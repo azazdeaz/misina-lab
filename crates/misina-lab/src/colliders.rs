@@ -226,8 +226,8 @@ fn triangle_edges(gizmo: &mut GizmoAsset, mesh: &Mesh, frame: Affine3A, color: S
         .map(|p| frame.transform_point3(Vec3::from(*p)))
         .collect();
     let corners: Vec<usize> = indices.iter().collect();
-    for triangle in corners.chunks_exact(3) {
-        let [a, b, c] = [0, 1, 2].map(|i| points[triangle[i]]);
+    for triangle in corners.as_chunks::<3>().0 {
+        let [a, b, c] = triangle.map(|i| points[i]);
         gizmo.linestrip([a, b, c, a], color);
     }
 }
