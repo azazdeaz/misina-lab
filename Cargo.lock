@@ -3167,6 +3167,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "greenhouse-lab"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "misina-lab",
+ "pyo3",
+]
+
+[[package]]
 name = "grid"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

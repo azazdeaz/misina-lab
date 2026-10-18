@@ -78,7 +78,9 @@ The panel commits an edit before `Build`, and the perf marks bracket it.
 | a built scene to assert against in a test | `testing::grown::<G>(params)` |
 
 The generator's `main` is `viewer::app::<G>()` plus whatever viewer-only
-plugins it wants, run. Its `lib.rs` holds the `Generator` impl and, under its
+plugins it wants, run. The camera starts where `viewer::Framing` says, framed
+for a scene about 80 by 50 m unless `main` inserts one of its own. Its
+`lib.rs` holds the `Generator` impl and, under its
 `python` feature, the `#[pymodule] fn _core` that calls the `module` function
 the macro wrote.
 

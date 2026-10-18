@@ -25,6 +25,7 @@ use bevy::prelude::*;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 
 use crate::Generator;
+use crate::scene::z_up_to_y_up;
 use crate::ui::{BlocksCamera, PANEL_WIDTH};
 
 /// Where the save key writes the scene document.
@@ -40,6 +41,7 @@ pub fn app<G: Generator>() -> App {
     // which is what makes an unlit scene look like it is all made of one shiny
     // material.
     app.insert_resource(GlobalAmbientLight::NONE);
+    app.init_resource::<Framing>();
     app.add_plugins((
         DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
@@ -103,15 +105,37 @@ pub fn app<G: Generator>() -> App {
     app
 }
 
+/// Where the camera starts, in scene coordinates (Z-up, meters): at `eye`,
+/// orbiting `focus`. A generator's `main` inserts its own before running the
+/// app; the default frames a scene about 80 by 50 m.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct Framing {
+    pub eye: Vec3,
+    pub focus: Vec3,
+}
+
+impl Default for Framing {
+    fn default() -> Self {
+        Self {
+            eye: Vec3::new(70.0, -70.0, 55.0),
+            focus: Vec3::ZERO,
+        }
+    }
+}
+
 /// How far from the camera shadows are still drawn, in meters. Past the engine
-/// default of 150, which the framing below overruns: the camera starts 114 m
-/// out and the far corner of an 80 by 50 m scene is another 50 beyond that,
-/// so at the default the row furthest from the camera would sit unshadowed.
-/// The cascade splits are left alone — they stay fine-grained near the
-/// camera, which is what orbiting in to inspect a single object wants.
+/// default of 150, which the default [`Framing`] overruns: the camera starts
+/// 114 m out and the far corner of an 80 by 50 m scene is another 50 beyond
+/// that, so at the default the row furthest from the camera would sit
+/// unshadowed. The cascade splits are left alone — they stay fine-grained near
+/// the camera, which is what orbiting in to inspect a single object wants.
 const SHADOW_DISTANCE: f32 = 200.0;
 
-fn setup(mut commands: Commands, mut mediums: ResMut<Assets<ScatteringMedium>>) {
+fn setup(
+    mut commands: Commands,
+    mut mediums: ResMut<Assets<ScatteringMedium>>,
+    framing: Res<Framing>,
+) {
     // A physically scattered sky, which is both the backdrop and — through
     // `AtmosphereEnvironmentMapLight` below — the scene's ambient light. It
     // places itself one earth radius under the origin on its own, so the
@@ -120,13 +144,15 @@ fn setup(mut commands: Commands, mut mediums: ResMut<Assets<ScatteringMedium>>) 
         mediums.add(ScatteringMedium::earth(256, 256)),
     ));
 
-    // Framed for a scene about 80 by 50 m.
-    // ponytail: one framing for every generator; a resource the generator
-    // inserts once a second scene size exists.
+    // The scene root stands the scene upright, so the camera is placed through
+    // the same rotation.
+    let (eye, focus) = (z_up_to_y_up() * framing.eye, z_up_to_y_up() * framing.focus);
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(70.0, 55.0, 70.0).looking_at(Vec3::ZERO, Vec3::Y),
-        PanOrbitCamera::default(),
+        Transform::from_translation(eye).looking_at(focus, Vec3::Y),
+        // Orbits `focus`: the camera reads its distance and angles off the
+        // transform above on its first update.
+        PanOrbitCamera { focus, ..default() },
         AtmosphereSettings::default(),
         // Lights the scene off the sky instead of off a constant: blue from
         // above, warm bounce from the ground, and a reflection whose spread

@@ -3,6 +3,7 @@
 /uv.lock
 /.venv
 /crates/vinerylab/python/vinerylab/*.so
+/crates/greenhouse-lab/python/greenhouse_lab/*.so
 __pycache__/
 
 *.local.md

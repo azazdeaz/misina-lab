@@ -1,0 +1,22 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "greenhouse-lab"
+description = "Procedural tomato greenhouse rows for robotics simulation, authored to USD."
+requires-python = ">=3.12"
+license = "MIT OR Apache-2.0"
+authors = [{ name = "Andras Polgar", email = "azazdeaz@gmail.com" }]
+dynamic = ["version"]
+# The scene is built in Rust and handed over as JSON; `misina_lab.usd`
+# authors the stage, and brings `usd-core` with it.
+dependencies = ["misina-lab"]
+
+[tool.uv.sources]
+misina-lab = { workspace = true }
+
+[tool.maturin]
+features = ["extension-module"]
+module-name = "greenhouse_lab._core"
+python-source = "python"
