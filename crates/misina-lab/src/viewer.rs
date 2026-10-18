@@ -58,6 +58,7 @@ pub fn app<G: Generator>() -> App {
         G::plugin,
         crate::ui::plugin::<G>,
         crate::stats::plugin,
+        crate::colliders::plugin,
         // Drives the footer's wireframe checkbox. Requests no wgpu feature of
         // its own: `WgpuSettings` defaults to `Functionality`, which already
         // enables everything the adapter supports, and a plugin that asks for

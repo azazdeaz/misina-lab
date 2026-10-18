@@ -88,6 +88,14 @@ rebuild rather than one per frame.
 Clicking a slider without dragging it turns it into a text field, as Blender's
 sliders do: the number starts selected, `Enter` or clicking away applies it,
 `Escape` drops it. A typed value is clamped to the slider's range.
+
+The footer's **Colliders** box draws what a physics engine collides with
+over the scene: in magenta the capsules nothing moves, the posts' and the
+wood's proxies and each rod's held first segment; in yellow every other rod
+segment, at the thickness it is simulated at rather than the width it is
+drawn at; in cyan the meshes that collide as themselves, the ground among
+them. See `crates/misina-lab/src/colliders.rs`.
+
 Press `S` to write the scene out as `scene.json`, and build it with:
 
     python -m misina_lab.usd scene.json scene.usd

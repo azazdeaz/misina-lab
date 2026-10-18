@@ -23,6 +23,7 @@ use bevy::prelude::*;
 use bevy::ui::InteractionDisabled;
 use bevy::ui_widgets::{ValueChange, checkbox_self_update};
 
+use crate::colliders::ShowColliders;
 use crate::scene::{Cable, Collider, Prototypes, UsdReference};
 use crate::ui::{BlocksCamera, PANEL_WIDTH, Tip, TipAbove};
 
@@ -203,6 +204,8 @@ fn footer() -> impl Scene {
             // Holds the view controls at the far end, away from the figures.
             Node { flex_grow: 1.0 }
             --
+            @colliders_checkbox()
+            --
             @wireframe_checkbox()
         ]
     }
@@ -248,6 +251,19 @@ fn wireframe_checkbox() -> impl Scene {
         },
         web.then_some(bsn! { InteractionDisabled }),
     )
+}
+
+/// Draws every collider over the scene — see [`crate::colliders`].
+fn colliders_checkbox() -> impl Scene {
+    bsn! {
+        @FeathersCheckbox { @caption: bsn! { @caption("Colliders") } }
+        Tip("Draw what a physics engine collides with: in magenta the capsules that stand still, in yellow the rod segments that bend, in cyan the meshes that collide as themselves, such as the ground.")
+        TipAbove
+        on(checkbox_self_update)
+        on(|change: On<ValueChange<bool>>, mut show: ResMut<ShowColliders>| {
+            show.0 = change.value;
+        })
+    }
 }
 
 #[cfg(test)]
