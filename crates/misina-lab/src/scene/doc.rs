@@ -29,13 +29,18 @@
 //!   mesh, which a dynamic collider could not be. A [`Cable`] is the one thing
 //!   that moves, and it is not a collider — a solver builds its own bodies
 //!   from the curve.
+//! - A [`Node`]'s `attributes` are custom attributes of that prim, authored
+//!   in the [`SceneDoc::namespace`]. An attribute's JSON type is its USD type;
+//!   see [`AttributeValue`].
+
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
 /// Bumped when the shape of this document changes incompatibly. The builder
 /// refuses anything it does not recognise, so a stale cached scene fails
 /// loudly instead of composing into something subtly wrong.
-pub const FORMAT: u32 = 6;
+pub const FORMAT: u32 = 7;
 
 /// One generated scene, ready to be turned into a USD stage.
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -47,6 +52,11 @@ pub struct SceneDoc {
     /// from a constant of its own.
     pub up_axis: String,
     pub meters_per_unit: f64,
+    /// The generator's Python package, `Generator::PACKAGE`. Every name in a
+    /// [`Node::attributes`] is authored under it — `boxlab:` for `boxlab` —
+    /// so a generator's attributes cannot collide with a schema's or with
+    /// another generator's.
+    pub namespace: String,
     /// The mesh library, sorted by name. Becomes `/Scene/parts`.
     pub parts: Vec<PartEntry>,
     /// The scene root, which becomes the stage's default prim.
@@ -154,8 +164,61 @@ pub struct Node {
     /// `reference`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cable: Option<Cable>,
+    /// Custom attributes of this prim, by name within
+    /// [`SceneDoc::namespace`] — ground truth a consumer reads off the stage,
+    /// which nothing renders or simulates. Any prim may carry them, an
+    /// instanceable one included: they are authored on the prim itself, like
+    /// its transform, and not inside the part it references.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub attributes: BTreeMap<String, AttributeValue>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<Node>,
+}
+
+/// One custom attribute's value. Serialized as the bare JSON value, so the
+/// JSON type is the tag: `true`, `3`, `0.5`, `"edge"`, `[0.0, 0.1, 0.2]`
+/// become USD's `bool`, `int`, `float`, `string` and `float3`.
+///
+/// A whole `Float` keeps its point (`1.0`, not `1`), which is what keeps it
+/// from coming back an `Int`.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(untagged)]
+pub enum AttributeValue {
+    Bool(bool),
+    Int(i32),
+    Float(f32),
+    Float3([f32; 3]),
+    String(String),
+}
+
+impl From<bool> for AttributeValue {
+    fn from(value: bool) -> Self {
+        Self::Bool(value)
+    }
+}
+
+impl From<i32> for AttributeValue {
+    fn from(value: i32) -> Self {
+        Self::Int(value)
+    }
+}
+
+impl From<f32> for AttributeValue {
+    fn from(value: f32) -> Self {
+        Self::Float(value)
+    }
+}
+
+impl From<[f32; 3]> for AttributeValue {
+    fn from(value: [f32; 3]) -> Self {
+        Self::Float3(value)
+    }
+}
+
+impl From<&str> for AttributeValue {
+    fn from(value: &str) -> Self {
+        Self::String(value.to_string())
+    }
 }
 
 /// A prim's transform, as the `translate` / `orient` / `scale` op stack.
@@ -232,6 +295,7 @@ impl Node {
             instanceable: false,
             collider: None,
             cable: None,
+            attributes: BTreeMap::new(),
             children: Vec::new(),
         }
     }
@@ -241,10 +305,22 @@ impl Node {
 mod tests {
     use super::*;
 
+    /// One of each type, the float whole so it has to keep its point.
+    fn attributes() -> BTreeMap<String, AttributeValue> {
+        BTreeMap::from([
+            ("flag".into(), true.into()),
+            ("count".into(), 3.into()),
+            ("share".into(), 1.0.into()),
+            ("offset".into(), [0.0, 0.1, 0.2].into()),
+            ("label".into(), "edge".into()),
+        ])
+    }
+
     fn doc() -> SceneDoc {
         let mut leaf = Node::group("Leaf_00", "Xform");
         leaf.reference = Some("Leaf_2".into());
         leaf.instanceable = true;
+        leaf.attributes = attributes();
         leaf.xform = Some(Xform {
             translate: [0.1, 0.2, 0.3],
             orient: [0.0, 0.0, 0.0, 1.0],
@@ -276,6 +352,7 @@ mod tests {
             format: FORMAT,
             up_axis: "Z".into(),
             meters_per_unit: 1.0,
+            namespace: "boxlab".into(),
             parts: vec![PartEntry {
                 name: "Leaf_2".into(),
                 points: vec![[0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
@@ -302,8 +379,10 @@ mod tests {
         assert_eq!(back.format, FORMAT);
         assert_eq!(back.up_axis, "Z");
         assert_eq!(back.parts[0].name, "Leaf_2");
+        assert_eq!(back.namespace, "boxlab");
         assert_eq!(back.root.children[0].reference.as_deref(), Some("Leaf_2"));
         assert!(back.root.children[0].instanceable);
+        assert_eq!(back.root.children[0].attributes, attributes());
         assert_eq!(
             back.root.children[1].collider,
             Some(Capsule {
@@ -333,5 +412,17 @@ mod tests {
         assert_eq!(json.matches("\"xform\"").count(), 1, "got:\n{json}");
         assert_eq!(json.matches("\"instanceable\"").count(), 1, "got:\n{json}");
         assert_eq!(json.matches("\"children\"").count(), 1, "got:\n{json}");
+        assert_eq!(json.matches("\"attributes\"").count(), 1, "got:\n{json}");
+    }
+
+    /// The JSON type is the only tag, so each value has to come out as the
+    /// JSON a reader types it by.
+    #[test]
+    fn an_attribute_is_its_bare_json_value() {
+        let json = serde_json::to_string(&attributes()).unwrap();
+        assert_eq!(
+            json,
+            r#"{"count":3,"flag":true,"label":"edge","offset":[0.0,0.1,0.2],"share":1.0}"#
+        );
     }
 }

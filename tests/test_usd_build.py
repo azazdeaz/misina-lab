@@ -12,11 +12,12 @@ builder stops doing it -- see `misina_lab/usd/build.py`'s module docstring.
 
 from __future__ import annotations
 
+import copy
 import json
 import pathlib
 
 import pytest
-from pxr import Gf, Usd, UsdGeom, UsdPhysics, UsdShade
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
 
 import misina_lab.usd
 from misina_lab.usd import GEOM, build_stage
@@ -329,6 +330,51 @@ def test_instances_of_one_part_share_a_single_prototype(stage: Usd.Stage):
 
     original = stage.GetPrimAtPath(f"{VINE}/Wood")
     assert twin.GetPrototype() == original.GetPrototype()
+
+
+@pytest.mark.parametrize(
+    ("name", "value_type", "value"),
+    [
+        ("flag", Sdf.ValueTypeNames.Bool, True),
+        ("count", Sdf.ValueTypeNames.Int, 3),
+        # Whole, so it has to come back a float rather than the int it reads as.
+        ("share", Sdf.ValueTypeNames.Float, 1.0),
+        ("offset", Sdf.ValueTypeNames.Float3, Gf.Vec3f(0.0, 0.1, 0.2)),
+        ("label", Sdf.ValueTypeNames.String, "edge"),
+    ],
+)
+def test_a_nodes_attributes_are_typed_custom_attributes_in_the_generators_namespace(
+    stage: Usd.Stage, name: str, value_type: Sdf.ValueTypeName, value: object
+):
+    """Typed by the JSON value alone, and namespaced so a label cannot collide
+    with a schema's attribute or another generator's."""
+    attribute = stage.GetPrimAtPath(LEAF).GetAttribute(f"vinerylab:{name}")
+    assert attribute.IsCustom()
+    assert attribute.GetTypeName() == value_type
+    assert attribute.Get() == value
+    assert type(attribute.Get()) is type(value)
+
+
+def test_an_instances_attributes_stay_on_the_instance(stage: Usd.Stage):
+    """Readable per prim off the instance itself, absent from the part every
+    instance shares, and no reason for a second prototype."""
+    leaf = stage.GetPrimAtPath(LEAF)
+    assert leaf.IsInstance()
+    assert leaf.GetAttribute("vinerylab:flag").Get() is True
+    assert not stage.GetPrimAtPath(f"{PARTS}/Leaf_1").GetAttribute("vinerylab:flag")
+
+    twin = stage.DefinePrim(f"{LEAF}_Twin")
+    twin.GetReferences().AddInternalReference(f"{PARTS}/Leaf_1")
+    twin.SetInstanceable(True)
+    assert twin.GetPrototype() == leaf.GetPrototype()
+
+
+def test_an_attribute_with_no_usd_type_is_refused(doc: dict, tmp_path: pathlib.Path):
+    """A hand-edited document fails loudly rather than losing the value."""
+    labelled = copy.deepcopy(doc)
+    labelled["root"]["attributes"] = {"nothing": None}
+    with pytest.raises(ValueError, match="no USD type"):
+        build_stage(labelled, str(tmp_path / "untyped.usda"))
 
 
 def test_a_collision_proxy_is_a_capsule_no_renderer_draws(stage: Usd.Stage):

@@ -20,7 +20,7 @@ impl Generator for Boxes {
 | --- | --- |
 | `Params` | the aggregate of every element's params, declared with `generator!` |
 | `NAME` | the root prim of the scene, and the stem of the Python names: `BoxesParams`, `BoxesCfg`, `BOXES_CFG`, `boxes_cfg.py` |
-| `PACKAGE` | the Python package that re-exports the `_core` extension module and holds `{PACKAGE}.isaaclab`; also the prefix of the environment variables, `BOXLAB_PERF` |
+| `PACKAGE` | the Python package that re-exports the `_core` extension module and holds `{PACKAGE}.isaaclab`; also the prefix of the environment variables, `BOXLAB_PERF`, and the namespace of every custom prim attribute, `boxlab:` |
 | `plugin` | adds the element plugins; their build systems go in the generator's own stage sets, chained inside `Build` |
 
 ## The params aggregate

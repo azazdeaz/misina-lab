@@ -48,7 +48,7 @@ The document's conventions are listed in `doc.rs`: every mesh is a triangle
 list; rotations are quaternions in xyzw order, never Euler triples; a node
 with a `reference` draws the part of that name and has no children; a part's
 surface response travels with it and becomes a bound material; colliders are
-static.
+static; a node's `attributes` are custom attributes of that prim.
 
 ## The builder
 
@@ -83,6 +83,32 @@ which a solver that understands one turns into bodies of its own
 ([isaac-lab.md](isaac-lab.md#rods)). It replaces the mesh rather than
 standing in for it, so it is geometry and collider at once.
 
+## Custom attributes
+
+An element labels a prim with ground truth a consumer reads off the stage,
+which nothing renders or simulates, by putting `scene::UsdAttributes` on
+its entity:
+
+```rust
+commands.spawn((
+    Name::new("Box_00"),
+    geometry.clone(),
+    UsdAttributes::default().with("graspable", true).with("clearance", 0.12),
+));
+```
+
+The walk copies them into the node's `attributes`, and the builder authors
+each as a custom attribute in the generator's namespace, its `PACKAGE`,
+which the document carries as `namespace`: `boxlab:graspable` above. A
+value is a `bool`, `i32`, `f32`, `[f32; 3]` or string, written into the JSON
+bare, so its JSON type is its USD type: `bool`, `int`, `float`, `float3`,
+`string`.
+
+A label is authored on the prim itself, never inside the part it references.
+On an instanceable prim that makes it a local opinion on the instance, like
+its transform: readable per prim with an ordinary `GetAttribute`, and no
+reason for a second prototype.
+
 ## Reading the ground back
 
 A consumer that places anything on the terrain after the fact, a robot above
@@ -95,6 +121,6 @@ being the one part a scene has at most one of.
 
 - [`src/scene/doc.rs`](../src/scene/doc.rs): the document, and the conventions the builder relies on
 - [`src/scene/export.rs`](../src/scene/export.rs): the walk
-- [`src/scene/mod.rs`](../src/scene/mod.rs): the export directives; `UsdRoot`, `UsdReference`, `capsule`, `cable`, `z_up_to_y_up`
+- [`src/scene/mod.rs`](../src/scene/mod.rs): the export directives; `UsdRoot`, `UsdReference`, `UsdAttributes`, `capsule`, `cable`, `z_up_to_y_up`
 - [`misina_lab/usd/build.py`](../../../python/misina-lab/misina_lab/usd/build.py): the builder, and every USD rule
 - [`misina_lab/usd/ground.py`](../../../python/misina-lab/misina_lab/usd/ground.py): `Ground`
