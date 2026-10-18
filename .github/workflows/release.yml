@@ -1,0 +1,70 @@
+name: Release
+
+# Builds the three Python packages and, on a `v*` tag, publishes them to PyPI.
+# A manual run from a branch builds them without publishing. They release
+# together under the workspace version; docs/development.md says how to cut one.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Pinned rather than `ubuntu-latest`: the glibc symbols the extension needs
+    # follow the runner's glibc, and a newer one can raise them past the tag below.
+    runs-on: ubuntu-24.04
+    env:
+      # Each wheel is built from its sdist in a scratch directory; one target
+      # directory lets the second generator reuse the first one's Bevy build.
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      # glibc 2.34 and up: Ubuntu 22.04, Debian 12, RHEL 9 and later. maturin
+      # fails the build if the extension needs anything newer.
+      MATURIN_PEP517_ARGS: --compatibility manylinux_2_34
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the tag names the workspace version
+        if: github.ref_type == 'tag'
+        run: |
+          v=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
+          [ "$GITHUB_REF_NAME" = "v$v" ] || { echo "::error::tag $GITHUB_REF_NAME, workspace version $v"; exit 1; }
+
+      # What alsa-sys, libudev-sys and wayland-sys resolve through pkg-config at
+      # build time, as in ci.yml. The extension links none of them.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@v7
+
+      # An sdist and a wheel for each package, every wheel built from its sdist,
+      # so an sdist missing a file fails here rather than on someone's machine.
+      - run: uv build --all-packages
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  # A job of its own, so the token PyPI issues is never in reach of a build script.
+  publish:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    # Trusted publishing: each of the three projects on PyPI names this
+    # repository, this file and this environment as its publisher, so there is
+    # no token to store.
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

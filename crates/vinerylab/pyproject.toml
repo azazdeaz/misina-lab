@@ -5,13 +5,19 @@ build-backend = "maturin"
 [project]
 name = "vinerylab"
 description = "Procedural vineyard scene generation, authored to USD."
+readme = "../../README.md"
 requires-python = ">=3.12"
 license = "MIT OR Apache-2.0"
 authors = [{ name = "Andras Polgar", email = "azazdeaz@gmail.com" }]
 dynamic = ["version"]
 # The generator builds the scene in Bevy and hands it over as JSON; the USD
 # stage is authored by `misina_lab.usd`, which brings `usd-core` with it.
-dependencies = ["misina-lab"]
+# Pinned exactly, to the workspace version both packages release under: the
+# scene document this extension writes is the one that release reads.
+dependencies = ["misina-lab==0.1.0"]
+
+[project.urls]
+Repository = "https://github.com/azazdeaz/vinery-lab"
 
 [tool.uv.sources]
 misina-lab = { workspace = true }

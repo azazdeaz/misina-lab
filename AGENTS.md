@@ -88,7 +88,7 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinerylab`,
 
 ## Docs
 
-- [docs/development.md](docs/development.md) — building, the checks, running the viewer, the web build
+- [docs/development.md](docs/development.md) — building, the checks, releasing, running the viewer, the web build
 - [docs/parameters.md](docs/parameters.md) — every parameter, with its default and range (generated)
 - [docs/pruning-research.md](docs/pruning-research.md) — prior art for cutting shoots: pruning robots, hedgers, how simulators model a cut
 - [docs/tomato-greenhouse-research.md](docs/tomato-greenhouse-research.md) — a Dutch high-wire tomato row in numbers, and the variations a tomato greenhouse generator starts with
