@@ -144,6 +144,7 @@ modules fit.
 | [export.md](docs/export.md) | coordinates, the scene document, and what the USD builder makes of it |
 | [isaac-lab.md](docs/isaac-lab.md) | spawning a generated scene: the cfg base, the cache, rods, and cutting them |
 | [editing-parameters.md](docs/editing-parameters.md) | how to add or change a parameter |
+| [outside-projects.md](docs/outside-projects.md) | a generator in its own repository: the dependencies, the layout, and pinning both halves to one release |
 
 ## Development
 
