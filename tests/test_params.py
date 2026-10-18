@@ -1,20 +1,19 @@
 """The params classes as Python sees them: keyword construction, and a stub that
 matches the compiled module.
 
-Needs only the extension, not Isaac Lab, so it runs everywhere `import vinerylab`
-does.
+Needs only the extensions, not Isaac Lab, so it runs everywhere `import vinerylab`
+does; the greenhouse's stub is checked where `greenhouse_lab` is installed too.
 """
 
 from __future__ import annotations
 
 import ast
 import pathlib
+from types import ModuleType
 
 import pytest
 
 import vinerylab
-
-STUB = pathlib.Path(vinerylab.__file__).with_name("_core.pyi")
 
 
 def params_attrs(params_cls: type) -> set[str]:
@@ -31,10 +30,11 @@ def params_attrs(params_cls: type) -> set[str]:
     }
 
 
-def stub_classes() -> dict[str, set[str]]:
-    """Every class the stub declares, with its annotated attributes."""
+def stub_classes(package: ModuleType) -> dict[str, set[str]]:
+    """Every class a package's stub declares, with its annotated attributes."""
+    stub = pathlib.Path(package.__file__ or "").with_name("_core.pyi")
     classes = {}
-    for node in ast.parse(STUB.read_text()).body:
+    for node in ast.parse(stub.read_text()).body:
         if isinstance(node, ast.ClassDef):
             classes[node.name] = {
                 item.target.id
@@ -62,16 +62,17 @@ def test_a_wrong_keyword_or_type_is_a_type_error(kwargs):
         vinerylab.PoleParams(**kwargs)
 
 
-def test_the_stub_declares_what_the_module_exports():
+@pytest.mark.parametrize("name", ["vinerylab", "greenhouse_lab"])
+def test_the_stub_declares_what_the_module_exports(name):
     """The generated stub and the compiled module agree, class for class and
     field for field. A stale extension, or a class the module forgot to
     register, shows up here rather than as a silent hole in the IDE."""
-    stub = stub_classes()
-    exported = {name for name in vinerylab.__all__ if name[0].isupper()}
+    package = pytest.importorskip(name)
+    stub = stub_classes(package)
+    exported = {cls for cls in package.__all__ if cls[0].isupper()}
     assert set(stub) == exported
-    for name in exported - {"VineyardParams"}:
-        assert stub[name] == params_attrs(getattr(vinerylab, name)), name
-    assert stub["VineyardParams"] == params_attrs(vinerylab.VineyardParams)
+    for cls in exported:
+        assert stub[cls] == params_attrs(getattr(package, cls)), cls
 
 
 def test_the_aggregate_holds_live_fragments():

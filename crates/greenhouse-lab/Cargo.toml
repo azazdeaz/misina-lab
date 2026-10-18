@@ -1,0 +1,26 @@
+[package]
+name = "greenhouse-lab"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+# `cdylib` is the extension module Python imports; `rlib` is what the viewer
+# binary and `cargo test` link against.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+misina-lab = { path = "../misina-lab" }
+bevy = { workspace = true }
+pyo3 = { version = "0.29", features = ["abi3-py312"], optional = true }
+
+[features]
+# The PyO3 side: the `_core` module in lib.rs and what `generator!` emits
+# under it. It still links libpython, so `cargo build` and `cargo test` work
+# with it on.
+python = ["dep:pyo3", "misina-lab/python"]
+# What maturin builds with: on top of `python`, leaves libpython unlinked,
+# since the interpreter loading the module provides it. Breaks `cargo run`
+# and `cargo test`.
+extension-module = ["python", "pyo3/extension-module"]

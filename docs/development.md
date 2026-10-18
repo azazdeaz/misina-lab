@@ -5,13 +5,15 @@
 No need to install `maturin` yourself — uv fetches it automatically as a
 PEP 517 build backend.
 
-The repo is a uv workspace of two packages. `python/misina-lab` is plain
+The repo is a uv workspace of three packages. `python/misina-lab` is plain
 Python: the USD builder and the Isaac Lab spawner every generator shares.
 `crates/vinerylab` is a maturin project in its *mixed* layout: hand-written
 Python lives in `crates/vinerylab/python/vinerylab/`, and the compiled Rust
 extension is built into it as the `_core` submodule, which `__init__.py`
 re-exports. Only the `isaaclab` subpackages import Isaac Lab, so plain
-`import vinerylab` stays usable without it.
+`import vinerylab` stays usable without it. `crates/greenhouse-lab` is laid
+out the same way, as `greenhouse_lab`; `--reinstall-package greenhouse-lab`
+rebuilds it.
 
 How the binding surface is shaped — why fragments are `Py<T>`, what
 `write_usd` releases the GIL around — is in the framework's
@@ -41,13 +43,13 @@ If you only changed Rust source (not pyproject.toml), force a rebuild:
 `.github/workflows/ci.yml` runs all of these on every push and pull request:
 
     cargo fmt --all -- --check
-    cargo clippy --workspace --all-targets --features vinerylab/python -- -D warnings
+    cargo clippy --workspace --all-targets --features vinerylab/python,greenhouse-lab/python -- -D warnings
     cargo test --workspace
     ruff check . && ruff format --check .
     mypy
     pytest tests
 
-`--features vinerylab/python` is what puts the PyO3 side — `crates/misina-lab/src/python.rs`
+Each generator's `python` feature is what puts the PyO3 side — `crates/misina-lab/src/python.rs`
 and what the `generator!` macro emits — in front of clippy. It is out of the
 default feature set, so a plain `cargo clippy` never sees it.
 
@@ -75,7 +77,8 @@ in front of a commit.
 
 ## Viewer (interactive)
 
-    cargo run --release
+    cargo run --release                         # the vineyard
+    cargo run --release -p greenhouse-lab       # the greenhouse
 
 The panel is built from the params structs: one section per fragment of
 `VineyardParams`, one control per field, with the caption, range and tooltip

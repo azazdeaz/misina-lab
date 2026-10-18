@@ -3313,6 +3313,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "greenhouse-lab"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "misina-lab",
+ "pyo3",
+]
+
+[[package]]
 name = "guillotiere"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
