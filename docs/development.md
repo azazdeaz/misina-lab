@@ -34,9 +34,14 @@ If you only changed Rust source (not pyproject.toml), force a rebuild:
 
     uv sync --reinstall-package vinerylab
 
-### Build a distributable wheel
+### Build the distributions
 
-    uvx maturin build --release -m crates/vinerylab/Cargo.toml
+    CARGO_TARGET_DIR=$PWD/target uv build --all-packages
+
+An sdist and a wheel for each package, into `dist/`, as the release workflow
+builds them. Each wheel is built from its sdist in a scratch directory; the
+target directory lets them reuse this checkout's compiled dependencies instead
+of building Bevy once per generator.
 
 ## Checks
 
@@ -74,6 +79,28 @@ Formatting and the fast lints are also available as commit hooks:
 
 Clippy and the test suites stay out of them — a Bevy rebuild is too slow to sit
 in front of a commit.
+
+## Releasing
+
+`misina-lab`, `vinerylab` and `greenhouse-lab` release to PyPI together, under
+the workspace version, `[workspace.package]` in the root `Cargo.toml`. The
+generators' wheels take it from their crates. Two other places spell it out:
+`version` in `python/misina-lab/pyproject.toml`, and the `misina-lab==` pin in
+each generator's `pyproject.toml`. `tests/test_versions.py` fails until all
+four agree.
+
+1. Bump the version in all four places and merge.
+2. Tag the merge commit `v<version>` and push the tag.
+
+`.github/workflows/release.yml` then builds an sdist and a Linux x86_64 wheel
+for each package and publishes them. A manual run of it from a branch builds
+them without publishing.
+
+Publishing goes through PyPI's trusted publishing, so no token is stored. Each
+project's publisher on PyPI names the `azazdeaz/vinery-lab` repository, the
+`release.yml` workflow and the `pypi` environment. A project not on PyPI yet
+takes a pending publisher, which its first upload turns into the project.
+Renaming the repository means updating all three publishers.
 
 ## Viewer (interactive)
 

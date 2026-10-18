@@ -4,6 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "misina-lab"
+# The workspace version, `[workspace.package]` in the root Cargo.toml, which
+# the generators release under and pin this package to.
 version = "0.1.0"
 description = "The Python side of a generated scene: the USD builder and the Isaac Lab spawner every generator shares."
 requires-python = ">=3.12"

@@ -37,7 +37,8 @@ From the repository root,
 cargo run --release -p greenhouse-lab
 ```
 
-opens the viewer and its parameter panel. From Python:
+opens the viewer and its parameter panel. From Python, after
+`pip install greenhouse-lab`:
 
 ```python
 import greenhouse_lab
