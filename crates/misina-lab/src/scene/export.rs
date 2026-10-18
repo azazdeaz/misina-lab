@@ -129,6 +129,18 @@ fn part_entry(name: &str, mesh: &Mesh, part: &Part) -> anyhow::Result<PartEntry>
         _ => None,
     };
 
+    // Bevy draws a vertex colour times the material's, so the document carries
+    // the product, which is what the viewer shows.
+    let colors = match mesh.attribute(Mesh::ATTRIBUTE_COLOR) {
+        Some(VertexAttributeValues::Float32x4(colors)) => Some(
+            colors
+                .iter()
+                .map(|c| [0, 1, 2].map(|i| c[i] * part.color[i]))
+                .collect(),
+        ),
+        _ => None,
+    };
+
     Ok(PartEntry {
         name: name.to_string(),
         points,
@@ -136,6 +148,7 @@ fn part_entry(name: &str, mesh: &Mesh, part: &Part) -> anyhow::Result<PartEntry>
         normals,
         uvs,
         display_color: part.color,
+        colors,
         roughness: part.roughness,
         reflectance: part.reflectance,
         translucency: part.translucency,
@@ -391,6 +404,36 @@ mod tests {
         assert_eq!(doc.parts[0].points.len(), 3);
         assert_eq!(doc.parts[0].indices, [0, 1, 2]);
         assert!(doc.parts[0].double_sided);
+        assert!(doc.parts[0].colors.is_none());
+    }
+
+    /// A mesh's vertex colours reach the document as the viewer draws them:
+    /// times the part's own colour.
+    #[test]
+    fn vertex_colors_are_carried_times_the_parts_color() {
+        let mut world = world();
+        root(&mut world);
+        let name = add_part(&mut world, "Leaf", 0);
+        let handle = world
+            .resource::<Prototypes>()
+            .get(&name)
+            .unwrap()
+            .mesh
+            .clone();
+        world
+            .resource_mut::<Assets<Mesh>>()
+            .get_mut(&handle)
+            .unwrap()
+            .insert_attribute(
+                Mesh::ATTRIBUTE_COLOR,
+                vec![[1.0, 1.0, 1.0, 1.0], [0.5, 0.5, 0.5, 1.0], [0.0; 4]],
+            );
+
+        let colors = scene_doc(&mut world).unwrap().parts[0].colors.clone();
+        assert_eq!(
+            colors,
+            Some(vec![[0.1, 0.2, 0.3], [0.05, 0.1, 0.15], [0.0; 3]])
+        );
     }
 
     /// A label rides on the prim it was put on, an instanceable one included,

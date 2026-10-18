@@ -23,7 +23,7 @@ it, bare stem with the trusses hanging off it.
 | Wires | two crop wires over every gutter, for the V the stems are trained in | height, spread |
 | Stems | two to a plant, each lowered along the gutter and rising to a hook on its wire, with its twine wound down it; a truss at every third node | harvest height, trusses on a stem, lowered length, extra stems, trusses turned to the path |
 | Trusses | peduncle, rachis and a pedicel to every fruit, with a `Cut` and a `Bend` frame | fruit count and diameter, branched, peduncle length, diameter and angle, missing fruit |
-| Fruit | every fruit its own prim, coloured by ripeness: a stem ripens from the bottom up, a truss from its base to its tip | ripe trusses on a stem, the spread in a truss, the ripe colour |
+| Fruit | every fruit its own prim, with a calyx of five or six sepals and a stage from fruit set to red: fruit grow toward the head, a stem ripens from the bottom up, a truss from its base to its tip, and a fruit from its blossom end | ripe trusses on a stem, the spread in a truss, the ripe colour, height to width, ribbing, jointed pedicels |
 
 Rows run along +X from the row head at x = 0, the main path lies at
 negative x, and z = 0 is the top of the floor. Every gutter has a path on
@@ -72,8 +72,9 @@ with its default and range.
 
 `Cut` sits at the peduncle's base and `Bend` where it bends most, each with
 +X along the peduncle: where a cut-flush gripper and a clamp-and-cut one
-take a truss. A fruit's ripeness shows only in its colour so far; the
-scene document has no per-prim attributes to carry it yet.
+take a truss. Every fruit carries `greenhouse_lab:stage`, its growth stage
+or USDA colour class, and `greenhouse_lab:ripeness`, the share of its
+surface that has coloured.
 
 Left is +Y: the side on the left looking down a row from its head. A
 standing gutter has `Stand_00 …` where a hanging one has hangers.

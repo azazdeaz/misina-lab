@@ -50,7 +50,8 @@ The parts library lives *inside* the default prim
     The fallback channel, for a consumer that resolves no material -- Hydra
     Storm and usdview, which read no MDL. Still authored on every drawn prim,
     and still the colour the materials below are built from, so the two cannot
-    drift apart.
+    drift apart. A part whose document carries ``colors`` gets it at
+    ``vertex`` interpolation instead, one colour per point.
 
 Every drawn prim binds an MDL material of its own
     Unbound, Kit shades the whole scene with one default surface tinted by
@@ -74,6 +75,14 @@ Every drawn prim binds an MDL material of its own
     turns the subsurface term into a second, flipped diffuse lobe rather than a
     volume, which is both what a backlit leaf looks like and far cheaper than
     volumetric scattering at a canopy's instance count.
+
+A part coloured per point binds a ``UsdPreviewSurface`` instead
+    OmniPBR takes one constant diffuse colour and reads no primvar, so a part
+    whose colour varies over it would draw in a single colour in Kit. Its
+    material is a ``UsdPreviewSurface`` whose ``diffuseColor`` is connected to
+    a ``UsdPrimvarReader_float3`` reading ``displayColor``. That is the
+    universal ``outputs:surface``, which Kit renders as well as Storm, so the
+    one material serves every renderer and there is no fallback left to keep.
 
 A part is an ``Xform`` *wrapping* its mesh, not a bare ``Mesh``
     This is what makes ``instanceable`` do anything at all. A USD instance
@@ -176,7 +185,7 @@ from typing import Any
 
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
 
-FORMAT = 7
+FORMAT = 8
 """Document version this builder understands. See `crates/misina-lab/src/scene/doc.rs`."""
 
 PARTS = "parts"
@@ -243,6 +252,10 @@ MATERIAL = "Material"
 
 SHADER = "Shader"
 """Name of the `Shader` inside it."""
+
+PRIMVAR_READER = "Primvar"
+"""Name of the `UsdPrimvarReader_float3` beside the shader of a part coloured
+per point."""
 
 MDL_OPAQUE = ("OmniPBR.mdl", "OmniPBR")
 MDL_TRANSLUCENT = ("OmniSurface.mdl", "OmniSurface")
@@ -369,8 +382,12 @@ def _author_part(stage: Usd.Stage, library: str, part: Mapping[str, Any]) -> Usd
         )
         primvar.Set(Vt.Vec2fArray([tuple(uv) for uv in uvs]))
 
-    color = mesh.CreateDisplayColorPrimvar(UsdGeom.Tokens.constant)
-    color.Set(Vt.Vec3fArray([tuple(part["display_color"])]))
+    if colors := part.get("colors"):
+        color = mesh.CreateDisplayColorPrimvar(UsdGeom.Tokens.vertex)
+        color.Set(Vt.Vec3fArray([tuple(c) for c in colors]))
+    else:
+        color = mesh.CreateDisplayColorPrimvar(UsdGeom.Tokens.constant)
+        color.Set(Vt.Vec3fArray([tuple(part["display_color"])]))
 
     # Inside the part, so the binding composes in through every reference to it.
     UsdShade.MaterialBindingAPI.Apply(mesh.GetPrim())
@@ -415,9 +432,21 @@ def _author_material(spec: Sdf.PrimSpec, surface: Mapping[str, Any]) -> None:
     The caller declares `MaterialBindingAPI` -- `Sdf` enforces no schema, and
     USD warns about a binding on a prim that does not apply it.
     """
-    module, identifier, inputs = _mdl_shader(surface)
-
     material = Sdf.PrimSpec(spec, MATERIAL, Sdf.SpecifierDef, "Material")
+    if surface.get("colors"):
+        _author_preview_surface(material, surface)
+    else:
+        _author_mdl_surface(material, surface)
+
+    # Not custom: `MaterialBindingAPI` declares the relationship, and `Sdf`
+    # defaults the other way because it checks no schema.
+    binding = Sdf.RelationshipSpec(spec, "material:binding", custom=False)
+    binding.targetPathList.explicitItems = [material.path]
+
+
+def _author_mdl_surface(material: Sdf.PrimSpec, surface: Mapping[str, Any]) -> None:
+    """An MDL shader in `material`, in the MDL render context only."""
+    module, identifier, inputs = _mdl_shader(surface)
     shader = Sdf.PrimSpec(material, SHADER, Sdf.SpecifierDef, "Shader")
     for name, value_type, value in (
         ("info:implementationSource", Sdf.ValueTypeNames.Token, "sourceAsset"),
@@ -435,10 +464,39 @@ def _author_material(spec: Sdf.PrimSpec, surface: Mapping[str, Any]) -> None:
     terminal = Sdf.AttributeSpec(material, "outputs:mdl:surface", Sdf.ValueTypeNames.Token)
     terminal.connectionPathList.explicitItems = [out.path]
 
-    # Not custom: `MaterialBindingAPI` declares the relationship, and `Sdf`
-    # defaults the other way because it checks no schema.
-    binding = Sdf.RelationshipSpec(spec, "material:binding", custom=False)
-    binding.targetPathList.explicitItems = [material.path]
+
+def _author_preview_surface(material: Sdf.PrimSpec, surface: Mapping[str, Any]) -> None:
+    """A `UsdPreviewSurface` in `material` whose diffuse colour is the mesh's
+    per-vertex `displayColor`.
+
+    `reflectance` becomes `ior` through the specular level's own definition:
+    a reflectance `r` reflects `0.16 r^2` at normal incidence, so 0.5 is the
+    4% of the default `ior` of 1.5.
+    """
+    reader = Sdf.PrimSpec(material, PRIMVAR_READER, Sdf.SpecifierDef, "Shader")
+    Sdf.AttributeSpec(
+        reader, "info:id", Sdf.ValueTypeNames.Token, Sdf.VariabilityUniform
+    ).default = "UsdPrimvarReader_float3"
+    Sdf.AttributeSpec(reader, "inputs:varname", Sdf.ValueTypeNames.String).default = "displayColor"
+    result = Sdf.AttributeSpec(reader, "outputs:result", Sdf.ValueTypeNames.Float3)
+
+    shader = Sdf.PrimSpec(material, SHADER, Sdf.SpecifierDef, "Shader")
+    Sdf.AttributeSpec(
+        shader, "info:id", Sdf.ValueTypeNames.Token, Sdf.VariabilityUniform
+    ).default = "UsdPreviewSurface"
+    diffuse = Sdf.AttributeSpec(shader, "inputs:diffuseColor", Sdf.ValueTypeNames.Color3f)
+    diffuse.connectionPathList.explicitItems = [result.path]
+    # The square root of what it reflects at normal incidence.
+    amplitude = 0.4 * float(surface["reflectance"])
+    for name, value in (
+        ("roughness", float(surface["roughness"])),
+        ("metallic", 0.0),
+        ("ior", (1.0 + amplitude) / (1.0 - amplitude)),
+    ):
+        Sdf.AttributeSpec(shader, f"inputs:{name}", Sdf.ValueTypeNames.Float).default = value
+    out = Sdf.AttributeSpec(shader, "outputs:surface", Sdf.ValueTypeNames.Token)
+    terminal = Sdf.AttributeSpec(material, "outputs:surface", Sdf.ValueTypeNames.Token)
+    terminal.connectionPathList.explicitItems = [out.path]
 
 
 def _mdl_shader(

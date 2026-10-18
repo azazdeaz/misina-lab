@@ -28,7 +28,7 @@
 //!   Peduncle          -> parts/Truss_k
 //!   Cut               Xform at the peduncle's base, +X along the peduncle
 //!   Bend              Xform where the peduncle bends most, +X along it
-//!   Fruit_00 …        a FruitConfig, hung by its top from a pedicel's tip
+//!   Fruit_00 …        a FruitConfig, hung from a pedicel's tip
 //! ```
 //!
 //! `Cut` and `Bend` are where the two kinds of harvesting gripper take a
@@ -36,7 +36,7 @@
 //! beside it. Both are frames, since the approach matters as much as the
 //! point.
 
-use std::f32::consts::{FRAC_PI_2, PI};
+use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
 use bevy::prelude::*;
 use misina_lab::geometry::mesh::{MeshData, merge_meshes};
@@ -49,16 +49,17 @@ use misina_lab::rng::{Rng, salt};
 use misina_lab::scene::{Library, Order, configs_changed};
 use nalgebra::Point3;
 
-use super::fruit::{FruitConfig, FruitParams};
+use super::fruit::{FruitConfig, FruitParams, Hung};
 use super::{Grow, SceneParams};
 
 /// The mesh-library prefix the trusses register under.
 pub const PART: &str = "Truss";
 
-/// Salts splitting a truss's shape draws and its fruit draws off the scene
-/// seed.
+/// Salts splitting a truss's shape draws, its fruit draws and each fruit's
+/// own shape off the scene seed.
 const SHAPE_STREAM: u64 = 0x94D0_49BB_1331_11EB;
 const FRUIT_STREAM: u64 = 0xD6E8_FEB8_6659_FD93;
+const FRUIT_SHAPE_STREAM: u64 = 0xA076_1D64_78BD_642F;
 
 /// How far a truss's peduncle and fruit vary about the params, as fractions.
 const LENGTH_JITTER: f64 = 0.2;
@@ -103,9 +104,9 @@ const MIN_TURN: f32 = 0.1;
 const BRANCH: f32 = 0.45;
 
 /// The rachis's radius at its tip, as a fraction of the peduncle's, and a
-/// pedicel's radius, in meters.
+/// pedicel's radius, in meters, which a fruit's stub carries on at.
 const RACHIS_TAPER: f32 = 0.6;
-const PEDICEL_RADIUS: f32 = 0.0012;
+pub const PEDICEL_RADIUS: f32 = 0.0012;
 
 /// Floors on what Python may set, so that every truss still builds.
 const MIN_LENGTH: f32 = 0.01;
@@ -151,7 +152,8 @@ pub struct Node {
     /// How many trusses above its stem's ripening front this one hangs, which
     /// its fruit's ripeness is read off.
     pub rank: f32,
-    /// How far its fruit have grown, as a fraction of full size.
+    /// How far its fruit have come toward full size, 0 just set to 1: the
+    /// trusses nearest the head set theirs last.
     pub growth: f32,
 }
 
@@ -414,9 +416,11 @@ fn facing(direction: Vec3) -> Quat {
 /// Builds one mesh per distinct truss, and hangs its frames and its fruit off
 /// every truss.
 ///
-/// Each truss's fruit draw from a stream keyed on its [`Order`]: two draws per
-/// pedicel, whether its fruit is missing and how big it is, made for every
-/// pedicel so a higher `missing_fruit` drops fruit without resizing the rest.
+/// Each truss's fruit draw from a stream keyed on its [`Order`]: three draws
+/// per pedicel, whether its fruit is missing, how big it is and how it is
+/// turned about its axis, made for every pedicel so a higher `missing_fruit`
+/// drops fruit without resizing the rest. A fruit's own shape is drawn off a
+/// stream keyed on its truss and its pedicel.
 pub(crate) fn build(
     mut commands: Commands,
     mut library: Library,
@@ -473,6 +477,7 @@ pub(crate) fn build(
         for (j, tip) in tips.iter().enumerate() {
             let missing = rng.unit() < params.missing_fruit as f64;
             let size = rng.range(1.0 - FRUIT_JITTER, 1.0 + FRUIT_JITTER) as f32;
+            let spin = rng.unit() as f32 * TAU;
             if missing {
                 continue;
             }
@@ -480,13 +485,18 @@ pub(crate) fn build(
             fruit_order += 1;
             truss.with_child((
                 Name::new(format!("Fruit_{j:02}")),
-                Transform::from_translation(*tip),
+                Transform::from_translation(*tip).with_rotation(Quat::from_rotation_z(spin)),
                 Visibility::default(),
                 FruitConfig::new(
                     &fruit_params,
-                    config.fruit_diameter * config.node.growth * (1.0 - TIP_SHRINK * along) * size,
-                    config.node.rank,
-                    along,
+                    // A truss holds fewer than 256 fruit.
+                    scene.seed ^ FRUIT_SHAPE_STREAM ^ salt(order.0 << 8 | j as u64),
+                    config.fruit_diameter * (1.0 - TIP_SHRINK * along) * size,
+                    Hung {
+                        rank: config.node.rank,
+                        along,
+                        growth: config.node.growth,
+                    },
                 ),
                 Order(fruit_order),
             ));

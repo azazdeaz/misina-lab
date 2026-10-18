@@ -32,6 +32,8 @@
 //! - A [`Node`]'s `attributes` are custom attributes of that prim, authored
 //!   in the [`SceneDoc::namespace`]. An attribute's JSON type is its USD type;
 //!   see [`AttributeValue`].
+//! - A part with [`colors`](PartEntry::colors) is coloured per point, and its
+//!   material reads that primvar instead of a constant; see `build.py`.
 
 use std::collections::BTreeMap;
 
@@ -40,7 +42,7 @@ use serde::{Deserialize, Serialize};
 /// Bumped when the shape of this document changes incompatibly. The builder
 /// refuses anything it does not recognise, so a stale cached scene fails
 /// loudly instead of composing into something subtly wrong.
-pub const FORMAT: u32 = 7;
+pub const FORMAT: u32 = 8;
 
 /// One generated scene, ready to be turned into a USD stage.
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -83,6 +85,12 @@ pub struct PartEntry {
     /// and as the bound material's diffuse colour — the first for a consumer
     /// that shades nothing, the second for one that does.
     pub display_color: [f32; 3],
+    /// Per-point linear RGB, one per point, with `display_color` already
+    /// multiplied in. Present on a part whose colour varies over it; the
+    /// builder then authors `displayColor` per vertex and ignores
+    /// `display_color`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colors: Option<Vec<[f32; 3]>>,
     /// Microfacet roughness. 0 is a mirror, 1 is chalk.
     pub roughness: f32,
     /// Specular intensity, on a linear 0..1 scale where 0.5 is the 4% every
@@ -360,6 +368,7 @@ mod tests {
                 normals: None,
                 uvs: None,
                 display_color: [0.2, 0.5, 0.1],
+                colors: None,
                 roughness: 0.5,
                 reflectance: 0.55,
                 translucency: 0.45,
@@ -404,6 +413,7 @@ mod tests {
 
         assert!(!json.contains("\"normals\""), "got:\n{json}");
         assert!(!json.contains("\"uvs\""), "got:\n{json}");
+        assert!(!json.contains("\"colors\""), "got:\n{json}");
         assert!(!json.contains("\"collision\""), "got:\n{json}");
         assert_eq!(json.matches("\"collider\"").count(), 1, "got:\n{json}");
         assert_eq!(json.matches("\"cable\"").count(), 1, "got:\n{json}");

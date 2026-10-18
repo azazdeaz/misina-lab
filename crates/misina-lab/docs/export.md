@@ -47,7 +47,8 @@ emitting something USD would silently drop.
 The document's conventions are listed in `doc.rs`: every mesh is a triangle
 list; rotations are quaternions in xyzw order, never Euler triples; a node
 with a `reference` draws the part of that name and has no children; a part's
-surface response travels with it and becomes a bound material; colliders are
+surface response travels with it and becomes a bound material; a part may
+carry a colour per point, read off the mesh's vertex colours; colliders are
 static; a node's `attributes` are custom attributes of that prim.
 
 ## The builder
@@ -59,7 +60,9 @@ holds every USD rule the project depends on, each of which fails *silently*
 if dropped: stage metadata, the parts library as a `class` inside the
 default prim, `subdivisionScheme = "none"`, `extent`, `displayColor` at
 `constant` interpolation, one MDL material per drawn prim as a child of it,
-and the one that is easiest to get wrong: a part is an `Xform` *wrapping*
+a `UsdPreviewSurface` reading a per-vertex `displayColor` instead for a part
+coloured per point, since OmniPBR reads no primvar, and the one that is
+easiest to get wrong: a part is an `Xform` *wrapping*
 its `Mesh` rather than a bare `Mesh`. A USD instance shares its
 *descendants* through a prototype while the instance prim's own attributes
 stay on the instance, so referencing a bare mesh and marking it instanceable

@@ -3,9 +3,9 @@
 //! [`layout`] solves where the rows and paths go and spawns a prim for each,
 //! the fixtures fill those prims, and the crop grows on them: [`stem`] roots
 //! a plant on every block and hangs trusses off its stems, [`truss`] hangs
-//! fruit off those, and [`fruit`] colours them. Every element holds its params and a
-//! build system that replaces everything it spawned whenever its params or
-//! the layout change. The panel, the config snippet and the Python classes
+//! fruit off those, and [`fruit`] shapes and colours them. Every element
+//! holds its params and a build system that replaces everything it spawned
+//! whenever its params or the layout change. The panel, the config snippet and the Python classes
 //! are read off the params structs — see
 //! `crates/misina-lab/docs/editing-parameters.md`.
 //!

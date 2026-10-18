@@ -183,12 +183,18 @@ class TrussCfg:
 
 @configclass
 class FruitCfg:
-    """The fruit: how ripe the crop is, and what colour ripe is.
+    """The fruit: their shape, how ripe the crop is, and what colour ripe is.
 
-    A stem ripens from its lowest truss up, and a truss from its base to its tip, so
-    the lowest `ripe_trusses` trusses on a stem are coloured and the ones above them
-    still green. A truss is due once its tip fruit has started turning. Every stem
-    runs a little ahead of or behind the rest.
+    Every fruit has a stage: set, expanding and mature green while it grows, then
+    breaker, turning, pink, light red and red as it colours from its blossom end up.
+    A truss sets its fruit at the head, and they reach full size five trusses down. A
+    stem colours from its lowest truss up and a truss from its base to its tip, so
+    the lowest `ripe_trusses` trusses on a stem are colouring and the ones above them
+    still green. A truss is due once its tip fruit is turning. Every stem runs a
+    little ahead of or behind the rest.
+
+    Every fruit draws its own lobe count, its five or six sepals and how each curls,
+    and a slight lean, within the ranges the research notes give.
     """
 
     ripe_trusses: float = 1.0
@@ -196,15 +202,28 @@ class FruitCfg:
     the next one part way.
     """
     spread: float = 0.2
-    """How far a truss's tip fruit lags behind its base fruit, as a red fraction: 0
-    colours a truss all at once.
+    """How far a truss's tip fruit lags behind its base fruit, as a share of the
+    ripening from breaker to red: 0 colours a truss all at once.
     """
     color: str = "red"
     """The colour a ripe fruit turns: `red`, `orange`, `yellow` or `brown`."""
+    aspect: float = 0.9
+    """Height of a fruit over its width: under 1 is oblate, as round truss tomatoes and
+    beefsteaks are, and over 1 elongated, as plum tomatoes are. Each fruit draws a
+    little either side.
+    """
+    ribbing: float = 0.03
+    """Depth of the grooves between a fruit's lobes, as a fraction of its radius: 0 is
+    smooth, and a beefsteak's are about 0.15.
+    """
+    jointed: bool = True
+    """Whether a pedicel has a knuckle, the joint a fruit breaks off at, as most truss
+    varieties do.
+    """
     variations: int = 24
-    """How many distinct fruit meshes the scene may hold, by size and colour. A budget,
-    not a count: the fruit are clustered and this is how many representatives the
-    clustering may keep.
+    """How many distinct fruit meshes the scene may hold, by size, shape and stage. A
+    budget, not a count: the fruit are clustered and this is how many representatives
+    the clustering may keep.
     """
 
 

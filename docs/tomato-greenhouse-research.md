@@ -153,7 +153,11 @@ Looking along a row, with Z up:
 | Peduncle angle from the stem | 70° | 5–139° | [Kondo et al.][kondo] |
 | Cutting force | | about 60 N for the thickest peduncle | [Kondo et al.][kondo] |
 | Ripening | from the base of the truss to its tip; due when the terminal fruit is at least "turning" | | [AHPPEBot][ahppebot] |
-| Calyx | 5–6 sepals | | |
+| Colour stages | green, breaker, turning, pink, light red, red: coloured on up to 10%, 30%, 60% and 90% of the surface, and more | colour starts at the blossom end | [USDA][usda] |
+| Fruit size by stage | full size at mature green | about 15% of it at fruit set (est.) | |
+| Fruit shape, height over width | 0.9 for round TOV (est.) | beefsteak 0.6–0.75, plum 1.3–1.8 (est.) | |
+| Lobes | 3–5 on round fruit, shallow ribs (est.) | beefsteak ribs about 15% of the radius deep (est.) | |
+| Calyx | 5–6 narrow-lanceolate sepals | 15–25 mm long on a large TOV fruit (est.) | |
 
 The Kondo figures were measured in a Dutch-style high-wire house in Japan,
 on medium fruit. They are the only measured truss geometry found, so they
@@ -232,7 +236,7 @@ prims:
       /Leaf_00 …          -> parts/Leaf_k
       /Truss_04           Xform, unique
         /Peduncle         -> parts/Truss_k: peduncle, rachis, pedicels
-        /Fruit_00 …       -> parts/Fruit_k, by diameter and colour bucket
+        /Fruit_00 …       -> parts/Fruit_k, by size, shape and stage
         /Cut              Xform at the peduncle base, +X along the peduncle
         /Bend             Xform at the peduncle's maximum curvature
 ```
@@ -245,6 +249,7 @@ Attributes:
 
 | Prim | Attribute | Meaning |
 | --- | --- | --- |
+| `Fruit_NN` | `stage` | the growth stage or the USDA colour class |
 | `Fruit_NN` | `ripeness` | red fraction, 0–1, from which any of the datasets' class schemes derives |
 | `Truss_NN` | `harvestable` | terminal fruit at least "turning" |
 | `Truss_NN` | `clearance` | distance from `Cut` to the nearest leaf, stem, wire, hook or other truss |
@@ -274,7 +279,7 @@ The same layered pipeline the vineyard uses, in build order:
 5. **Leaves:** a compound leaf of traced leaflet outlines, quantized.
 6. **Trusses:** peduncle, rachis and pedicels as one strand mesh, quantized.
    A truss authors a fruit config at each pedicel tip.
-7. **Fruit:** quantized by diameter and colour bucket.
+7. **Fruit:** quantized by size, shape and stage, coloured per point.
 
 Ripeness changes colour, and colour is baked per mesh. So fruit are
 quantized on it, and every fruit stays its own prim so its own `ripeness`
@@ -327,5 +332,6 @@ Dutch gutter slope.
 [sourceag]: https://docs.source.ag/en/articles/96771-protocols-tomato-vegetative
 [thesis]: https://edepot.wur.nl/176100
 [ur]: https://www.universal-robots.com/case-stories/eternal/
+[usda]: https://www.ecfr.gov/current/title-7/section-51.1860
 [wpr1379]: https://edepot.wur.nl/685694
 [wur716057]: https://edepot.wur.nl/716057
