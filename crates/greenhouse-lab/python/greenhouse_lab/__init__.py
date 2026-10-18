@@ -11,21 +11,27 @@ works without it.
 
 # >>> generated: exports
 from ._core import (
+    FruitParams,
     GreenhouseParams,
     GutterParams,
     LayoutParams,
     RailParams,
     SceneParams,
+    StemParams,
+    TrussParams,
     WireParams,
     __version__,
 )
 
 __all__ = [
+    "FruitParams",
     "GreenhouseParams",
     "GutterParams",
     "LayoutParams",
     "RailParams",
     "SceneParams",
+    "StemParams",
+    "TrussParams",
     "WireParams",
     "__version__",
 ]

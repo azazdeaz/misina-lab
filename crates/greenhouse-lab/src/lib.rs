@@ -2,8 +2,8 @@
 //! greenhouse, for robotics simulation.
 //!
 //! The scene is what a robot touches or sees up close in a row: the floor,
-//! the pipe rails, the gutters with their slabs and blocks, and the crop
-//! wires. The building around them comes from an HDR or a Gaussian splat and
+//! the pipe rails, the gutters with their slabs and blocks, the crop wires,
+//! and the crop's stems, trusses and fruit. The building around them comes from an HDR or a Gaussian splat and
 //! is not generated. The parts are [`elements`]; everything around them — the
 //! panel, the export, the generated Python and docs — is [`misina_lab`],
 //! keyed on [`Greenhouse`].

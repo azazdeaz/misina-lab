@@ -16,11 +16,14 @@ except ImportError as err:  # pragma: no cover - depends on the environment
 
 # >>> generated: imports
 from .greenhouse_cfg import (
+    FruitCfg,
     GreenhouseCfg,
     GutterCfg,
     LayoutCfg,
     RailCfg,
     SceneCfg,
+    StemCfg,
+    TrussCfg,
     WireCfg,
 )
 
@@ -28,11 +31,14 @@ from .greenhouse_cfg import (
 
 __all__ = [
     # >>> generated: all
+    "FruitCfg",
     "GreenhouseCfg",
     "GutterCfg",
     "LayoutCfg",
     "RailCfg",
     "SceneCfg",
+    "StemCfg",
+    "TrussCfg",
     "WireCfg",
     # <<< generated: all
 ]

@@ -1,7 +1,9 @@
 //! Elements — the parts of a greenhouse row, one module each.
 //!
 //! [`layout`] solves where the rows and paths go and spawns a prim for each,
-//! and the fixtures fill those prims. Every element holds its params and a
+//! the fixtures fill those prims, and the crop grows on them: [`stem`] roots
+//! a plant on every block and hangs trusses off its stems, [`truss`] hangs
+//! fruit off those, and [`fruit`] colours them. Every element holds its params and a
 //! build system that replaces everything it spawned whenever its params or
 //! the layout change. The panel, the config snippet and the Python classes
 //! are read off the params structs — see
@@ -11,9 +13,12 @@
 //! at negative x, and the top of the floor is z = 0.
 
 pub mod floor;
+pub mod fruit;
 pub mod gutter;
 pub mod layout;
 pub mod rail;
+pub mod stem;
+pub mod truss;
 pub mod wire;
 
 use bevy::prelude::*;
@@ -22,20 +27,32 @@ use misina_lab::geometry::mesh::{MeshData, box_mesh};
 use misina_lab::palette::Response;
 use misina_lab::params::{Label, Slider};
 
-/// Build order: the layout spawns the row and path prims the fixtures fill.
+/// Build order: the layout spawns the row and path prims the fixtures fill,
+/// and each layer of the crop builds the configs the one above it authored.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Grow {
     /// The rows and the paths.
     Layout,
     /// The floor, the rails, the gutters and the wires.
     Fixtures,
+    Stems,
+    Trusses,
+    Fruit,
 }
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<SceneParams>()
         .configure_sets(
             PreUpdate,
-            (Grow::Layout, Grow::Fixtures).chain().in_set(Build),
+            (
+                Grow::Layout,
+                Grow::Fixtures,
+                Grow::Stems,
+                Grow::Trusses,
+                Grow::Fruit,
+            )
+                .chain()
+                .in_set(Build),
         )
         .add_plugins((
             layout::plugin,
@@ -43,6 +60,9 @@ pub fn plugin(app: &mut App) {
             rail::plugin,
             gutter::plugin,
             wire::plugin,
+            stem::plugin,
+            truss::plugin,
+            fruit::plugin,
         ));
 }
 
@@ -72,6 +92,11 @@ misina_lab::generator! {
         pub gutter: gutter::GutterParams,
         #[reflect(@Label("Crop wires"))]
         pub wire: wire::WireParams,
+        #[reflect(@Label("Stems"))]
+        pub stem: stem::StemParams,
+        #[reflect(@Label("Trusses"))]
+        pub truss: truss::TrussParams,
+        pub fruit: fruit::FruitParams,
     }
 }
 
@@ -89,6 +114,29 @@ pub fn cuboid(min: Vec3, max: Vec3) -> MeshData {
 #[cfg(test)]
 pub(crate) fn grown(params: GreenhouseParams) -> App {
     misina_lab::testing::grown::<crate::Greenhouse>(params)
+}
+
+/// The default params on a short row or two, for a test that only needs a
+/// few plants.
+#[cfg(test)]
+pub(crate) fn small() -> GreenhouseParams {
+    let mut params = GreenhouseParams::default();
+    (params.layout.rows, params.layout.row_length) = (2, 6.0);
+    params
+}
+
+/// Where `entity` is in the scene: its transform composed with its
+/// ancestors' up to the scene root. A headless build propagates none.
+#[cfg(test)]
+pub(crate) fn in_scene(world: &World, mut entity: Entity) -> Transform {
+    let root = world.resource::<misina_lab::scene::PrimRoot>().0;
+    let mut placed = Transform::IDENTITY;
+    while entity != root {
+        let at = world.entity(entity);
+        placed = at.get::<Transform>().copied().unwrap_or_default() * placed;
+        entity = at.get::<ChildOf>().unwrap().parent();
+    }
+    placed
 }
 
 #[cfg(test)]
@@ -154,7 +202,7 @@ mod tests {
     #[test]
     fn an_edit_lands_where_generating_would_have() {
         let edited = |edit: fn(&mut GreenhouseParams)| {
-            let mut params = GreenhouseParams::default();
+            let mut params = small();
             edit(&mut params);
             params
         };
@@ -164,9 +212,12 @@ mod tests {
             ("mount", edited(|p| p.gutter.mount = "standing".into())),
             ("unevenness", edited(|p| p.rail.unevenness = 1.5)),
             ("wire height", edited(|p| p.wire.height = 4.0)),
+            ("lowered", edited(|p| p.stem.lowered = 0.0)),
+            ("peduncle", edited(|p| p.truss.peduncle_length = 0.1)),
+            ("ripeness", edited(|p| p.fruit.ripe_trusses = 2.5)),
             ("seed", edited(|p| p.scene.seed = 7)),
         ] {
-            let mut app = grown(GreenhouseParams::default());
+            let mut app = grown(small());
             want.apply(app.world_mut());
             app.update();
             assert!(json(&mut app) == json(&mut grown(want)), "{what} drifted");

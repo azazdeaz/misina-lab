@@ -3318,6 +3318,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "misina-lab",
+ "nalgebra 0.35.0",
  "pyo3",
 ]
 

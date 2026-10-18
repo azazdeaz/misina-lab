@@ -2,15 +2,16 @@
 
 The rows of a Western European high-wire tomato greenhouse, generated for
 robotics simulation and authored to USD for Isaac Lab: the floor, the pipe
-rails, the gutters with their slabs and blocks, and the crop wires. The
-building, its roof, glass and columns, is left to an HDR or a Gaussian
-splat. It is built on [misina-lab](../misina-lab/README.md), like the
-vineyard beside it.
+rails, the gutters with their slabs and blocks, the crop wires, and the
+crop on them: stems, trusses and fruit. The building, its roof, glass and
+columns, is left to an HDR or a Gaussian splat. It is built on
+[misina-lab](../misina-lab/README.md), like the vineyard beside it.
 
 The dimensions and the variations follow
 [the research notes](../../docs/tomato-greenhouse-research.md), drawn from
 Dutch research compartments, supplier sheets and one measured truss study.
-The stems, leaves, trusses and fruit come next.
+The leaves come next. Until then a row is the harvest band as growers leave
+it, bare stem with the trusses hanging off it.
 
 ## What a row holds
 
@@ -20,6 +21,9 @@ The stems, leaves, trusses and fruit come next.
 | Rail | two heating pipes in every path, on a support every meter, each segment a capsule collider | gauge, pipe diameter, height, unevenness up to and past the 2° spec |
 | Gutter | a steel channel, hanging or standing, with stone wool slabs and a block at every plant | height, mount, plant spacing |
 | Wires | two crop wires over every gutter, for the V the stems are trained in | height, spread |
+| Stems | two to a plant, each lowered along the gutter and rising to a hook on its wire, with its twine wound down it; a truss at every third node | harvest height, trusses on a stem, lowered length, extra stems, trusses turned to the path |
+| Trusses | peduncle, rachis and a pedicel to every fruit, with a `Cut` and a `Bend` frame | fruit count and diameter, branched, peduncle length, diameter and angle, missing fruit |
+| Fruit | every fruit its own prim, coloured by ripeness: a stem ripens from the bottom up, a truss from its base to its tip | ripe trusses on a stem, the spread in a truss, the ripe colour |
 
 Rows run along +X from the row head at x = 0, the main path lies at
 negative x, and z = 0 is the top of the floor. Every gutter has a path on
@@ -58,7 +62,18 @@ with its default and range.
   /Rows/Row_02
     /Gutter  /Hanger_00 …  /Slab_00 …  /Block_017 …
     /Wire_L  /Wire_R
+    /Plant_017
+      /Stem_0
+        /Tube  /Hook  /Twine
+        /Truss_00                     the lowest still on the stem
+          /Peduncle  /Cut  /Bend
+          /Fruit_00 …
 ```
+
+`Cut` sits at the peduncle's base and `Bend` where it bends most, each with
++X along the peduncle: where a cut-flush gripper and a clamp-and-cut one
+take a truss. A fruit's ripeness shows only in its colour so far; the
+scene document has no per-prim attributes to carry it yet.
 
 Left is +Y: the side on the left looking down a row from its head. A
 standing gutter has `Stand_00 …` where a hanging one has hangers.
