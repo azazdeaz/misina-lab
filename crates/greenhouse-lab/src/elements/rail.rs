@@ -258,7 +258,7 @@ mod tests {
     fn unevenness_one_stays_inside_the_spec_and_reaches_it() {
         let mut params = GreenhouseParams::default();
         params.rail.unevenness = 1.0;
-        params.layout.row_length = 120.0;
+        (params.layout.rows, params.layout.row_length) = (1, 120.0);
         let limit = params.rail.gauge * SPEC_TILT.to_radians().tan();
         let (app, prims) = rail(params);
 

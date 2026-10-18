@@ -112,6 +112,102 @@ class WireCfg:
     """
 
 
+@configclass
+class StemCfg:
+    """The crop's stems: two to a plant, trained alternately to the left and the right
+    wire, and lowered as they grow.
+
+    Each stem lies `lowered` meters along the gutter, then rises to its hook, with
+    its head a hook's length below the wire. The stem between `harvest_height` and
+    the head carries `trusses` trusses at every third node, so how much stem a truss
+    takes follows from the wire height rather than being set.
+    """
+
+    harvest_height: float = 1.2
+    """Height above the floor of the lowest truss still on a stem, in meters: where a
+    harvesting arm reaches to. The stem below it has been picked and stripped bare.
+    """
+    trusses: int = 9
+    """Trusses on a stem, from the lowest still on it up to the head."""
+    lowered: float = 2.0
+    """Length of bare stem lying beside the gutter, in meters: how far into the season
+    the crop is, at about 25 cm of lowering a week. 0 is a crop before its first
+    lowering.
+    """
+    extra_stems: float = 0.0
+    """Share of plants grown on with a third stem, which growers keep to raise the stem
+    density.
+    """
+    turned_to_path: float = 0.8
+    """Share of trusses turned to face the path. The rest face anywhere, into the crop
+    as often as not, where a harvester has to skip them.
+    """
+
+
+@configclass
+class TrussCfg:
+    """The trusses: a peduncle off the stem, bending over into a rachis with the fruit
+    hung along it.
+
+    The peduncle numbers default to the means measured on medium trusses in a
+    high-wire house, and every truss draws its own about them. A medium truss tomato
+    is about 6 fruit of 60 mm; a cherry truss about 15 of 25 mm, branched.
+    """
+
+    fruits: int = 6
+    """Fruit on a truss. Each truss draws a few more or fewer."""
+    fruit_diameter: float = 0.06
+    """Diameter of a fruit at the base of a truss, in meters; the fruit toward its tip
+    come out a little smaller.
+    """
+    branched: bool = False
+    """Whether the rachis forks in two at the first fruit, as a cherry truss does,
+    rather than hanging as one.
+    """
+    peduncle_length: float = 0.079
+    """Length of the peduncle from the stem to the first fruit, in meters."""
+    peduncle_diameter: float = 0.007
+    """Diameter of the peduncle, in meters."""
+    peduncle_angle: float = 70.0
+    """Angle between the stem and the peduncle where it leaves, in degrees: 90 leaves
+    level, less leaves rising.
+    """
+    missing_fruit: float = 0.05
+    """Chance that a fruit is missing from its pedicel."""
+    variations: int = 16
+    """How many distinct truss meshes the scene may hold. A budget, not a count: the
+    trusses are clustered and this is how many representatives the clustering may
+    keep.
+    """
+
+
+@configclass
+class FruitCfg:
+    """The fruit: how ripe the crop is, and what colour ripe is.
+
+    A stem ripens from its lowest truss up, and a truss from its base to its tip, so
+    the lowest `ripe_trusses` trusses on a stem are coloured and the ones above them
+    still green. A truss is due once its tip fruit has started turning. Every stem
+    runs a little ahead of or behind the rest.
+    """
+
+    ripe_trusses: float = 1.0
+    """Trusses per stem that have coloured, counted up from the lowest: a fraction is
+    the next one part way.
+    """
+    spread: float = 0.2
+    """How far a truss's tip fruit lags behind its base fruit, as a red fraction: 0
+    colours a truss all at once.
+    """
+    color: str = "red"
+    """The colour a ripe fruit turns: `red`, `orange`, `yellow` or `brown`."""
+    variations: int = 24
+    """How many distinct fruit meshes the scene may hold, by size and colour. A budget,
+    not a count: the fruit are clustered and this is how many representatives the
+    clustering may keep.
+    """
+
+
 # <<< generated: fragments
 
 
@@ -145,6 +241,9 @@ class GreenhouseCfg(GeneratedSceneCfg):
     rail: RailCfg = RailCfg()
     gutter: GutterCfg = GutterCfg()
     wire: WireCfg = WireCfg()
+    stem: StemCfg = StemCfg()
+    truss: TrussCfg = TrussCfg()
+    fruit: FruitCfg = FruitCfg()
 
     FRAGMENTS: ClassVar[tuple[str, ...]] = (
         "scene",
@@ -152,6 +251,9 @@ class GreenhouseCfg(GeneratedSceneCfg):
         "rail",
         "gutter",
         "wire",
+        "stem",
+        "truss",
+        "fruit",
     )
     """The fragment fields, in the order `GreenhouseParams` takes them: what `to_params`
     converts and the cache key is built from. Everything else on the cfg is applied

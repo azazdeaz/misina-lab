@@ -17,8 +17,8 @@ use super::wire::WireParams;
 use super::{Grow, STEEL, cuboid};
 
 /// The channel's outer width, wall height and sheet thickness, in meters.
-const WIDTH: f32 = 0.2;
-const DEPTH: f32 = 0.06;
+pub const WIDTH: f32 = 0.2;
+pub const DEPTH: f32 = 0.06;
 const SHEET: f32 = 0.002;
 
 /// A propagation block, in meters.
@@ -108,6 +108,16 @@ impl Default for GutterParams {
 }
 
 impl GutterParams {
+    /// Height of the gutter's floor above the ground, as built.
+    pub fn floor(&self) -> f32 {
+        self.height.max(0.0)
+    }
+
+    /// Height of the blocks' tops above the ground, where the stems start.
+    pub fn block_top(&self) -> f32 {
+        self.floor() + SHEET + SLAB.z + BLOCK.z
+    }
+
     /// The parsed mount. An unknown name is read as the default: Python has
     /// already rejected it, and a build system is no place to fail.
     pub fn mount(&self) -> Mount {
@@ -154,7 +164,7 @@ fn build(
         library.clear(prefix);
     }
 
-    let height = params.height.max(0.0);
+    let height = params.floor();
     let steel = STEEL.surface(srgb(GUTTER_COLOR));
     let gutter = library.part("Gutter", 0, channel(layout.length).to_mesh(), steel);
     let [slab, block] = [

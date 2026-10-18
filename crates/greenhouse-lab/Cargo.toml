@@ -13,6 +13,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 misina-lab = { path = "../misina-lab" }
 bevy = { workspace = true }
+nalgebra = { workspace = true }
 pyo3 = { version = "0.29", features = ["abi3-py312"], optional = true }
 
 [features]
