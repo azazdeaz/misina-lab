@@ -22,8 +22,9 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, bail, ensure};
-use bevy::math::curve::{Curve, EaseFunction};
+// Named over the prelude's `ContextExt`, Bevy's own `context`, which would
+// make every call ambiguous.
+use anyhow::{Context as ContextExt, bail, ensure};
 use bevy::picking::PickingSettings;
 use bevy::prelude::*;
 use bevy::reflect::NamedField;

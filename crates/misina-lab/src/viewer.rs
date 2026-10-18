@@ -21,7 +21,9 @@ use bevy::light::{
 };
 use bevy::pbr::AtmosphereSettings;
 use bevy::pbr::wireframe::WireframePlugin;
+use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
+use bevy::ui::Pressed;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 
 use crate::Generator;
@@ -235,17 +237,17 @@ fn sub_view(width: f32, height: f32) -> SubCameraView {
     }
 }
 
-/// Disables orbit/pan/zoom while the pointer is over the UI, so dragging a
-/// slider there doesn't also drag the camera underneath it.
+/// Disables orbit/pan/zoom while the pointer is over the UI or holds one of its
+/// controls, so dragging a slider doesn't also drag the camera underneath it —
+/// not even once the drag has left the panel.
 fn sync_camera_enabled_with_ui(
-    panel: Query<&Interaction, With<BlocksCamera>>,
+    panel: Query<&Hovered, With<BlocksCamera>>,
+    pressed: Query<(), With<Pressed>>,
     mut cameras: Query<&mut PanOrbitCamera>,
 ) {
-    let over_panel = panel
-        .iter()
-        .any(|interaction| *interaction != Interaction::None);
+    let busy = panel.iter().any(Hovered::get) || !pressed.is_empty();
     for mut camera in &mut cameras {
-        camera.enabled = !over_panel;
+        camera.enabled = !busy;
     }
 }
 

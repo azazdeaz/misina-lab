@@ -88,11 +88,8 @@ fn build(
     params: Res<BoxParams>,
     root: Res<PrimRoot>,
     mut library: Library,
-    standing: Query<Entity, With<Row>>,
 ) {
-    for row in &standing {
-        commands.entity(row).despawn();
-    }
+    commands.despawn_all::<With<Row>>();
     library.clear("Box");
     let surface = Surface {
         color: [0.5, 0.35, 0.2],

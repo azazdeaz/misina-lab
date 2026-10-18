@@ -49,7 +49,9 @@
 
 use std::f64::consts::{PI, TAU};
 
-use anyhow::Context;
+// Named over the prelude's `ContextExt`, Bevy's own `context`, which would
+// make every call ambiguous.
+use anyhow::Context as ContextExt;
 use bevy::prelude::*;
 
 use super::util::{color, material, par_map};

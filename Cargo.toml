@@ -17,7 +17,7 @@ authors = ["Andras Polgar <azazdeaz@gmail.com>"]
 # `reflect_documentation` keeps the params structs' doc comments readable at
 # run time, which is where the viewer's tooltips and the generated Python docs
 # come from.
-bevy = { version = "0.19.1", features = [
+bevy = { version = "0.20.0", features = [
     "bevy_feathers",
     "ghost_nodes",
     "bevy_ui_debug",
@@ -58,3 +58,9 @@ lto = "fat"
 codegen-units = 1
 panic = "abort"
 strip = true
+
+# bevy_panorbit_camera has no Bevy 0.20 release yet. This fork's `bevy-0.20`
+# branch only bumps Bevy and bevy_egui; drop it for the first upstream release
+# that supports 0.20, bumping the dependency in crates/misina-lab to match.
+[patch.crates-io]
+bevy_panorbit_camera = { git = "https://github.com/azazdeaz/bevy_panorbit_camera", rev = "f71b07c323757b842b03a5d1638759362017f45c" }
