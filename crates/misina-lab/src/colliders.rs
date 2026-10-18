@@ -64,7 +64,6 @@ struct Overlay;
 fn draw(
     mut commands: Commands,
     show: Res<ShowColliders>,
-    overlays: Query<Entity, With<Overlay>>,
     mut gizmos: ResMut<Assets<GizmoAsset>>,
     prototypes: Res<Prototypes>,
     meshes: Res<Assets<Mesh>>,
@@ -73,9 +72,7 @@ fn draw(
     frames: Query<&GlobalTransform>,
     instances: Query<(&UsdReference, &GlobalTransform)>,
 ) {
-    for overlay in &overlays {
-        commands.entity(overlay).despawn();
-    }
+    commands.despawn_all::<With<Overlay>>();
     if !show.0 {
         return;
     }

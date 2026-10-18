@@ -31,14 +31,13 @@ use bevy::feathers::{
         FeathersTextInputContainer,
     },
     dark_theme::create_dark_theme,
-    display::label_small,
-    theme::{ThemeBackgroundColor, ThemeBorderColor, ThemedText, UiTheme},
+    display::{caption, label_small},
+    theme::{ThemeBackgroundColor, ThemeBorderColor, UiTheme},
     tokens,
 };
 use bevy::input::ButtonState;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::input_focus::{AutoFocus, FocusedInput, InputFocus};
-use bevy::picking::events::{Click, DragEnd, Pointer};
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::reflect::{NamedField, PartialReflect, Reflect};
@@ -72,7 +71,7 @@ pub fn plugin<G: Generator>(app: &mut App) {
 /// The write-back observers reach the params through it, and so does
 /// [`sync_controls`], which is why a dropdown's caption and a checkbox's
 /// check are right however the params came to change.
-#[derive(Component, Clone, Copy, Debug, Default)]
+#[derive(Component, Clone, Copy, Debug)]
 pub struct Bound {
     pub fragment: &'static str,
     pub field: &'static str,
@@ -135,20 +134,20 @@ fn slider_control<P: Params>(
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(4) }
         Children [
-            label_small(label),
-            (
-                @FeathersSlider { @min: {slider.min}, @max: {slider.max}, @value: value }
-                Tip(tip)
-                Bound { fragment: {bound.fragment}, field: {bound.field} }
-                SliderStep({slider.step})
-                SliderPrecision(precision)
-                on(slider_self_update)
-                on(move |change: On<ValueChange<f32>>, mut staged: ResMut<Staged<P>>| {
-                    bound.set_number(&mut staged.0, change.value);
-                })
-                on(open_field_on_click)
-                on(open_field_after_drag)
-            ),
+            @label_small(label)
+            --
+            @FeathersSlider { @min: {slider.min}, @max: {slider.max} }
+            SliderValue(value)
+            Tip(tip)
+            bound
+            SliderStep({slider.step})
+            SliderPrecision(precision)
+            on(slider_self_update)
+            on(move |change: On<ValueChange<f32>>, mut staged: ResMut<Staged<P>>| {
+                bound.set_number(&mut staged.0, change.value);
+            })
+            on(open_field_on_click)
+            on(open_field_after_drag)
         ]
     }
 }
@@ -163,14 +162,6 @@ fn slider_control<P: Params>(
 #[derive(Component, Clone, Copy)]
 struct NumberField(Entity);
 
-impl Default for NumberField {
-    /// Never a real field: `bsn!` needs a default to build the template from,
-    /// and [`number_field`] names the slider on every one it spawns.
-    fn default() -> Self {
-        Self(Entity::PLACEHOLDER)
-    }
-}
-
 /// How far the pointer may travel between press and release and still be
 /// typing rather than dragging.
 ///
@@ -179,11 +170,11 @@ impl Default for NumberField {
 /// almost never register as one.
 const CLICK_SLOP: f32 = 4.0;
 
-/// A press and release that never moved. Picking sends `Click` before
-/// `DragEnd`, so a drag still reads as dragging here and is left to
+/// A press and release that never moved. Picking sends `PointerClick` before
+/// `PointerDragEnd`, so a drag still reads as dragging here and is left to
 /// [`open_field_after_drag`], which is the half that knows how far it went.
 fn open_field_on_click(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     dragged: Query<&SliderDragState>,
     sliders: Query<(&SliderValue, &SliderPrecision, &ChildOf)>,
     nodes: Query<&mut Node>,
@@ -200,7 +191,7 @@ fn open_field_on_click(
 /// The smudge has already nudged the value, which the field then starts from
 /// — a pixel's worth, and about to be typed over anyway.
 fn open_field_after_drag(
-    drag: On<Pointer<DragEnd>>,
+    drag: On<PointerDragEnd>,
     sliders: Query<(&SliderValue, &SliderPrecision, &ChildOf)>,
     nodes: Query<&mut Node>,
     commands: Commands,
@@ -241,9 +232,10 @@ fn open_field(
 /// The field itself: born holding the slider's value, with the keyboard and
 /// the whole number selected, so it can be typed straight over.
 fn number_field(slider: Entity, text: String) -> impl Scene {
+    let field = NumberField(slider);
     bsn! {
         @FeathersTextInputContainer
-        Children [(
+        Children [
             @FeathersTextInput
             EditableText::new(text)
             // A float and nothing else: digits, a point, a sign, an exponent.
@@ -252,13 +244,13 @@ fn number_field(slider: Entity, text: String) -> impl Scene {
             })
             SelectAllOnFocus
             AutoFocus
-            NumberField(slider)
+            field
             // The pointer is over the field the moment it stands in for the
             // slider, but picking only agrees a frame later — without this,
             // `close_fields` reads the click that opened it as a click away.
             Hovered(true)
             on(field_keys)
-        )]
+        ]
     }
 }
 
@@ -360,32 +352,27 @@ pub fn dropdown<P: Params>(
         .map(|name| {
             let name: &'static str = name;
             bsn! {
-                (
-                    @FeathersMenuItem { @caption: bsn! { Text(name) ThemedText } }
-                    on(move |_activate: On<Activate>, mut staged: ResMut<Staged<P>>| {
-                        bound.set(&mut staged.0, name.to_string());
-                    })
-                )
+                @FeathersMenuItem { @caption: bsn! { @caption(name) } }
+                on(move |_activate: On<Activate>, mut staged: ResMut<Staged<P>>| {
+                    bound.set(&mut staged.0, name.to_string());
+                })
             }
         })
         .collect();
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(4) }
         Children [
-            label_small(label),
-            (
-                @FeathersMenu
-                Children [
-                    (
-                        @FeathersMenuButton {
-                            @caption: bsn! { (Text("") ThemedText Bound { fragment: {bound.fragment}, field: {bound.field} }) }
-                        }
-                        Node { flex_grow: 1.0 }
-                        Tip(tip)
-                    ),
-                    (@FeathersMenuPopup Children [ {items} ]),
-                ]
-            ),
+            @label_small(label)
+            --
+            @FeathersMenu
+            Children [
+                @FeathersMenuButton { @caption: bsn! { @caption("") bound } }
+                Node { flex_grow: 1.0 }
+                Tip(tip)
+                --
+                @FeathersMenuPopup
+                Children [ {items} ]
+            ]
         ]
     }
 }
@@ -394,15 +381,13 @@ pub fn dropdown<P: Params>(
 /// params, the way a dropdown's caption is.
 fn checkbox<P: Params>(label: String, tip: Cow<'static, str>, bound: Bound) -> impl Scene {
     bsn! {
-        (
-            @FeathersCheckbox { @caption: bsn! { (Text(label) ThemedText) } }
-            Tip(tip)
-            Bound { fragment: {bound.fragment}, field: {bound.field} }
-            on(checkbox_self_update)
-            on(move |change: On<ValueChange<bool>>, mut staged: ResMut<Staged<P>>| {
-                bound.set(&mut staged.0, change.value);
-            })
-        )
+        @FeathersCheckbox { @caption: bsn! { @caption(label) } }
+        Tip(tip)
+        bound
+        on(checkbox_self_update)
+        on(move |change: On<ValueChange<bool>>, mut staged: ResMut<Staged<P>>| {
+            bound.set(&mut staged.0, change.value);
+        })
     }
 }
 
@@ -519,7 +504,7 @@ pub(crate) fn tip_popup(text: Cow<'static, str>, above: bool) -> impl Scene {
             positions: {positions},
             window_margin: 10.0,
         }
-        Children [ label_small(text) ]
+        Children [ @label_small(text) ]
     }
 }
 
@@ -566,9 +551,8 @@ fn commit<P: Params>(world: &mut World, mut still: Local<Option<f32>>) {
 /// Marks a piece of UI the pointer can be over, so the viewer camera knows to
 /// stop orbiting while it is — see `viewer::sync_camera_enabled_with_ui`.
 ///
-/// Goes on whatever node actually takes the hover: the params panel's root,
-/// whose background covers it, but the viewport toolbar's *button*, since a
-/// hovered node blocks its ancestors from counting as hovered.
+/// Goes on the piece's root, next to a [`Hovered`], which counts the pointer
+/// over any descendant as over the root.
 #[derive(Component, Clone, Default)]
 pub struct BlocksCamera;
 
@@ -614,30 +598,30 @@ fn params_panel<G: Generator>(params: &G::Params) -> impl Scene {
             align_items: AlignItems::Stretch,
         }
         BlocksCamera
-        Interaction
+        Hovered
         ThemeBackgroundColor(tokens::WINDOW_BG)
         // `min_height` on both: a flex item refuses to shrink below its own
         // content by default, which would push the scroll area past the
         // bottom of the window instead of letting it scroll.
-        Children [ pane() Node { flex_grow: 1.0, min_height: px(0) } Children [
-            pane_header() Children [ (Text(title) ThemedText) ],
-            pane_body() Node { flex_grow: 1.0, min_height: px(0) } Children [
-                (
-                    Node {
-                        display: Display::Flex,
-                        flex_direction: FlexDirection::Column,
-                        row_gap: px(6),
-                        flex_grow: 1.0,
-                        min_height: px(0),
-                        overflow: Overflow::scroll_y(),
-                    }
-                    ScrollArea
-                    Children [ {sections} ]
-                ),
+        Children [ @pane() Node { flex_grow: 1.0, min_height: px(0) } Children [
+            @pane_header() Children [ @caption(title) ]
+            --
+            @pane_body() Node { flex_grow: 1.0, min_height: px(0) } Children [
+                Node {
+                    display: Display::Flex,
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(6),
+                    flex_grow: 1.0,
+                    min_height: px(0),
+                    overflow: Overflow::scroll_y(),
+                }
+                ScrollArea
+                Children [ {sections} ]
+                --
                 // Outside the scroll area, so it stays reachable however far
                 // down the panel is scrolled.
-                copy_cfg_button::<G>(),
-            ],
+                @copy_cfg_button::<G>()
+            ]
         ]]
     }
 }
@@ -662,21 +646,19 @@ fn section(
     let checked = open.then_some(bsn! { Checked });
     let display = if open { Display::Flex } else { Display::None };
     bsn! {
-        group()
+        @group()
         Children [
-            group_header() Children [
-                (Text(title) ThemedText),
-                (
-                    @FeathersDisclosureToggle
-                    Section(fragment)
-                    on(checkbox_self_update)
-                    on(fold_section)
-                    // Last: a brace straight after `@FeathersDisclosureToggle`
-                    // would be read as that scene component's props.
-                    {checked}
-                ),
-            ],
-            group_body() Node { display: {display} } Children [ {body} ],
+            @group_header() Children [
+                @caption(title)
+                --
+                @FeathersDisclosureToggle
+                Section(fragment)
+                on(checkbox_self_update)
+                on(fold_section)
+                @{checked}
+            ]
+            --
+            @group_body() Node { display: {display} } Children [ {body} ]
         ]
     }
 }
@@ -721,9 +703,9 @@ fn fold_section(
 fn copy_cfg_button<G: Generator>() -> impl Scene {
     bsn! {
         Node { margin: UiRect::top(px(8)) }
-        Children [ (
+        Children [
             @FeathersButton {
-                @caption: bsn! { Text("Copy Isaac Lab cfg") ThemedText },
+                @caption: bsn! { @caption("Copy Isaac Lab cfg") },
                 @variant: ButtonVariant::Primary,
             }
             // Off `Staged` rather than the live resources, so the snippet is
@@ -744,7 +726,7 @@ fn copy_cfg_button<G: Generator>() -> impl Scene {
                     Err(err) => warn!("could not reach the clipboard: {err}"),
                 }
             })
-        ) ]
+        ]
     }
 }
 
@@ -792,11 +774,11 @@ mod tests {
     }
 
     fn open_section() -> impl SceneList {
-        bsn_list![section("test", "Test", true, bsn_list![Node])]
+        bsn_list! { @section("test", "Test", true, bsn_list! { Node }) }
     }
 
     fn closed_section() -> impl SceneList {
-        bsn_list![section("test", "Test", false, bsn_list![Node])]
+        bsn_list! { @section("test", "Test", false, bsn_list! { Node }) }
     }
 
     /// Everything a section's scene touches while spawning, and nothing else:
@@ -866,7 +848,7 @@ mod tests {
     }
 
     fn one_dropdown() -> impl SceneList {
-        bsn_list![dropdown::<BoxesParams>(
+        bsn_list! { @dropdown::<BoxesParams>(
             "Material".into(),
             "What the boxes are made of.".into(),
             &MATERIALS,
@@ -874,7 +856,7 @@ mod tests {
                 fragment: "boxes",
                 field: "material",
             },
-        )]
+        ) }
     }
 
     /// The caption a dropdown shows, in a world with the params it reads.
@@ -950,14 +932,14 @@ mod tests {
     }
 
     fn one_checkbox() -> impl SceneList {
-        bsn_list![checkbox::<BoxesParams>(
+        bsn_list! { @checkbox::<BoxesParams>(
             "Open".into(),
             "Whether a box is open at the top.".into(),
             Bound {
                 fragment: "boxes",
                 field: "open",
             },
-        )]
+        ) }
     }
 
     /// A checkbox starts as its flag reads and follows it, since nothing in
@@ -982,7 +964,7 @@ mod tests {
     }
 
     fn one_slider() -> impl SceneList {
-        bsn_list![slider_control::<BoxesParams>(
+        bsn_list! { @slider_control::<BoxesParams>(
             "Gap".into(),
             "The gap between neighbours.".into(),
             Slider {
@@ -995,7 +977,7 @@ mod tests {
                 fragment: "boxes",
                 field: "gap",
             },
-        )]
+        ) }
     }
 
     fn the_slider(world: &mut World) -> Entity {
@@ -1024,29 +1006,24 @@ mod tests {
             ),
             position: Vec2::ZERO,
         };
-        // Picking sends `Click` first, and `DragEnd` after it and only if a
-        // drag had started.
-        world.trigger(Pointer::new(
-            PointerId::Mouse,
-            at.clone(),
-            Click {
-                button: PointerButton::Primary,
-                hit: HitData::new(Entity::PLACEHOLDER, 0.0, None, None),
-                duration: Duration::ZERO,
-                count: 1,
-            },
-            slider,
-        ));
+        let pointer = Pointer::new(PointerId::Mouse, at);
+        // Picking sends `PointerClick` first, and `PointerDragEnd` after it
+        // and only if a drag had started.
+        world.trigger(PointerClick {
+            entity: slider,
+            pointer: pointer.clone(),
+            button: PointerButton::Primary,
+            hit: HitData::new(Entity::PLACEHOLDER, 0.0, None, None),
+            duration: Duration::ZERO,
+            count: 1,
+        });
         if let Some(distance) = moved {
-            world.trigger(Pointer::new(
-                PointerId::Mouse,
-                at,
-                DragEnd {
-                    button: PointerButton::Primary,
-                    distance,
-                },
-                slider,
-            ));
+            world.trigger(PointerDragEnd {
+                entity: slider,
+                pointer,
+                button: PointerButton::Primary,
+                distance,
+            });
         }
         world.flush();
     }
