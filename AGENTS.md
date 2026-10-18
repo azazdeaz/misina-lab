@@ -110,6 +110,10 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinerylab`,
   `docs/parameters.md` are stale; `cargo test regen_params -- --ignored`
   rewrites them. The greenhouse's are the same files under
   `crates/greenhouse-lab/`, rewritten with `-p greenhouse-lab`.
+- **A user-facing change adds its line under Unreleased in
+  [CHANGELOG.md](CHANGELOG.md)**, in the same change, marked the way the
+  changelog's header says when it bumps the scene document format or changes
+  a cfg class.
 - **The `python` feature is off by default**, so a plain `cargo clippy` never
   sees the PyO3 side. Pass `--features vinerylab/python,greenhouse-lab/python`,
   as CI does.
