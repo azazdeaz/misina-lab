@@ -11,6 +11,10 @@
 //! tens of thousands of leaves; the component only tells the exporter to emit a
 //! reference to the shared part instead of a copy of its points.
 //!
+//! [`UsdAttributes`] is how an element labels a prim with ground truth a
+//! consumer reads off the stage: whether a robot may grasp it, how much room
+//! it has around it.
+//!
 //! # The shape of the tree
 //!
 //! Structural prims are unique and have children. Geometry prims reference a
@@ -52,7 +56,7 @@ use bevy::prelude::*;
 
 use crate::Generator;
 
-/// The mesh library, and the scene root named after `G`.
+/// The mesh library, and the scene root named after `G`, in `G`'s namespace.
 pub fn plugin<G: Generator>(app: &mut App) {
     app.init_resource::<Prototypes>()
         .add_systems(Startup, spawn_root::<G>);
@@ -92,7 +96,9 @@ fn spawn_root<G: Generator>(mut commands: Commands) {
     // the correction never reaches the document.
     let root = commands
         .spawn((
-            UsdRoot,
+            UsdRoot {
+                namespace: G::PACKAGE,
+            },
             Name::new(G::NAME),
             Transform::IDENTITY,
             Visibility::default(),
@@ -111,7 +117,11 @@ fn spawn_root<G: Generator>(mut commands: Commands) {
 /// the rotation exists only so Bevy's Y-up camera has something upright to
 /// look at.
 #[derive(Component, Debug)]
-pub struct UsdRoot;
+pub struct UsdRoot {
+    /// The namespace every [`UsdAttributes`] name is authored in: the
+    /// generator's `PACKAGE`.
+    pub namespace: &'static str,
+}
 
 /// Draw the [`Part`] of this name instead of inlining geometry.
 ///
@@ -127,6 +137,28 @@ pub struct UsdReference(pub String);
 /// draped onto terrain that one row transform could not follow.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct UsdType(pub &'static str);
+
+/// Custom attributes for the prim this entity becomes, by name within the
+/// [`UsdRoot`]'s namespace.
+///
+/// For ground truth a consumer reads off the stage and nothing renders or
+/// simulates. Authored on the prim itself, so a referencing prim may carry
+/// them: they stay on the instance, readable and per prim, while its geometry
+/// is shared.
+///
+/// ```ignore
+/// UsdAttributes::default().with("graspable", true).with("clearance", 0.12)
+/// ```
+#[derive(Component, Clone, Debug, Default, PartialEq)]
+pub struct UsdAttributes(pub BTreeMap<String, doc::AttributeValue>);
+
+impl UsdAttributes {
+    /// Sets `name` to `value`, replacing what it held.
+    pub fn with(mut self, name: &str, value: impl Into<doc::AttributeValue>) -> Self {
+        self.0.insert(name.to_string(), value.into());
+        self
+    }
+}
 
 /// The prim name a collision proxy takes, under the organ it stands in for.
 ///

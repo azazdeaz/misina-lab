@@ -130,6 +130,21 @@ A flexible organ is a curve and the material it bends by
     drives the segment prims, so a flexible organ draws correctly at its rest
     shape and never moves.
 
+Custom attributes are authored on the prim itself, in the generator's namespace
+    A node's ``attributes`` become ``<namespace>:<name>``, where the document's
+    ``namespace`` is the generator's Python package, so a label cannot collide
+    with a schema's attribute or with another generator's. Each is ``custom``,
+    since no schema declares it, and typed by the JSON value it arrived as.
+    See `_ATTRIBUTE_TYPES`.
+
+    On an instanceable referencing prim they are local opinions on the
+    instance, as its transform is: an instance's own properties are not part
+    of the prototype, so each stays readable per prim through the ordinary
+    ``GetAttribute`` and none splits the prototype the instances share. That
+    is why `_author_node` authors them on the node's own spec and nowhere
+    else -- inside the part they would hold one value for every instance, and
+    below the instance they would not be reachable at all.
+
 ``xformOp:orient`` rather than ``xformOp:rotateXYZ``
     USD's ``rotateXYZ`` and Bevy's Euler conventions disagree about intrinsic
     versus extrinsic composition, and a mismatch produces a scene that is
@@ -161,7 +176,7 @@ from typing import Any
 
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
 
-FORMAT = 6
+FORMAT = 7
 """Document version this builder understands. See `crates/misina-lab/src/scene/doc.rs`."""
 
 PARTS = "parts"
@@ -191,6 +206,17 @@ extend it alongside the generator.
 _XFORM_OP_ORDER = Vt.TokenArray(["xformOp:translate", "xformOp:orient", "xformOp:scale"])
 
 _UP_AXIS_TOKENS = {"X": UsdGeom.Tokens.x, "Y": UsdGeom.Tokens.y, "Z": UsdGeom.Tokens.z}
+
+_ATTRIBUTE_TYPES = {
+    bool: Sdf.ValueTypeNames.Bool,
+    int: Sdf.ValueTypeNames.Int,
+    float: Sdf.ValueTypeNames.Float,
+    str: Sdf.ValueTypeNames.String,
+    list: Sdf.ValueTypeNames.Float3,
+}
+"""A custom attribute's USD type, by the JSON type of its value: the document
+carries no other tag. Looked up by exact `type`, so a `bool` is not taken for
+the `int` it subclasses."""
 
 _COLLISION_API = Sdf.TokenListOp.Create(prependedItems=["PhysicsCollisionAPI"])
 """What `UsdPhysics.CollisionAPI.Apply` writes, for the prims authored through
@@ -283,7 +309,7 @@ def build_stage(doc: Mapping[str, Any], path: str) -> Usd.Stage:
     _author_parts(stage, library, doc.get("parts", ()))
 
     with Sdf.ChangeBlock():
-        _author_node(stage.GetRootLayer(), library, root, doc["root"])
+        _author_node(stage.GetRootLayer(), library, doc["namespace"], root, doc["root"])
     stage.SetDefaultPrim(stage.GetPrimAtPath(root))
     return stage
 
@@ -470,7 +496,9 @@ def _mdl_shader(
 # --- the prim tree --------------------------------------------------
 
 
-def _author_node(layer: Sdf.Layer, library: str, path: str, node: Mapping[str, Any]) -> None:
+def _author_node(
+    layer: Sdf.Layer, library: str, namespace: str, path: str, node: Mapping[str, Any]
+) -> None:
     spec = Sdf.CreatePrimInLayer(layer, path)
     # `CreatePrimInLayer` leaves an `over`, and authors ancestors as overs too
     # -- harmless here, since a node is always authored before its children.
@@ -497,8 +525,12 @@ def _author_node(layer: Sdf.Layer, library: str, path: str, node: Mapping[str, A
     if cable := node.get("cable"):
         _author_cable(spec, cable)
 
+    # On this spec even when it is an instance; see the module docstring.
+    for name, value in node.get("attributes", {}).items():
+        _author_attribute(spec, f"{namespace}:{name}", value)
+
     for child in node.get("children", ()):
-        _author_node(layer, library, f"{path}/{child['name']}", child)
+        _author_node(layer, library, namespace, f"{path}/{child['name']}", child)
 
 
 @functools.cache
@@ -510,6 +542,15 @@ def _part_path(library: str, name: str) -> Sdf.Path:
     measurable slice of authoring a large scene.
     """
     return Sdf.Path(f"{library}/{name}")
+
+
+def _author_attribute(spec: Sdf.PrimSpec, name: str, value: Any) -> None:
+    """One custom attribute, typed by its JSON value. See `_ATTRIBUTE_TYPES`."""
+    value_type = _ATTRIBUTE_TYPES.get(type(value))
+    if value_type is None:
+        raise ValueError(f"{spec.path}.{name} is a {type(value).__name__}, which has no USD type")
+    attribute = Sdf.AttributeSpec(spec, name, value_type, declaresCustom=True)
+    attribute.default = Gf.Vec3f(*value) if isinstance(value, list) else value
 
 
 def _author_xform(spec: Sdf.PrimSpec, xform: Mapping[str, Any]) -> None:

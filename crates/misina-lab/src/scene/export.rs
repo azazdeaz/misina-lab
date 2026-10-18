@@ -8,10 +8,10 @@
 use anyhow::{anyhow, bail};
 use bevy::mesh::{PrimitiveTopology, VertexAttributeValues};
 use bevy::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::doc::{self, Capsule, FORMAT, Node, PartEntry, SceneDoc, Xform};
-use super::{Cable, Collider, Part, Prototypes, UsdReference, UsdRoot, UsdType};
+use super::{Cable, Collider, Part, Prototypes, UsdAttributes, UsdReference, UsdRoot, UsdType};
 
 /// The scene's coordinate convention. Authored natively rather than corrected
 /// downstream: `upAxis` and `metersPerUnit` are root-layer-only stage metadata
@@ -33,7 +33,7 @@ pub fn scene_doc(world: &mut World) -> anyhow::Result<SceneDoc> {
         .filter(|part| part.collision.is_some())
         .map(|part| part.name.as_str())
         .collect();
-    let root = root_entity(world)?;
+    let (root, namespace) = root_entity(world)?;
     let prims = collect_prims(world);
     let root_node = build_node(root, &prims, &solid)?
         .ok_or_else(|| anyhow!("the `UsdRoot` entity has no `Name`, so it has no prim path"))?;
@@ -42,6 +42,7 @@ pub fn scene_doc(world: &mut World) -> anyhow::Result<SceneDoc> {
         format: FORMAT,
         up_axis: UP_AXIS.to_string(),
         meters_per_unit: METERS_PER_UNIT,
+        namespace: namespace.to_string(),
         parts,
         root: root_node,
     })
@@ -52,8 +53,8 @@ pub fn scene_json(world: &mut World) -> anyhow::Result<String> {
     Ok(serde_json::to_string(&scene_doc(world)?)?)
 }
 
-fn root_entity(world: &mut World) -> anyhow::Result<Entity> {
-    let mut query = world.query_filtered::<Entity, With<UsdRoot>>();
+fn root_entity(world: &mut World) -> anyhow::Result<(Entity, &'static str)> {
+    let mut query = world.query::<(Entity, &UsdRoot)>();
     let mut found = query.iter(world);
     let root = found
         .next()
@@ -61,7 +62,7 @@ fn root_entity(world: &mut World) -> anyhow::Result<Entity> {
     if found.next().is_some() {
         bail!("more than one `UsdRoot` entity; the export needs a single scene root");
     }
-    Ok(root)
+    Ok((root.0, root.1.namespace))
 }
 
 // ─── The mesh library ───────────────────────────────────────────────
@@ -154,6 +155,7 @@ struct Prim {
     reference: Option<String>,
     collider: Option<Capsule>,
     cable: Option<doc::Cable>,
+    attributes: BTreeMap<String, doc::AttributeValue>,
     children: Vec<Entity>,
 }
 
@@ -166,13 +168,24 @@ fn collect_prims(world: &mut World) -> HashMap<Entity, Prim> {
         Option<&UsdReference>,
         Option<&Collider>,
         Option<&Cable>,
+        Option<&UsdAttributes>,
         Option<&Children>,
     )>();
 
     query
         .iter(world)
         .map(
-            |(entity, name, transform, prim_type, reference, collider, cable, children)| {
+            |(
+                entity,
+                name,
+                transform,
+                prim_type,
+                reference,
+                collider,
+                cable,
+                attributes,
+                children,
+            )| {
                 let prim = Prim {
                     name: name.as_str().to_string(),
                     type_name: prim_type.map_or("Xform", |t| t.0).to_string(),
@@ -180,6 +193,7 @@ fn collect_prims(world: &mut World) -> HashMap<Entity, Prim> {
                     reference: reference.map(|r| r.0.clone()),
                     collider: collider.map(|c| c.0),
                     cable: cable.map(|c| c.0.clone()),
+                    attributes: attributes.map(|a| a.0.clone()).unwrap_or_default(),
                     children: children.map(|c| c.to_vec()).unwrap_or_default(),
                 };
                 (entity, prim)
@@ -255,6 +269,7 @@ fn build_node(
         reference: prim.reference.clone(),
         collider: prim.collider,
         cable: prim.cable.clone(),
+        attributes: prim.attributes.clone(),
         children,
     }))
 }
@@ -306,7 +321,14 @@ mod tests {
     }
 
     fn root(world: &mut World) -> Entity {
-        world.spawn((UsdRoot, Name::new("Scene"))).id()
+        world
+            .spawn((
+                UsdRoot {
+                    namespace: "boxlab",
+                },
+                Name::new("Scene"),
+            ))
+            .id()
     }
 
     #[test]
@@ -369,6 +391,36 @@ mod tests {
         assert_eq!(doc.parts[0].points.len(), 3);
         assert_eq!(doc.parts[0].indices, [0, 1, 2]);
         assert!(doc.parts[0].double_sided);
+    }
+
+    /// A label rides on the prim it was put on, an instanceable one included,
+    /// and the document says what namespace it is authored in.
+    #[test]
+    fn attributes_land_on_their_prim_in_the_roots_namespace() {
+        let mut world = world();
+        let root = root(&mut world);
+        let name = add_part(&mut world, "Leaf", 0);
+        world.spawn((
+            Name::new("Leaf_00"),
+            UsdReference(name),
+            UsdAttributes::default()
+                .with("share", 0.25)
+                .with("flag", true),
+            ChildOf(root),
+        ));
+
+        let doc = scene_doc(&mut world).unwrap();
+        assert_eq!(doc.namespace, "boxlab");
+        let leaf = &doc.root.children[0];
+        assert!(leaf.instanceable);
+        assert_eq!(
+            leaf.attributes,
+            UsdAttributes::default()
+                .with("flag", true)
+                .with("share", 0.25)
+                .0
+        );
+        assert!(doc.root.attributes.is_empty());
     }
 
     /// A collision proxy is a prim in its own right — no geometry, no
