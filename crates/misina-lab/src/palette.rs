@@ -6,6 +6,11 @@
 //! — Bevy draws it, and USD carries it as a `displayColor` primvar — so the
 //! viewer and the export agree by construction.
 //!
+//! A part whose colour varies over it carries a vertex colour per point,
+//! `Mesh::ATTRIBUTE_COLOR` in linear RGBA. Bevy multiplies it by the
+//! material's colour and the export does the same, so such a part takes white
+//! for its [`Surface`] colour and lets the points say the rest.
+//!
 //! The named colours and responses — a leaf, a post, bark — are a generator's
 //! own. What is here is the machinery those constants go through: [`srgb`]
 //! into linear, [`mix`] between two, [`shade`] for the per-variation jitter

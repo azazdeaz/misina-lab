@@ -233,6 +233,29 @@ def test_a_material_offers_no_surface_outside_the_mdl_context(stage: Usd.Stage):
     assert material.GetPrim().GetChild(SHADER).GetTypeName() == "Shader"
 
 
+def test_a_part_coloured_per_point_shades_from_its_display_color(doc: dict, tmp_path: pathlib.Path):
+    """OmniPBR takes one constant colour, so a part whose colour varies over it
+    would draw in one colour in Kit; its surface reads the per-vertex
+    `displayColor` instead, and is the universal one every renderer reads."""
+    colors = [[0.5, 0.0, 0.0], [0.0, 0.5, 0.0], [0.0, 0.0, 0.5]]
+    coloured = copy.deepcopy(doc)
+    next(p for p in coloured["parts"] if p["name"] == "Vine_0")["colors"] = colors
+    stage = build_stage(coloured, str(tmp_path / "coloured.usda"))
+
+    primvar = part_mesh(stage, "Vine_0").GetDisplayColorPrimvar()
+    assert primvar.GetInterpolation() == UsdGeom.Tokens.vertex
+    assert [tuple(c) for c in primvar.Get()] == [tuple(c) for c in colors]
+
+    material = UsdShade.Material(stage.GetPrimAtPath(f"{PARTS}/Vine_0/{GEOM}/{MATERIAL}"))
+    shader = material.ComputeSurfaceSource()[0]
+    assert shader.GetIdAttr().Get() == "UsdPreviewSurface"
+    # Wood's reflectance of 0.25 is 1% at normal incidence.
+    assert shader.GetInput("ior").Get() == pytest.approx(1.1 / 0.9)
+    reader = shader.GetInput("diffuseColor").GetConnectedSources()[0][0].source
+    assert UsdShade.Shader(reader.GetPrim()).GetIdAttr().Get() == "UsdPrimvarReader_float3"
+    assert reader.GetInput("varname").Get() == "displayColor"
+
+
 def test_optional_attributes_are_authored_only_where_the_document_has_them(
     stage: Usd.Stage,
 ):
