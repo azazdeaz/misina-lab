@@ -29,7 +29,9 @@
 
 use std::f64::consts::TAU;
 
-use anyhow::Context;
+// Named over the prelude's `ContextExt`, Bevy's own `context`, which would
+// make every call ambiguous.
+use anyhow::Context as ContextExt;
 use bevy::prelude::*;
 use nalgebra::Point3;
 
@@ -415,11 +417,8 @@ pub(crate) fn author(
     layout: Res<VineyardLayout>,
     ground: Res<Ground>,
     root: Res<PrimRoot>,
-    existing: Query<Entity, With<Weeds>>,
 ) {
-    for entity in &existing {
-        commands.entity(entity).despawn();
-    }
+    commands.despawn_all::<With<Weeds>>();
     let weeds = commands
         .spawn((
             Weeds,

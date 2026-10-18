@@ -162,11 +162,8 @@ pub fn plant(
     layout: Res<VineyardLayout>,
     ground: Res<Ground>,
     root: Res<PrimRoot>,
-    existing: Query<Entity, With<Planting>>,
 ) {
-    for entity in &existing {
-        commands.entity(entity).despawn();
-    }
+    commands.despawn_all::<With<Planting>>();
     let planting = commands
         .spawn((
             Planting,

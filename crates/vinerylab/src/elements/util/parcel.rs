@@ -26,7 +26,7 @@
 use bevy::color::palettes::basic::{GRAY, YELLOW};
 use bevy::color::palettes::css::{LIMEGREEN, ORANGE};
 use bevy::feathers::controls::FeathersCheckbox;
-use bevy::feathers::theme::ThemedText;
+use bevy::feathers::display::caption;
 use bevy::prelude::*;
 use bevy::ui_widgets::{ValueChange, checkbox_self_update};
 use misina_lab::params::Slider;
@@ -353,7 +353,7 @@ pub fn debug_plugin(app: &mut App) {
 fn spawn_checkbox(mut commands: Commands, footer: Single<Entity, With<Footer>>) {
     commands
         .spawn_scene(bsn! {
-            @FeathersCheckbox { @caption: bsn! { (Text("Layout") ThemedText) } }
+            @FeathersCheckbox { @caption: bsn! { @caption("Layout") } }
             Tip("Draw the solved row and post layout over the scene.")
             TipAbove
             on(checkbox_self_update)

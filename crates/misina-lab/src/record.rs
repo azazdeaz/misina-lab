@@ -27,7 +27,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
-use anyhow::{Context, bail, ensure};
+// Named over the prelude's `ContextExt`, Bevy's own `context`, which would
+// make every call ambiguous.
+use anyhow::{Context as ContextExt, bail, ensure};
 use bevy::prelude::*;
 use bevy::render::render_resource::TextureFormat;
 use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured};

@@ -173,11 +173,8 @@ pub fn build(
     params: Res<TerrainParams>,
     root: Res<PrimRoot>,
     mut ground: ResMut<Ground>,
-    existing: Query<Entity, With<Terrain>>,
 ) -> Result<()> {
-    for entity in &existing {
-        commands.entity(entity).despawn();
-    }
+    commands.despawn_all::<With<Terrain>>();
     library.clear(PART);
 
     let field = terrain_grid(&params);

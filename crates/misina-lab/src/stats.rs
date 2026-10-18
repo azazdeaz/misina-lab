@@ -13,8 +13,8 @@
 use std::collections::HashMap;
 
 use bevy::feathers::controls::FeathersCheckbox;
-use bevy::feathers::display::label;
-use bevy::feathers::theme::{ThemeBackgroundColor, ThemedText};
+use bevy::feathers::display::{caption, label};
+use bevy::feathers::theme::ThemeBackgroundColor;
 use bevy::feathers::tokens;
 use bevy::mesh::Indices;
 use bevy::pbr::wireframe::WireframeConfig;
@@ -132,14 +132,6 @@ fn short(n: usize) -> String {
 #[derive(Component, Clone, Copy)]
 struct Field(&'static str, fn(&SceneStats) -> String);
 
-/// Blank, and only because a scene template builds its components from their
-/// defaults before patching them; every field patches both halves in.
-impl Default for Field {
-    fn default() -> Self {
-        Self("", |_| String::new())
-    }
-}
-
 /// Shows every figure what the last tally counted.
 fn show(stats: Res<SceneStats>, mut fields: Query<(&Field, &mut Text)>) {
     for (field, mut text) in &mut fields {
@@ -151,7 +143,7 @@ fn show(stats: Res<SceneStats>, mut fields: Query<(&Field, &mut Text)>) {
 }
 
 fn footer_list() -> impl SceneList {
-    bsn_list![footer()]
+    bsn_list! { @footer() }
 }
 
 /// A bar along the bottom of the viewport, starting where the params panel
@@ -169,42 +161,49 @@ fn footer() -> impl Scene {
         }
         BlocksCamera
         Footer
-        Interaction
+        Hovered
         ThemeBackgroundColor(tokens::WINDOW_BG)
         Children [
-            field(
+            @field(
                 "Prims",
                 "Prims the export writes: one per organ, plus the transforms grouping them. The size of the stage, not of the render.",
                 |stats| short(stats.prims),
-            ),
-            field(
+            )
+            --
+            @field(
                 "Instances",
                 "Prims drawing a shared part rather than points of their own. Bevy batches each part into one draw however many reference it.",
                 |stats| short(stats.instances),
-            ),
-            field(
+            )
+            --
+            @field(
                 "Parts",
                 "Meshes in the shared library, one per representative. What a variations slider buys: unique geometry, not more of it.",
                 |stats| short(stats.parts),
-            ),
-            field(
+            )
+            --
+            @field(
                 "Tris",
                 "Triangles built, then triangles standing in the scene. The gap between them is the instancing — a detail slider moves the first, a count or layout slider the second.",
                 |stats| format!("{} / {}", short(stats.unique_triangles), short(stats.drawn_triangles)),
-            ),
-            field(
+            )
+            --
+            @field(
                 "Capsules",
                 "Capsule proxies a physics engine collides with. The ground collides as its own mesh and is not counted here.",
                 |stats| short(stats.capsules),
-            ),
-            field(
+            )
+            --
+            @field(
                 "Rods",
                 "Capsule bodies a solver builds from the scene's flexible organs — the one figure here that reaches the physics step. Zero when nothing in the scene is flexible.",
                 |stats| short(stats.segments),
-            ),
+            )
+            --
             // Holds the view controls at the far end, away from the figures.
-            (Node { flex_grow: 1.0 }),
-            wireframe_checkbox(),
+            Node { flex_grow: 1.0 }
+            --
+            @wireframe_checkbox()
         ]
     }
 }
@@ -215,12 +214,13 @@ fn footer() -> impl Scene {
 /// A wrapper rather than the label itself: [`tips`](crate::ui) hangs its card
 /// off the hovered entity as a child, and a `Text`'s children are its spans.
 fn field(caption: &'static str, tip: &'static str, read: fn(&SceneStats) -> String) -> impl Scene {
+    let figure = Field(caption, read);
     bsn! {
         Node
         Hovered
         Tip(tip)
         TipAbove
-        Children [ (label("") Field(caption, read)) ]
+        Children [ @label("") figure ]
     }
 }
 
@@ -238,7 +238,7 @@ fn wireframe_checkbox() -> impl Scene {
     };
     (
         bsn! {
-            @FeathersCheckbox { @caption: bsn! { (Text("Wireframe") ThemedText) } }
+            @FeathersCheckbox { @caption: bsn! { @caption("Wireframe") } }
             Tip({tip})
             TipAbove
             on(checkbox_self_update)
