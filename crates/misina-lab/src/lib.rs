@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 pub mod codegen;
+pub mod colliders;
 pub mod generate;
 pub mod geometry;
 pub mod palette;
