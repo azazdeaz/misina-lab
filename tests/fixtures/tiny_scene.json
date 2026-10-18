@@ -2,7 +2,7 @@
   "format": 8,
   "up_axis": "Z",
   "meters_per_unit": 1.0,
-  "namespace": "vinerylab",
+  "namespace": "vinery_lab",
   "parts": [
     {
       "name": "Leaf_1",

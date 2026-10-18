@@ -1,4 +1,4 @@
-"""Type stubs for the `vinerylab._core` extension module.
+"""Type stubs for the `vinery_lab._core` extension module.
 
 The fragment classes between the ``generated`` markers are rendered from the
 Rust params structs by ``cargo test regen_params -- --ignored``: edit the
@@ -7,8 +7,8 @@ next to the compiled `_core` extension in the mixed maturin layout
 (`python-source = "python"`), alongside the `py.typed` marker that makes the
 whole package's annotations visible to type checkers.
 
-`vinerylab/__init__.py` re-exports everything declared here, so consumers
-write `from vinerylab import VineyardParams` rather than reaching into
+`vinery_lab/__init__.py` re-exports everything declared here, so consumers
+write `from vinery_lab import VineyardParams` rather than reaching into
 `_core` themselves.
 """
 
@@ -597,6 +597,6 @@ class VineyardParams:
 
         Needs `usd-core`, which is a dependency of this package: the scene is
         built in Rust and the USD is authored in Python, by
-        `vinerylab.usd.build_usd`.
+        `vinery_lab.usd.build_usd`.
         """
         ...

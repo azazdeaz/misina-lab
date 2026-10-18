@@ -6,13 +6,13 @@
 #
 #   docs/video/publish.sh [video.mp4] [README.md] [pull request]
 #
-# Defaults to target/video/vinerylab.mp4, the top README.md and the current
+# Defaults to target/video/vinery-lab.mp4, the top README.md and the current
 # branch's pull request. Needs gh 2.102 or later, for `--attach`, and push
 # access. It leaves the README edited, for the commit that changed the video.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
-video=$(realpath "${1:-$repo/target/video/vinerylab.mp4}")
+video=$(realpath "${1:-$repo/target/video/vinery-lab.mp4}")
 readme=$(realpath "${2:-$repo/README.md}")
 # The video line: the one line that is an uploaded asset alone, which GitHub
 # draws as a player.

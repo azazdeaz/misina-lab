@@ -76,7 +76,7 @@ thickness. The cut itself is
 which any script can use on a running simulation:
 
 ```python
-from vinerylab.isaaclab import Shears
+from vinery_lab.isaaclab import Shears
 
 shears = Shears()                           # after sim.reset()
 shears.cut_through(corner, along, up)       # every rod crossing a rectangle

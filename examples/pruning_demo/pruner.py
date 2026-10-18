@@ -36,7 +36,7 @@ from kinematics import frames, solve
 if TYPE_CHECKING:
     from pxr import Usd
 
-    from vinerylab.isaaclab import Shears
+    from vinery_lab.isaaclab import Shears
 
     from bumblebee import Bumblebee
 

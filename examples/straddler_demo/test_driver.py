@@ -21,7 +21,7 @@ STRAIGHT = torch.zeros(4)
 
 class Slope:
     """Ground climbing at 10% towards +y, for the scene's own
-    `vinerylab.usd.Ground`."""
+    `vinery_lab.usd.Ground`."""
 
     def height(self, x: float, y: float) -> float:
         return 0.1 * y

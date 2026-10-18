@@ -1,6 +1,6 @@
 """Tests for the demo's row-straddling route.
 
-`route` reaches Isaac Lab through `vinerylab.isaaclab`, so this is skipped
+`route` reaches Isaac Lab through `vinery_lab.isaaclab`, so this is skipped
 entirely where that isn't installed.
 """
 
@@ -29,7 +29,7 @@ def block(*ends: tuple[float, float]) -> list[np.ndarray]:
 
 class Slope:
     """Ground climbing at `gradient` along the AB line, for the scene's own
-    `vinerylab.usd.Ground`."""
+    `vinery_lab.usd.Ground`."""
 
     def __init__(self, gradient: float = 0.0):
         self.gradient = gradient

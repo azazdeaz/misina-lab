@@ -1,7 +1,7 @@
 """Spawner configuration for a procedurally generated vineyard.
 
 One `@configclass` fragment per element, mirroring the `*Params` pyclasses in
-`vinerylab._core` field for field. The fragments and `VineyardCfg`'s fields are
+`vinery_lab._core` field for field. The fragments and `VineyardCfg`'s fields are
 generated from the Rust params structs -- see
 `crates/misina-lab/docs/editing-parameters.md`;
 `VineyardCfg` below is hand-written, over the core's `GeneratedSceneCfg`,
@@ -14,7 +14,7 @@ from typing import ClassVar, Self
 
 from isaaclab.utils.configclass import configclass
 
-import vinerylab
+import vinery_lab
 from misina_lab.isaaclab.spawn import GeneratedSceneCfg
 
 
@@ -466,9 +466,9 @@ class VineyardCfg(GeneratedSceneCfg):
     meshes under every backend.
     """
 
-    PARAMS: ClassVar[type] = vinerylab.VineyardParams
+    PARAMS: ClassVar[type] = vinery_lab.VineyardParams
     PLANT: ClassVar[str] = "Vine"
-    """`PART` in `crates/vinerylab/src/elements/vine.rs`: a vine's canes and
+    """`PART` in `crates/vinery-lab/src/elements/vine.rs`: a vine's canes and
     its wood collide as one group."""
 
     # >>> generated: aggregate

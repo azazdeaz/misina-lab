@@ -18,8 +18,8 @@ from isaaclab.utils.math import wrap_to_pi, yaw_quat
 
 from bumblebee import LEFT, RIGHT, Bumblebee
 
-if TYPE_CHECKING:  # `vinerylab.usd` pulls in `pxr`, which has to wait for Kit
-    from vinerylab.usd import Ground
+if TYPE_CHECKING:  # `vinery_lab.usd` pulls in `pxr`, which has to wait for Kit
+    from vinery_lab.usd import Ground
 
 # 200 Hz physics under a 50 Hz controller.
 SIM_DT = 0.005

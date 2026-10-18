@@ -3,7 +3,7 @@
 The inside of a Western European high-wire tomato glasshouse, as the
 numbers a generator can be built from, and the smallest set of variations
 worth building first. It is the groundwork for a tomato greenhouse crate
-beside `vinerylab`, aimed first at truss-harvesting robots such as
+beside `vinery-lab`, aimed first at truss-harvesting robots such as
 eternal.ag's Harvester.
 
 The scene is the crop and what a robot touches or sees up close in a row:

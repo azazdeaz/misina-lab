@@ -2,7 +2,7 @@
 # the repo. `uv sync` here installs all of them, the generators built through
 # maturin and `misina-lab` as plain Python.
 [tool.uv.workspace]
-members = ["crates/vinerylab", "crates/greenhouse-lab", "python/misina-lab"]
+members = ["crates/vinery-lab", "crates/greenhouse-lab", "python/misina-lab"]
 
 [dependency-groups]
 dev = ["pytest", "ruff~=0.14.0", "mypy~=1.18"]
@@ -18,7 +18,7 @@ extend-select = ["I", "UP"]
 [tool.ruff.lint.isort]
 # Every package is installed into the environment, so ruff would otherwise
 # file their own imports under third-party.
-known-first-party = ["greenhouse_lab", "misina_lab", "vinerylab"]
+known-first-party = ["greenhouse_lab", "misina_lab", "vinery_lab"]
 
 [tool.ruff.lint.per-file-ignores]
 # The demo mirrors Isaac Lab's own example layout, which groups imports by
@@ -28,7 +28,7 @@ known-first-party = ["greenhouse_lab", "misina_lab", "vinerylab"]
 [tool.mypy]
 files = [
     "python/misina-lab/misina_lab",
-    "crates/vinerylab/python/vinerylab",
+    "crates/vinery-lab/python/vinery_lab",
     "crates/greenhouse-lab/python/greenhouse_lab",
 ]
 # Isaac Lab cannot be imported without the whole simulator stack installed.

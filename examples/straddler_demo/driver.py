@@ -23,8 +23,8 @@ from isaaclab.utils.math import wrap_to_pi, yaw_quat
 from straddler import DRIVE_JOINTS, STEER_JOINTS, Straddler
 from route import STRIDE
 
-if TYPE_CHECKING:  # `vinerylab.usd` pulls in `pxr`; see `route.row_route` for why that waits
-    from vinerylab.usd import Ground
+if TYPE_CHECKING:  # `vinery_lab.usd` pulls in `pxr`; see `route.row_route` for why that waits
+    from vinery_lab.usd import Ground
 
 # 200 Hz physics under a 50 Hz controller. The gantry is stiff and slow; the
 # rate matters only to the steering joints, which have to swing 90 degrees at

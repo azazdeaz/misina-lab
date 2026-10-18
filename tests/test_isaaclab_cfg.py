@@ -16,12 +16,12 @@ import os
 
 import pytest
 
-# Not `pytest.importorskip`: `vinerylab.isaaclab` re-raises a missing Isaac Lab
+# Not `pytest.importorskip`: `vinery_lab.isaaclab` re-raises a missing Isaac Lab
 # under its own message, and pytest skips only when the error names the module
 # it was asked to import.
 try:
     from misina_lab.isaaclab import spawn
-    from vinerylab.isaaclab import vineyard_cfg as isaaclab_cfg
+    from vinery_lab.isaaclab import vineyard_cfg as isaaclab_cfg
 except ImportError:
     pytest.skip("Isaac Lab is not installed", allow_module_level=True)
 

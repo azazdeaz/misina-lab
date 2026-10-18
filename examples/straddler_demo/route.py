@@ -15,11 +15,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from vinerylab.isaaclab import VineyardCfg
-from vinerylab.isaaclab.vineyard import resolve_usd_path
+from vinery_lab.isaaclab import VineyardCfg
+from vinery_lab.isaaclab.vineyard import resolve_usd_path
 
-if TYPE_CHECKING:  # `vinerylab.usd` pulls in `pxr`; see `row_route` for why not here
-    from vinerylab.usd import Ground
+if TYPE_CHECKING:  # `vinery_lab.usd` pulls in `pxr`; see `row_route` for why not here
+    from vinery_lab.usd import Ground
 
 STRIDE = 0.5  # m between waypoints
 RUNOUT = 4.0  # m a pass carries on past the end posts, into the headland
@@ -61,7 +61,7 @@ def row_route(cfg: VineyardCfg, start_row: int = 0) -> tuple[np.ndarray, float, 
     # copy of `pxr` only wins the import if nothing loaded the pip one first.
     from pxr import Usd, UsdGeom
 
-    from vinerylab.usd import ROOT, Ground
+    from vinery_lab.usd import ROOT, Ground
 
     stage = Usd.Stage.Open(resolve_usd_path(cfg))
     ground = Ground(stage)

@@ -1,13 +1,13 @@
 """Procedural vineyard scene generation, authored to USD.
 
 The scene generator itself is a compiled Rust extension, [`_core`]; this
-module re-exports it so `vinerylab.VineyardParams` stays the import path it
+module re-exports it so `vinery_lab.VineyardParams` stays the import path it
 has always been. The re-export list is generated from the Rust params structs
 -- see `crates/misina-lab/docs/editing-parameters.md`.
 
-Isaac Lab integration lives in the `vinerylab.isaaclab` subpackage and is
+Isaac Lab integration lives in the `vinery_lab.isaaclab` subpackage and is
 *not* imported from here — it needs Isaac Lab installed, and plain
-`import vinerylab` must keep working without it.
+`import vinery_lab` must keep working without it.
 """
 
 # >>> generated: exports

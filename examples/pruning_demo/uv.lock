@@ -3785,7 +3785,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "isaaclab", extra = ["all", "isaacsim"] },
-    { name = "vinerylab" },
+    { name = "vinery-lab" },
 ]
 
 [package.dev-dependencies]
@@ -3796,7 +3796,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "isaaclab", extras = ["isaacsim", "all"], git = "https://github.com/isaac-sim/IsaacLab.git?subdirectory=tools%2Fwheel_builder&rev=ab34e8c5e3ee7a2c5f260d1511714e5be3bed3eb" },
-    { name = "vinerylab", editable = "../../crates/vinerylab" },
+    { name = "vinery-lab", editable = "../../crates/vinery-lab" },
 ]
 
 [package.metadata.requires-dev]
@@ -5402,8 +5402,8 @@ wheels = [
 ]
 
 [[package]]
-name = "vinerylab"
-source = { editable = "../../crates/vinerylab" }
+name = "vinery-lab"
+source = { editable = "../../crates/vinery-lab" }
 dependencies = [
     { name = "misina-lab" },
 ]

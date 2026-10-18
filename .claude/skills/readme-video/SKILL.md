@@ -16,8 +16,8 @@ docs/video/record.sh
 ```
 
 It builds the viewer, plays the storyboard `docs/video/tour.json` in it one
-video frame per rendered frame, and writes `target/video/vinerylab.mp4` and,
-beside it, `vinerylab-sheet.png`: the frames at 0, 2, 4… seconds, four to a
+video frame per rendered frame, and writes `target/video/vinery-lab.mp4` and,
+beside it, `vinery-lab-sheet.png`: the frames at 0, 2, 4… seconds, four to a
 row. About a minute on a GPU. It needs cargo, ffmpeg and a display; the window
 opens on the desktop at the video's size, ignores the pointer, and closes
 itself when the video is done.
@@ -29,7 +29,7 @@ itself when the video is done.
    below. The viewer's log, which the script prints, has a
    `tour: step N at T s` line for each step: `N` counts the entries of `steps`
    from 1, and `T` is seconds into the video.
-   `ffmpeg -ss T -i target/video/vinerylab.mp4 -frames:v 1 -update 1 frame.png`
+   `ffmpeg -ss T -i target/video/vinery-lab.mp4 -frames:v 1 -update 1 frame.png`
    takes the frame at `T`. A video that fails one is not done: change the
    storyboard, never the video.
 3. Run `docs/video/publish.sh` on the branch whose pull request changes the
@@ -47,7 +47,7 @@ A video is right when:
   recording starts (3 by default).
 - no camera move passes through a vine, a post or the cover. Sample each move
   every half second:
-  `ffmpeg -i target/video/vinerylab.mp4 -vf "select='between(t,12,16)*not(mod(n,15))',scale=480:-2,tile=4x2" -frames:v 1 -update 1 move.png`
+  `ffmpeg -i target/video/vinery-lab.mp4 -vf "select='between(t,12,16)*not(mod(n,15))',scale=480:-2,tile=4x2" -frames:v 1 -update 1 move.png`
 - the panel shows each control, tooltip up, before it moves, and the scene has
   visibly answered an edit before the next one starts
 - the panel's text is legible at the README's width, about 830 px
@@ -106,7 +106,7 @@ last step's `wait` is the closing hold: the video ends when it runs out.
   and run
   `docs/video/record.sh scratch.json /tmp/scratch.mp4`.
 
-`VINERYLAB_TOUR=docs/video/tour.json cargo run --release` plays the storyboard
+`VINERY_LAB_TOUR=docs/video/tour.json cargo run --release` plays the storyboard
 on the wall clock, without recording: a preview, rebuild stalls included.
 
 ## Something no step can do

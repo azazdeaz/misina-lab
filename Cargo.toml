@@ -4,7 +4,7 @@ members = ["crates/*"]
 # What a bare `cargo run` or `cargo build` at the root picks: the vineyard
 # viewer. The greenhouse's is `cargo run -p greenhouse-lab`, and `--workspace`
 # reaches every crate.
-default-members = ["crates/misina-lab", "crates/vinerylab"]
+default-members = ["crates/misina-lab", "crates/vinery-lab"]
 
 [workspace.package]
 version = "0.1.0"

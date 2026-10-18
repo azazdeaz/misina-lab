@@ -3,7 +3,7 @@ requires = ["maturin>=1.9,<2"]
 build-backend = "maturin"
 
 [project]
-name = "vinerylab"
+name = "vinery-lab"
 description = "Procedural vineyard scene generation, authored to USD."
 readme = "../../README.md"
 requires-python = ">=3.12"
@@ -24,5 +24,5 @@ misina-lab = { workspace = true }
 
 [tool.maturin]
 features = ["extension-module"]
-module-name = "vinerylab._core"
+module-name = "vinery_lab._core"
 python-source = "python"

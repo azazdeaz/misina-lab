@@ -12,11 +12,11 @@ import pytest
 
 pytest.importorskip("isaaclab", reason="Isaac Lab is not installed")
 
-# Past the skip: `vinerylab` itself needs only usd-core, so numpy comes with
+# Past the skip: `vinery-lab` itself needs only usd-core, so numpy comes with
 # Isaac Lab or not at all.
 import numpy as np  # noqa: E402
 
-from vinerylab.isaaclab import newton_patches  # noqa: E402
+from vinery_lab.isaaclab import newton_patches  # noqa: E402
 
 
 class FakeArray:

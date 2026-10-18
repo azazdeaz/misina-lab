@@ -29,7 +29,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
 
-from vinerylab.isaaclab import VineyardCfg
+from vinery_lab.isaaclab import VineyardCfg
 
 CORNERS = ("front_left", "front_right", "rear_left", "rear_right")
 """Wheel modules, in the order `Straddler.corners` and the driver address them."""
@@ -91,7 +91,7 @@ class Trimmer:
     Summer hedging is done this way, with sickle bars at 3-4 km/h or rotary
     knives at 5-6, which is the pace this robot cruises at. The bars are
     visuals only; what they cut is decided by `Straddler.bars` and
-    `vinerylab.isaaclab.cutting.Shears`.
+    `vinery_lab.isaaclab.cutting.Shears`.
     """
 
     reach: float = 0.4

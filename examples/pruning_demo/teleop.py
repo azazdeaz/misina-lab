@@ -26,7 +26,7 @@ from kinematics import frames, solve
 from pruner import JOINT_STEP, Stroke, reached, squared
 
 if TYPE_CHECKING:
-    from vinerylab.isaaclab import Shears
+    from vinery_lab.isaaclab import Shears
 
 READY = (0.0, 1.0, -1.6, 2.4, -0.8, 1.0, 1.6)
 """The slide and arm positions the arm reaches out to at the start: turned

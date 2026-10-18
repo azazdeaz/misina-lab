@@ -1,19 +1,14 @@
 [package]
-name = "vinerylab"
+name = "vinery-lab"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
 [lib]
-name = "vinerylab"
 # `cdylib` is what Python imports (the compiled extension module);
-# `rlib` is what our own `[[bin]]` and `cargo test` link against.
+# `rlib` is what the viewer binary and `cargo test` link against.
 crate-type = ["cdylib", "rlib"]
-
-[[bin]]
-name = "vinerylab"
-path = "src/main.rs"
 
 [dependencies]
 misina-lab = { path = "../misina-lab" }
