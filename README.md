@@ -33,7 +33,6 @@ Open-source parametric vineyard generator for developing and testing vineyard ro
 ## Upcoming features
  - Optionally use PointInstancer to spawn organs without a unique prim path
  - Simulate human workers and other safety critical scenarios
- - Install from PyPI
  - More detailed cover crop and weed definitions
 
 ## Planned features
@@ -43,6 +42,17 @@ Open-source parametric vineyard generator for developing and testing vineyard ro
  - GeoJSON and TASKDATA.xml export
  - Complete example projects demonstrating task executions
  - **Share what you need for your project :rocket:**
+
+
+## Install
+
+```bash
+pip install vinerylab
+```
+
+Wheels are built for Linux x86_64 and Python 3.12 and later; anywhere else
+pip builds it from source, which needs [Rust](https://www.rust-lang.org/tools/install).
+The Isaac Lab examples below install it from this checkout instead.
 
 
 ## Parameter editor app
