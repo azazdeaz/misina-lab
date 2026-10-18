@@ -113,11 +113,8 @@ fn build(
     scene: Res<SceneParams>,
     layout: Res<GreenhouseLayout>,
     paths: Query<(Entity, &Path)>,
-    existing: Query<Entity, With<Owned>>,
 ) {
-    for entity in &existing {
-        commands.entity(entity).despawn();
-    }
+    commands.despawn_all::<With<Owned>>();
     library.clear("Pipe");
     library.clear("Support");
 

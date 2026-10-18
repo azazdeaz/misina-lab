@@ -52,11 +52,8 @@ fn build(
     mut library: Library,
     layout: Res<GreenhouseLayout>,
     root: Res<PrimRoot>,
-    existing: Query<Entity, With<Owned>>,
 ) {
-    for entity in &existing {
-        commands.entity(entity).despawn();
-    }
+    commands.despawn_all::<With<Owned>>();
     let floor = commands
         .spawn((
             Owned,

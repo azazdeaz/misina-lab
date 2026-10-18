@@ -123,11 +123,8 @@ fn author(
     params: Res<LayoutParams>,
     root: Res<PrimRoot>,
     mut layout: ResMut<GreenhouseLayout>,
-    existing: Query<Entity, With<Owned>>,
 ) {
-    for entity in &existing {
-        commands.entity(entity).despawn();
-    }
+    commands.despawn_all::<With<Owned>>();
     *layout = solve(&params);
 
     // Scopes: a group carries no transform of its own.

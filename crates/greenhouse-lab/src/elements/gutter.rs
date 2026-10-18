@@ -148,11 +148,8 @@ fn build(
     wire: Res<WireParams>,
     layout: Res<GreenhouseLayout>,
     rows: Query<Entity, With<Row>>,
-    existing: Query<Entity, With<Owned>>,
 ) {
-    for entity in &existing {
-        commands.entity(entity).despawn();
-    }
+    commands.despawn_all::<With<Owned>>();
     for prefix in ["Gutter", "Hanger", "Stand", "Slab", "Block"] {
         library.clear(prefix);
     }

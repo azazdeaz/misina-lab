@@ -65,11 +65,8 @@ fn build(
     params: Res<WireParams>,
     layout: Res<GreenhouseLayout>,
     rows: Query<Entity, With<Row>>,
-    existing: Query<Entity, With<Owned>>,
 ) {
-    for entity in &existing {
-        commands.entity(entity).despawn();
-    }
+    commands.despawn_all::<With<Owned>>();
     library.clear("Wire");
     let geometry = library.part(
         "Wire",
