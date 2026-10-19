@@ -208,7 +208,8 @@ pub fn ripeness(stage: f32) -> f32 {
 /// of it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Hung {
-    /// How many trusses above its stem's ripening front its truss hangs.
+    /// How many weeks its truss is behind its stem's ripening front, a truss
+    /// a week.
     pub rank: f32,
     /// How far along its truss toward the tip it hangs, 0 to 1.
     pub along: f32,
@@ -307,12 +308,13 @@ impl Metric<FruitConfig> for FruitMetric {
 ///
 /// Every fruit has a stage: set, expanding and mature green while it grows,
 /// then breaker, turning, pink, light red and red as it colours from its
-/// blossom end up. A truss sets its fruit at the head, and they reach full
+/// blossom end up. A truss sets its fruit near the head, and they reach full
 /// size five trusses down. A stem colours from its lowest truss up and a
-/// truss from its base to its tip, so the lowest `ripe_trusses` trusses on a
-/// stem are colouring and the ones above them still green. A truss is due
-/// once its tip fruit is turning. Every stem runs a little ahead of or behind
-/// the rest.
+/// truss from its base to its tip, so in full production the lowest
+/// `ripe_trusses` trusses on a stem are colouring and the ones above them
+/// still green; a young crop's trusses are all green until the first are
+/// old enough. A truss is due once its tip fruit is turning. Every stem runs
+/// a little ahead of or behind the rest.
 ///
 /// Every fruit draws its own lobe count, its five or six sepals and how each
 /// curls, and a slight lean, within the ranges the research notes give.
@@ -322,8 +324,8 @@ impl Metric<FruitConfig> for FruitMetric {
     pyo3::pyclass(get_all, set_all, skip_from_py_object)
 )]
 pub struct FruitParams {
-    /// Trusses per stem that have coloured, counted up from the lowest: a
-    /// fraction is the next one part way.
+    /// Trusses per stem that have coloured in full production, counted up
+    /// from the lowest: a fraction is the next one part way.
     #[reflect(@Slider { min: 0.0, max: 3.0, step: 0.1 })]
     pub ripe_trusses: f32,
     /// How far a truss's tip fruit lags behind its base fruit, as a share of

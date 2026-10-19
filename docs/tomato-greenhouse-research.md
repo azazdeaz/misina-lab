@@ -23,7 +23,7 @@ dimensions were found, though, so the layout here is Dutch.
 | --- | --- | --- |
 | Row layout | One hanging gutter every 1.6 m; stems trained in a V to two wires; a pipe rail in every path; a concrete main path at the row head | The same, with pitch, gutter height, wire height and rail gauge as parameters |
 | Robot surface | 51 mm heating pipes, 550–600 mm apart, double as rails; tilt at most 2° and the two rails at most 15–21 mm apart in height | A rail pair per path, gauge and pipe choices, and an unevenness knob scaled to that spec |
-| Crop | Two-stem plants at 2.5 → 3.8 stems/m²; a truss every 3 leaves; 14–18 leaves kept; lowered bare stems along the gutter | Stems built plant by plant and solved to put the harvest band at a given height |
+| Crop | Two-stem plants at 2.5 → 3.8 stems/m²; a truss every 3 leaves, about one a week; 14–18 leaves kept; lowered bare stems along the gutter | Stems grown plant by plant from planting to a given week, with the harvest band at a given height in full production |
 | Fruit | Dutch area: truss (TOV) about 53%, cherry 27%, loose 19% | A simple TOV truss first and a branched cherry truss second; no loose fruit |
 | Ground truth | Robots cut at the peduncle base or at its bend, and skip trusses without clearance | Cut frames on every truss, ripeness on every fruit, and harvestable and clearance flags on every truss |
 
@@ -134,11 +134,15 @@ Looking along a row, with Z up:
 | Plant | 2 stems, 0.36 m apart | 0.33–0.5 m | [GTB-1139][gtb1139] |
 | Stem diameter | 16 mm | 12–20 mm | [Kondo et al.][kondo] |
 | Leaves between trusses | 3 | | [Source.ag][sourceag] |
+| Leaves below the first truss | | 6–12 | [Pnueli et al.][pnueli] |
+| Transplant | 0.4 m, its first truss flowering (est.) | | |
+| Extra stem | from a side shoot, six weeks after planting (est.) | | |
 | Stem per truss | 0.25–0.35 m | from 20–35 cm/week growth at about one truss a week | [Kim & Kubota][kim], [Duijvestijn][duijvestijn] |
 | Leaves kept | 16 | 14–18; 18–21 in the last month | [WUR thesis][thesis] |
 | Leaf | 0.45 m, 7 or 9 leaflets | 0.35–0.6 m (est.); pressed leaves of 24–40 cm, with 3–4 lateral pairs and leaflets covering about 0.2 × length² | [Naturalis][naturalis] |
 | Stem length, end of season | | up to 12 m | [Duijvestijn][duijvestijn] |
-| Lowering | about 25 cm/week; hooks shifted along the wire; bare stem lies along the row | | [Duijvestijn][duijvestijn], [NL2000684C2][lowering-patent] |
+| Lowering | about 25 cm/week; hooks shifted along the wire; bare stem lies along the row | 50 cm every two weeks, from March | [Duijvestijn][duijvestijn], [NL2000684C2][lowering-patent] |
+| Season | planted in December; at the top of a 4.5 m house after about 2.5 months; topped in September; cleared at the end of November | | [Duijvestijn][duijvestijn] |
 
 ### Truss and fruit
 
@@ -152,6 +156,7 @@ Looking along a row, with Z up:
 | Peduncle diameter | 7 mm | 4.8–11.8 mm | [Kondo et al.][kondo] |
 | Peduncle angle from the stem | 70° | 5–139° | [Kondo et al.][kondo] |
 | Cutting force | | about 60 N for the thickest peduncle | [Kondo et al.][kondo] |
+| Fruit set to harvest | 8 weeks | | [Duijvestijn][duijvestijn] |
 | Ripening | from the base of the truss to its tip; due when the terminal fruit is at least "turning" | | [AHPPEBot][ahppebot] |
 | Colour stages | green, breaker, turning, pink, light red, red: coloured on up to 10%, 30%, 60% and 90% of the surface, and more | colour starts at the blossom end | [USDA][usda] |
 | Fruit size by stage | full size at mature green | about 15% of it at fruit set (est.) | |
@@ -176,7 +181,8 @@ above.
 | Rows | pitch 1.5–1.8 m; 1–12 rows; length 5–120 m; main path 3–5 m | 1.6 m, 6 rows, 20 m, 3 m | The lane change on concrete, and the aisle the arm works in |
 | Gutter | height 0.3–1.0 m; hanging or standing | 0.5 m, hanging | Moves the slab and the lowered stems relative to the rail |
 | Wire height | 3.5–5.5 m | 4.5 m | How tall the crop stands |
-| Harvest height, the lowest unharvested truss | 0.8–1.8 m; 6–12 trusses from there to the head | 1.2 m (est.); 9 (est.) | Where the arm has to reach. Stems are solved to put trusses here, so stem per truss follows: 0.34 m at the defaults, inside the measured growth range |
+| Crop age | 0–40 weeks since planting | 16 | Which trusses hang and how ripe they are, how tall the crop stands, and how much stem lies lowered along the gutter |
+| Harvest height, the lowest unharvested truss | 0.8–1.8 m; 6–12 trusses from there to the head | 1.2 m (est.); 9 (est.) | Where the arm has to reach, in full production. A week's growth of stem follows: 0.34 m at the defaults, inside the measured growth range |
 | Stem density | plant spacing 0.3–0.5 m; extra-stem share 0–0.5 | 0.36 m, 0 | Occlusion by neighbours, and trusses snagged between stems |
 | Leaves | kept 10–21; length 0.35–0.6 m; an old leaf's droop 0–150° | 16, 0.45 m, 90° (est.) | The main occlusion knob, behind the ~15% of trusses the Harvester leaves |
 | Truss | fruit count, fruit diameter, branched or simple | 6 × 60 mm, simple | What is cut; size drives occlusion and the gripper's approach. The TOV medium, TOV large and cherry presets are cfg values, not a choice field |
@@ -191,8 +197,14 @@ The rest is fixed, with one good version and no knob: the slab, block and
 drip look, the white film, hooks and twine, the two-wire V, stem taper, the
 terminal, lateral and intercalary leaflet shapes, and the calyx.
 
-A young crop needs no knob of its own. A lowered length of 0 with no ripe
-trusses gives the crop before its first lowering.
+The season is one knob, the crop's age in weeks, rather than a height or a
+lowered length. Once the heads reach the wire the standing crop looks the
+same week after week, so only the age tells a crop before its first harvest
+from one with meters of stem lowered. A stem grows forward from a
+transplant at a truss a week, a truss flowering at the head every week and
+picked `trusses` weeks after it flowered, which at 9 is the 8 weeks from
+fruit set to harvest above. Topping, after which a stem stops growing, is
+not modelled.
 
 ## Left out, and why
 
@@ -330,6 +342,7 @@ Dutch gutter slope.
 [metazet]: https://metazet.com/teeltgoot/formflex-vg-teeltgoot/
 [naturalis]: https://bioportal.naturalis.nl/en/specimen/L.4471084
 [packer]: https://www.thepacker.com/news/packer-tech/precision-over-pressure-how-eternal-ag-solving-hardest-challenges-autonomous-tom
+[pnueli]: https://cris.huji.ac.il/en/publications/the-self-pruning-gene-of-tomato-regulates-vegetative-to-reproduct/
 [rb-hooks]: https://royalbrinkman.com/knowledge-center/crop-rotation/twine-tomato-hooks
 [rb-trolley]: https://royalbrinkman.com/mechanical-equipment/internal-transport/harvest-trolleys/
 [rb-truss]: https://royalbrinkman.com/crop-rotation/clips-truss-support/truss-support/

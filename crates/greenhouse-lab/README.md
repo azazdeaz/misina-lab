@@ -13,6 +13,13 @@ Dutch research compartments, supplier sheets and one measured truss study.
 A stem keeps its leaves from the head down and is stripped below them, as
 growers leave it, so the trusses in the harvest band hang off bare stem.
 
+The crop is grown to an age, `scene.week`, the weeks since planting. A
+young crop stands on its twines below the wires with green fruit only. Its
+heads reach the wires and its first trusses ripen about week 9, and from
+then on the stems are lowered along the gutter as they grow, a truss's
+worth of stem a week, so a crop deep into the season has meters of bare
+stem lying beside it.
+
 ## What a row holds
 
 | Part | What it is | Knobs |
@@ -21,7 +28,7 @@ growers leave it, so the trusses in the harvest band hang off bare stem.
 | Rail | two heating pipes in every path, on a support every meter, each segment a capsule collider | gauge, pipe diameter, height, unevenness up to and past the 2° spec |
 | Gutter | a steel channel, hanging or standing, with stone wool slabs and a block at every plant | height, mount, plant spacing |
 | Wires | two crop wires over every gutter, for the V the stems are trained in | height, spread |
-| Stems | two to a plant, each lowered along the gutter and rising to a hook on its wire, with its twine wound down it; a leaf at every node and a truss in every third internode, the leaves stripped below the top few with a stub left at each | harvest height, trusses on a stem, leaves kept, lowered length, extra stems, trusses turned to the path |
+| Stems | two to a plant, each grown up its twine to a hook on its wire and lowered along the gutter from then on; a leaf at every node and a truss in every third internode, the leaves stripped below the top few with a stub left at each | the crop's age, harvest height, trusses on a stem, leaves kept, extra stems, trusses turned to the path |
 | Leaves | a compound leaf: a petiole and a rachis with a terminal leaflet, three or four pairs of laterals and small leaflets between them, each leaflet outlined from its veins; small and upright at the head, drooping further down. Visual only, with no collider | length, droop |
 | Trusses | peduncle, rachis and a pedicel to every fruit, with a `Cut` and a `Bend` frame | fruit count and diameter, branched, peduncle length, diameter and angle, missing fruit |
 | Fruit | every fruit its own prim, with a calyx of five or six sepals and a stage from fruit set to red: fruit grow toward the head, a stem ripens from the bottom up, a truss from its base to its tip, and a fruit from its blossom end | ripe trusses on a stem, the spread in a truss, the ripe colour, height to width, ribbing, jointed pedicels |

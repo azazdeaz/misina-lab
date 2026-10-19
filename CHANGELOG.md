@@ -30,11 +30,23 @@ Two kinds of change break a project that worked on the release before:
   pairs of laterals and small leaflets between them, each leaflet outlined
   from its veins. Leaves are small and upright at the head and droop further
   down. The stem below them is stripped, with a stub at each node, so the
-  lowest two trusses always hang on bare stem. Leaves are visual only, with
-  no collider. New: `StemCfg.leaves_kept` and `LeafCfg`.
+  two trusses nearest their picking always hang on bare stem. Leaves are
+  visual only, with no collider. New: `StemCfg.leaves_kept` and `LeafCfg`.
+- **greenhouse-lab**: the crop's age. `SceneCfg.week`, the weeks since
+  planting, grows every stem forward from a 0.4 m transplant at a truss a
+  week. A young crop stands on its twines below the wire with green fruit
+  only and keeps its lowest leaves; its heads reach the wire and its first
+  trusses ripen about week 9 at the defaults; from then on its stems are
+  lowered along the gutter as they grow. Which trusses hang, how ripe they
+  are and how far their fruit have grown follow from each truss's age, and
+  an extra stem is taken on six weeks after planting.
 
 ### Changed
 
+- **greenhouse-lab** (**cfg**): `StemCfg.lowered` is gone: how much stem
+  lies along the gutter follows from `SceneCfg.week`.
+  `StemCfg.harvest_height` and `StemCfg.trusses` now describe the crop in
+  full production, and set how much a stem grows in a week.
 - **misina-lab**: `Shears.colliders(body)` replaces `Shears.collider(body)`
   and lists all of a body's collision shapes, so a part built of several, a
   blade in slices, can have each moved on its own with `Shears.place`.

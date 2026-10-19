@@ -149,8 +149,8 @@ pub struct Node {
     /// The stem's radius at the node; the `Cut` sits that far out along the
     /// peduncle.
     pub stem_radius: f32,
-    /// How many trusses above its stem's ripening front this one hangs, which
-    /// its fruit's ripeness is read off.
+    /// How many weeks this one is behind its stem's ripening front, a truss
+    /// a week, which its fruit's ripeness is read off.
     pub rank: f32,
     /// How far its fruit have come toward full size, 0 just set to 1: the
     /// trusses nearest the head set theirs last.

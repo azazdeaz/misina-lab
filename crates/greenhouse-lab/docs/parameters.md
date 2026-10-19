@@ -14,11 +14,12 @@ generator can build. Lengths are in meters.
 
 `SceneParams` in Python, `SceneCfg` in Isaac Lab.
 
-Scene-wide parameters: the seed.
+Scene-wide parameters: the seed, and how far into the season the crop is.
 
 | Parameter | Type | Default | Slider range | Description |
 |---|---|---|---|---|
 | `seed` | int | `0` | 0 to 64 | The one seed the whole scene is generated from. Each element salts it with a constant of its own, so a new seed is a different greenhouse and an edit to one element never re-rolls another. |
+| `week` | float | `16.0` | 0 to 40 | Weeks since the crop was planted. A stem grows about a truss a week up its twine, reaches the wire after about nine weeks at the defaults, when its first trusses ripen, and is lowered along the gutter from then on. |
 
 ## Rows
 
@@ -81,14 +82,13 @@ The two crop wires over every gutter, which the stems are trained up to in a V.
 
 The crop's stems: two to a plant, trained alternately to the left and the right wire, and lowered as they grow.
 
-Each stem lies `lowered` meters along the gutter, then rises to its hook, with its head a hook's length below the wire. The stem between `harvest_height` and the head carries `trusses` trusses with three leaves to each, so how much stem a truss takes follows from the wire height rather than being set. Only the top `leaves_kept` leaves are left on; the stem below them is stripped bare.
+Each stem grows a truss a week from planting, up its twine to a hook on the wire. Once its head is a hook's length below the wire it is lowered, and all the stem the wire is too low for lies along the gutter. In full production the stem between `harvest_height` and the head carries `trusses` trusses with three leaves to each, so how much a stem grows in a week follows from the wire height rather than being set. Only the top `leaves_kept` leaves are left on; the stem below them is stripped bare.
 
 | Parameter | Type | Default | Slider range | Description |
 |---|---|---|---|---|
-| `harvest_height` | float | `1.2` | 0.8 to 1.8 | Height above the floor of the lowest truss still on a stem, in meters: where a harvesting arm reaches to. The stem below it has been picked and stripped bare. |
-| `trusses` | int | `9` | 6 to 12 | Trusses on a stem, from the lowest still on it up to the head. |
-| `leaves_kept` | int | `16` | 10 to 21 | Leaves on a stem, counted down from the head. Growers strip the ones below, so the stem under them is bare, and the lowest two trusses always hang on bare stem however many are kept. |
-| `lowered` | float | `2.0` | 0 to 6 | Length of bare stem lying beside the gutter, in meters: how far into the season the crop is, at about 25 cm of lowering a week. 0 is a crop before its first lowering. |
+| `harvest_height` | float | `1.2` | 0.8 to 1.8 | Height above the floor of the lowest truss still on a stem once the crop is in full production, in meters: where a harvesting arm reaches to. The stem below it has been picked and stripped bare. |
+| `trusses` | int | `9` | 6 to 12 | Trusses on a stem in full production, from the lowest still on it up to the head. At a truss a week, also the weeks from a truss flowering at the head to its picking. |
+| `leaves_kept` | int | `16` | 10 to 21 | Leaves on a stem, counted down from the head. Growers strip the ones below, so the stem under them is bare, and the two trusses nearest their picking always hang on bare stem however many are kept. |
 | `extra_stems` | float | `0.0` | 0 to 0.5 | Share of plants grown on with a third stem, which growers keep to raise the stem density. |
 | `turned_to_path` | float | `0.8` | 0 to 1 | Share of trusses turned to face the path. The rest face anywhere, into the crop as often as not, where a harvester has to skip them. |
 
@@ -131,13 +131,13 @@ The peduncle numbers default to the means measured on medium trusses in a high-w
 
 The fruit: their shape, how ripe the crop is, and what colour ripe is.
 
-Every fruit has a stage: set, expanding and mature green while it grows, then breaker, turning, pink, light red and red as it colours from its blossom end up. A truss sets its fruit at the head, and they reach full size five trusses down. A stem colours from its lowest truss up and a truss from its base to its tip, so the lowest `ripe_trusses` trusses on a stem are colouring and the ones above them still green. A truss is due once its tip fruit is turning. Every stem runs a little ahead of or behind the rest.
+Every fruit has a stage: set, expanding and mature green while it grows, then breaker, turning, pink, light red and red as it colours from its blossom end up. A truss sets its fruit near the head, and they reach full size five trusses down. A stem colours from its lowest truss up and a truss from its base to its tip, so in full production the lowest `ripe_trusses` trusses on a stem are colouring and the ones above them still green; a young crop's trusses are all green until the first are old enough. A truss is due once its tip fruit is turning. Every stem runs a little ahead of or behind the rest.
 
 Every fruit draws its own lobe count, its five or six sepals and how each curls, and a slight lean, within the ranges the research notes give.
 
 | Parameter | Type | Default | Slider range | Description |
 |---|---|---|---|---|
-| `ripe_trusses` | float | `1.0` | 0 to 3 | Trusses per stem that have coloured, counted up from the lowest: a fraction is the next one part way. |
+| `ripe_trusses` | float | `1.0` | 0 to 3 | Trusses per stem that have coloured in full production, counted up from the lowest: a fraction is the next one part way. |
 | `spread` | float | `0.2` | 0 to 1 | How far a truss's tip fruit lags behind its base fruit, as a share of the ripening from breaker to red: 0 colours a truss all at once. |
 | `color` | str | `"red"` | `red`, `orange`, `yellow`, `brown` | The colour a ripe fruit turns: `red`, `orange`, `yellow` or `brown`. |
 | `aspect` | float | `0.9` | 0.5 to 1.8 | Height of a fruit over its width: under 1 is oblate, as round truss tomatoes and beefsteaks are, and over 1 elongated, as plum tomatoes are. Each fruit draws a little either side. |

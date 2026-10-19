@@ -72,8 +72,8 @@ pub fn plugin(app: &mut App) {
         ));
 }
 
-/// Scene-wide parameters: the seed.
-#[derive(Resource, Reflect, Clone, Debug, Default, PartialEq)]
+/// Scene-wide parameters: the seed, and how far into the season the crop is.
+#[derive(Resource, Reflect, Clone, Debug, PartialEq)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(get_all, set_all, skip_from_py_object)
@@ -84,6 +84,24 @@ pub struct SceneParams {
     /// an edit to one element never re-rolls another.
     #[reflect(@Slider { min: 0.0, max: 64.0, step: 1.0 })]
     pub seed: u64,
+    /// Weeks since the crop was planted. A stem grows about a truss a week up
+    /// its twine, reaches the wire after about nine weeks at the defaults,
+    /// when its first trusses ripen, and is lowered along the gutter from
+    /// then on.
+    ///
+    /// Scene-wide rather than the stems', because it is one date that every
+    /// layer of the crop reads.
+    #[reflect(@Slider { min: 0.0, max: 40.0, step: 1.0 })]
+    pub week: f32,
+}
+
+impl Default for SceneParams {
+    fn default() -> Self {
+        Self {
+            seed: 0,
+            week: 16.0,
+        }
+    }
 }
 
 misina_lab::generator! {
@@ -226,7 +244,8 @@ mod tests {
             ("mount", edited(|p| p.gutter.mount = "standing".into())),
             ("unevenness", edited(|p| p.rail.unevenness = 1.5)),
             ("wire height", edited(|p| p.wire.height = 4.0)),
-            ("lowered", edited(|p| p.stem.lowered = 0.0)),
+            ("week", edited(|p| p.scene.week = 4.0)),
+            ("no trusses yet", edited(|p| p.scene.week = 0.0)),
             ("leaves kept", edited(|p| p.stem.leaves_kept = 12)),
             ("leaf length", edited(|p| p.leaf.length = 0.5)),
             ("peduncle", edited(|p| p.truss.peduncle_length = 0.1)),

@@ -19,18 +19,24 @@ FruitColor = Literal["red", "orange", "yellow", "brown"]
 """What `FruitParams.color` may be set to."""
 
 class SceneParams:
-    """Scene-wide parameters: the seed."""
+    """Scene-wide parameters: the seed, and how far into the season the crop is."""
 
     seed: int
     """The one seed the whole scene is generated from. Each element salts it with a
     constant of its own, so a new seed is a different greenhouse and an edit to one
     element never re-rolls another.
     """
+    week: float
+    """Weeks since the crop was planted. A stem grows about a truss a week up its twine,
+    reaches the wire after about nine weeks at the defaults, when its first trusses
+    ripen, and is lowered along the gutter from then on.
+    """
 
     def __init__(
         self,
         *,
         seed: int = 0,
+        week: float = 16.0,
     ) -> None: ...
     def __repr__(self) -> str: ...
 
@@ -150,28 +156,29 @@ class StemParams:
     """The crop's stems: two to a plant, trained alternately to the left and the right
     wire, and lowered as they grow.
 
-    Each stem lies `lowered` meters along the gutter, then rises to its hook, with
-    its head a hook's length below the wire. The stem between `harvest_height` and
-    the head carries `trusses` trusses with three leaves to each, so how much stem a
-    truss takes follows from the wire height rather than being set. Only the top
-    `leaves_kept` leaves are left on; the stem below them is stripped bare.
+    Each stem grows a truss a week from planting, up its twine to a hook on the wire.
+    Once its head is a hook's length below the wire it is lowered, and all the stem
+    the wire is too low for lies along the gutter. In full production the stem
+    between `harvest_height` and the head carries `trusses` trusses with three leaves
+    to each, so how much a stem grows in a week follows from the wire height rather
+    than being set. Only the top `leaves_kept` leaves are left on; the stem below
+    them is stripped bare.
     """
 
     harvest_height: float
-    """Height above the floor of the lowest truss still on a stem, in meters: where a
-    harvesting arm reaches to. The stem below it has been picked and stripped bare.
+    """Height above the floor of the lowest truss still on a stem once the crop is in
+    full production, in meters: where a harvesting arm reaches to. The stem below it
+    has been picked and stripped bare.
     """
     trusses: int
-    """Trusses on a stem, from the lowest still on it up to the head."""
+    """Trusses on a stem in full production, from the lowest still on it up to the head.
+    At a truss a week, also the weeks from a truss flowering at the head to its
+    picking.
+    """
     leaves_kept: int
     """Leaves on a stem, counted down from the head. Growers strip the ones below, so
-    the stem under them is bare, and the lowest two trusses always hang on bare stem
-    however many are kept.
-    """
-    lowered: float
-    """Length of bare stem lying beside the gutter, in meters: how far into the season
-    the crop is, at about 25 cm of lowering a week. 0 is a crop before its first
-    lowering.
+    the stem under them is bare, and the two trusses nearest their picking always
+    hang on bare stem however many are kept.
     """
     extra_stems: float
     """Share of plants grown on with a third stem, which growers keep to raise the stem
@@ -188,7 +195,6 @@ class StemParams:
         harvest_height: float = 1.2,
         trusses: int = 9,
         leaves_kept: int = 16,
-        lowered: float = 2.0,
         extra_stems: float = 0.0,
         turned_to_path: float = 0.8,
     ) -> None: ...
@@ -282,19 +288,20 @@ class FruitParams:
 
     Every fruit has a stage: set, expanding and mature green while it grows, then
     breaker, turning, pink, light red and red as it colours from its blossom end up.
-    A truss sets its fruit at the head, and they reach full size five trusses down. A
-    stem colours from its lowest truss up and a truss from its base to its tip, so
-    the lowest `ripe_trusses` trusses on a stem are colouring and the ones above them
-    still green. A truss is due once its tip fruit is turning. Every stem runs a
-    little ahead of or behind the rest.
+    A truss sets its fruit near the head, and they reach full size five trusses down.
+    A stem colours from its lowest truss up and a truss from its base to its tip, so
+    in full production the lowest `ripe_trusses` trusses on a stem are colouring and
+    the ones above them still green; a young crop's trusses are all green until the
+    first are old enough. A truss is due once its tip fruit is turning. Every stem
+    runs a little ahead of or behind the rest.
 
     Every fruit draws its own lobe count, its five or six sepals and how each curls,
     and a slight lean, within the ranges the research notes give.
     """
 
     ripe_trusses: float
-    """Trusses per stem that have coloured, counted up from the lowest: a fraction is
-    the next one part way.
+    """Trusses per stem that have coloured in full production, counted up from the
+    lowest: a fraction is the next one part way.
     """
     spread: float
     """How far a truss's tip fruit lags behind its base fruit, as a share of the
