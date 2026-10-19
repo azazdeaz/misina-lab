@@ -52,7 +52,7 @@ vineyard, and then the greenhouse.
 | [vinery-lab/src/elements/util/](crates/vinery-lab/src/elements/util/) | the named colours and responses, layout solver, planting walk — everything under `elements/` that is not an element |
 | [vinery-lab/src/perf.rs](crates/vinery-lab/src/perf.rs) | the per-layer marks and the bench |
 | [greenhouse-lab/src/lib.rs](crates/greenhouse-lab/src/lib.rs) | crate root: the `Greenhouse` generator and its `_core` Python module |
-| [greenhouse-lab/src/elements/](crates/greenhouse-lab/src/elements/) | the layout, the floor, one module per fixture and one per layer of the crop; `mod.rs` holds the stage sets and the `generator!` call |
+| [greenhouse-lab/src/elements/](crates/greenhouse-lab/src/elements/) | the layout, the floor, one module per fixture and one per layer of the crop, and `leaflet.rs`, a leaflet's outline built from its veins; `mod.rs` holds the stage sets and the `generator!` call |
 
 ### Python
 
