@@ -20,6 +20,14 @@ Two kinds of change break a project that worked on the release before:
 
 ## [Unreleased]
 
+### Changed
+
+- The repository is now
+  [azazdeaz/misina-lab](https://github.com/azazdeaz/misina-lab), and the web
+  playground moved with it to
+  [azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/).
+  The old repository URL redirects; the old playground URL does not.
+
 ## [0.1.0] - Unreleased
 
 Scene document format 8. The first release.
@@ -60,7 +68,7 @@ Scene document format 8. The first release.
   and a dormant mode: bare canes with a bud at every node, every one of them
   cuttable.
 - **vinery-lab**: `VineyardCfg`, and the viewer as a
-  [web playground](https://azazdeaz.github.io/vinery-lab/).
+  [web playground](https://azazdeaz.github.io/misina-lab/).
 - **greenhouse-lab**: the rows of a high-wire tomato greenhouse. Floor, heating
   pipe rails, gutters with slabs and blocks, crop wires, and the crop on them:
   stems with their twine and hooks, trusses with a `Cut` and a `Bend` frame
