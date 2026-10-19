@@ -28,7 +28,7 @@ nothing to do.
 
 
 
-https://github.com/user-attachments/assets/5831edf6-d97a-4f67-a7ce-a16cb0be8053
+https://github.com/user-attachments/assets/65e43466-2f64-4a45-a0ad-c5bb07786d7a
 
 
 
@@ -169,10 +169,10 @@ Every tick while the shear closes, `pruner.Stroke`:
 
 A cane the blade is still carrying across is not cut before the blades
 meet, even when it has sunk into the blade past its axis: the solver lets a
-pushed cane sink in a little, and a cut there would be made in mid-air. Nothing is crushed between
-the blades and nothing the cane leans on is pulled from under it. Opening,
-a standing slice rides the blade again once that has opened back past it,
-so every stroke starts with the blade whole:
+pushed cane sink in a little, and a cut there would be made in mid-air.
+Nothing is crushed between the blades and nothing the cane leans on is
+pulled from under it. Opening, a standing slice rides the blade again once
+that has opened back past it, so every stroke starts with the blade whole:
 
 ```mermaid
 stateDiagram-v2
