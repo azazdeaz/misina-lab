@@ -40,7 +40,6 @@ extension-module = ["python", "pyo3/extension-module"]
 bevy = { workspace = true, features = ["webgpu"] }
 # `getrandom` reaches wasm32-unknown-unknown twice — 0.4 under bevy_math's rand,
 # 0.3 under curvo's argmin — and neither picks a backend on its own. Renamed
-# because two majors of one crate cannot share a key. See `.cargo/config.toml`
-# for the other half.
+# because two majors of one crate cannot share a key.
 getrandom_04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }
 getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
