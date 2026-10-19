@@ -49,7 +49,8 @@ Pure Python over `usd-core`, in [`../../python/misina-lab`](../../python/misina-
 | [misina_lab/usd/ground.py](../../python/misina-lab/misina_lab/usd/ground.py) | `Ground`: the terrain height under any (x, y), read back off a stage |
 | [misina_lab/isaaclab/spawn.py](../../python/misina-lab/misina_lab/isaaclab/spawn.py) | `GeneratedSceneCfg`, the base of every generator's cfg; generates, caches and spawns the `.usd` |
 | [misina_lab/isaaclab/rods.py](../../python/misina-lab/misina_lab/isaaclab/rods.py) | the coupled Newton config that lets a rod bend, and the tuning and collision groups it needs |
-| [misina_lab/isaaclab/cutting.py](../../python/misina-lab/misina_lab/isaaclab/cutting.py) | `Shears`: cuts a rod anywhere along it while the simulation runs |
+| [misina_lab/isaaclab/cutting.py](../../python/misina-lab/misina_lab/isaaclab/cutting.py) | `Shears`: cuts a rod anywhere along it while the simulation runs, and moves a collider in its body's frame |
+| [misina_lab/isaaclab/colliders.py](../../python/misina-lab/misina_lab/isaaclab/colliders.py) | `ColliderView`: every collider of the running Newton model, drawn in Kit's viewport |
 
 Only `misina_lab.isaaclab` imports Isaac Lab; plain `import misina_lab`
 works without it.

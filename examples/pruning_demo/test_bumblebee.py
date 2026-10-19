@@ -88,22 +88,31 @@ def test_the_mouth_is_what_the_closing_blade_sweeps():
     assert abs(normal @ MACHINE.tool[:3, 0]) == pytest.approx(np.linalg.norm(normal))
 
 
-def test_the_blades_collide_whole(built):
-    """Each plate is one box, drawn and colliding alike, with its cutting
-    edge on the link's XZ plane: what pushes a cane about is the plate the
-    stroke stands at the cane."""
+def test_the_blades_collide_where_they_are_drawn(built):
+    """Each plate is drawn as one box with its cutting edge on the link's XZ
+    plane. The fixed one collides as that box, and the moving one as
+    `Shear.slices` boxes end to end along it -- the pieces `Stroke` stands at
+    a cane one by one."""
     shear = MACHINE.shear
     assert any(
-        width == pytest.approx(shear.head)
-        for _, width in _boxes(built.find("./link[@name='shear_link']"), "collision")
+        size[0] == pytest.approx(shear.head)
+        for _, size in _boxes(built.find("./link[@name='shear_link']"), "collision")
     ), "the head collides"
-    for name, side in (("shear_link", 1), (bumblebee.BLADE, -1)):
+    for name, side, spans in (
+        ("shear_link", 1, [(0.0, shear.blade)]),
+        (bumblebee.BLADE, -1, shear.spans),
+    ):
         link = built.find(f"./link[@name='{name}']")
-        for tag in ("visual", "collision"):
-            [(y, width)] = [
-                box for box in _boxes(link, tag) if box[1] == pytest.approx(shear.width)
-            ]
-            assert side * y - width / 2 == pytest.approx(0.0), f"{name} {tag}: edge on the XZ plane"
+        for tag, expected in (("visual", [(0.0, shear.blade)]), ("collision", spans)):
+            plates = [box for box in _boxes(link, tag) if box[1][1] == pytest.approx(shear.width)]
+            for centre, size in plates:
+                assert side * centre[1] - size[1] / 2 == pytest.approx(0.0), (
+                    f"{name} {tag}: edge on the XZ plane"
+                )
+            along = sorted(
+                (centre[2] - size[2] / 2, centre[2] + size[2] / 2) for centre, size in plates
+            )
+            assert np.array(along) == pytest.approx(np.array(expected)), f"{name} {tag}"
 
 
 def test_a_cane_in_the_mouth_is_pinched_where_the_edges_are_a_cane_apart():
@@ -123,14 +132,14 @@ def test_a_cane_in_the_mouth_is_pinched_where_the_edges_are_a_cane_apart():
     assert (shear.reach * (a - 1), shear.blade * b) == pytest.approx(shear.mouth)
 
 
-def _boxes(link: ElementTree.Element, tag: str) -> list[tuple[float, float]]:
-    """Each box under `link`'s `tag` elements, as its Y centre and Y size."""
+def _boxes(link: ElementTree.Element, tag: str) -> list[tuple[list[float], list[float]]]:
+    """Each box under `link`'s `tag` elements, as its centre and its size."""
     boxes = []
     for element in link.findall(tag):
         box = element.find("geometry/box")
         if box is not None:
-            y = float(element.find("origin").get("xyz").split()[1])
-            boxes.append((y, float(box.get("size").split()[1])))
+            centre = [float(v) for v in element.find("origin").get("xyz").split()]
+            boxes.append((centre, [float(v) for v in box.get("size").split()]))
     return boxes
 
 

@@ -19,7 +19,7 @@ except ImportError as err:  # pragma: no cover - depends on the environment
         " without it."
     ) from err
 
-from misina_lab.isaaclab import Shears
+from misina_lab.isaaclab import ColliderView, Shears
 
 from .physics import CABLE, make_physics_cfg_newton, tune_shoots
 from .vineyard import spawn_vineyard
@@ -44,6 +44,7 @@ from .vineyard_cfg import (
 
 __all__ = [
     "CABLE",
+    "ColliderView",
     "Shears",
     "make_physics_cfg_newton",
     "spawn_vineyard",

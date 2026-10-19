@@ -20,6 +20,18 @@ Two kinds of change break a project that worked on the release before:
 
 ## [Unreleased]
 
+### Added
+
+- **misina-lab**: `ColliderView` draws every collider of the running Newton
+  model in Kit's viewport, translucent, and follows the ones moved or resized
+  while it runs. Kit draws only a PhysX scene's colliders.
+
+### Changed
+
+- **misina-lab**: `Shears.colliders(body)` replaces `Shears.collider(body)`
+  and lists all of a body's collision shapes, so a part built of several, a
+  blade in slices, can have each moved on its own with `Shears.place`.
+
 ## [0.1.0] - Unreleased
 
 Scene document format 8. The first release.
