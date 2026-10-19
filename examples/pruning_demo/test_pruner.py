@@ -8,6 +8,8 @@ which reaches Isaac Lab.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
@@ -68,25 +70,40 @@ class FakeShears:
         self.removed |= {bud.prim for bud in cane.buds[KEEP_BUDS:]}
         return True
 
-    def collider(self, body: int):
-        return 0, IDENTITY.copy()
+    def colliders(self, body: int):
+        return blade_slices()
 
     def place(self, shape: int, pose: np.ndarray) -> None:
         pass
 
 
+def blade_slices() -> tuple[np.ndarray, np.ndarray]:
+    """The moving blade's slices as `Shears.colliders` gives them: shape
+    indices and rest poses in the blade's frame, tip first, since nothing
+    promises the order."""
+    from bumblebee import Shear
+
+    shear = Shear()
+    rest = np.zeros((shear.slices, 7))
+    rest[:, :2] = shear.bypass, -shear.width / 2
+    rest[:, 2] = shear.spans.mean(axis=1)[::-1]
+    rest[:, 6] = 1.0
+    return np.arange(shear.slices) + 10, rest
+
+
 class HeldCane:
     """Canes crossing the moving plate's plane at `points`, which nothing
-    moves, each until it is cut; and the moving blade's collider wherever
-    `Stroke` last put it."""
+    moves, each until it is cut; and each slice of the moving blade's
+    collider everywhere `Stroke` put it."""
 
     labels = ["/robot/blade_link"]
-    bodies = np.array([3, 4])
-    radius = np.array([0.005, 0.005])
-    REST = np.array([0.006, -0.01, 0.04, 0.0, 0.0, 0.0, 1.0])
+    RADIUS = 0.005
 
     def __init__(self, *points: np.ndarray):
-        self.points, self.cuts, self.placed = points, [], []
+        self.points, self.cuts, self.placed = points, [], {}
+        self.bodies = np.arange(3, 3 + len(points))
+        self.radius = np.full(len(points), self.RADIUS)
+        self.loose = np.zeros(len(points), dtype=bool)
 
     def crossing(self, corner, u, v):
         cut = {body for body, _ in self.cuts}
@@ -102,12 +119,11 @@ class HeldCane:
         self.cuts.append((body, at))
         return True
 
-    def collider(self, body: int):
-        return 7, self.REST.copy()
+    def colliders(self, body: int):
+        return blade_slices()
 
     def place(self, shape: int, pose: np.ndarray) -> None:
-        assert shape == 7
-        self.placed.append(pose)
+        self.placed.setdefault(int(shape), []).append(pose)
 
 
 def cane(prim: str, body: int, stations: list[float]) -> Cane:
@@ -197,70 +213,94 @@ def test_the_ground_truth_is_read_off_the_stage():
 
 
 @pytest.mark.parametrize(
-    ("z", "other"),
+    ("z", "other", "cut"),
     [
-        (0.06, None),
-        (0.01, None),
-        (0.06, (-0.03, 0.008)),  # in the open blade already, at its root
-        (0.06, (-0.02, 0.07)),  # off the fixed blade, where the edge passes it first
+        (0.06, None, False),
+        (0.01, None, False),
+        (0.06, (-0.005, 0.025), True),  # against the fixed blade too, nearer the pivot
+        (0.06, (-0.03, 0.008), False),  # in the open blade already, behind it shut
+        (0.06, (-0.025, 0.07), False),  # off the fixed blade, where the edge passes it first
     ],
 )
-def test_the_collider_stands_at_a_held_cane_while_the_blade_closes_through_it(z, other):
-    """A cane against the fixed blade, `z` out along it: the collider follows
-    the blade until the moving edge reaches the cane -- or stays put, if it
-    is there already when the stroke starts -- and stands there while the
-    blade closes on. The held cane is cut as the edge reaches its axis, not a
-    second at `other`: one the open blade is in already, or one the edge
-    passes first, off the fixed blade. Opening, the collider never turns back
-    shut, rides the blade again once that is past it, and the stroke is ready
-    for the next."""
+def test_each_held_cane_stands_its_slices_while_the_blade_closes_through_it(z, other, cut):
+    """A cane against the fixed blade, `z` out along it: the slices along
+    which the edge meets it follow the blade until the edge reaches the cane
+    -- or stay put, if it is there already when the stroke starts -- and
+    stand there while the blade closes on, and the others close with the
+    blade. The cane is cut as the edge reaches its axis. A second cane at
+    `other` is `cut` the same way, at its own tick, if it lies against the
+    fixed blade as well; not if the open blade was in it already, or if it
+    lies off the fixed blade. Opening, no slice turns back shut, each rides
+    the blade again once that is past it, and the stroke is ready for the
+    next."""
     bumblebee = pytest.importorskip("bumblebee", reason="Isaac Lab is not installed")
     machine = bumblebee.Bumblebee()
     shear = machine.shear
-    y = -float(HeldCane.radius[0])
     hand = kinematics.frames(machine.chain, np.array([0.0, *bumblebee.ARM_HOME]))[-1]
 
     def placed(y: float, z: float) -> np.ndarray:
         """The point (y, z) of the moving plate's plane, in world coordinates."""
         return (hand @ bumblebee.TOOL @ [shear.bypass, y, z, 1.0])[:3]
 
-    points = [(y, z), *([other] if other else [])]
-    cane = HeldCane(*(placed(*point) for point in points))
-    stroke = pruner.Stroke(machine, cane)
-    pinch = min(shear.pinch(y, z, HeldCane.radius[0] + pruner.GRIP), shear.opening)
+    points = [(-HeldCane.RADIUS, z), *([other] if other else [])]
+    canes = HeldCane(*(placed(*point) for point in points))
+    stroke = pruner.Stroke(machine, canes)
 
-    def stood(closing: bool) -> list[float]:
-        """The collider's angle once the blade has followed its target, tick
-        by tick until the stroke reports the blade there; and the blade's
-        angle at the tick the cut was made, in `cut_at`."""
+    def stood(closing: bool) -> np.ndarray:
+        """Each slice's angle, out from the pivot, once the blade has
+        followed its target, tick by tick until the stroke reports the blade
+        there; and the blade's angle at the tick each cane was cut, in
+        `cut_at`."""
         nonlocal angle
         angles = []
         while True:
             there = stroke.tick(hand, angle, closing)
-            if stroke.cut and not cut_at:
-                cut_at.append(angle)
+            for body, _ in canes.cuts:
+                cut_at.setdefault(body, angle)
             if there:
-                return angles
+                return np.array(angles)
             angle = stroke.jaw
             angles.append(angle + stroke.turned)
 
-    angle, cut_at = shear.opening, []
+    angle, cut_at = shear.opening, {}
     shut = stood(closing=True)
-    assert cane.cuts == [(HeldCane.bodies[0], 0.5)] and stroke.held == pytest.approx(pinch)
-    axis = shear.pinch(y, z, 0.0)
-    assert cut_at[0] <= axis < cut_at[0] + BLADE_STEP, "cut as the edge reaches its axis"
-    assert shut[0] == pytest.approx(shear.opening - BLADE_STEP), "follows the blade at first"
-    assert min(shut[1:]) == pytest.approx(pinch) and shut[-1] == pytest.approx(pinch)
-    assert (np.diff(shut[1:]) <= 1e-9).all(), "shutting, it never turns back open"
+    radius = HeldCane.RADIUS + pruner.GRIP
+    stands, pinches = np.zeros(shear.slices, dtype=bool), {}
+    for (y, z), body, held in zip(points, canes.bodies, [True, cut], strict=False):
+        if not held:
+            assert body not in cut_at, f"{(y, z)} left standing"
+            continue
+        axis, pinch = shear.pinch(y, z, 0.0), min(shear.pinch(y, z, radius), shear.opening)
+        assert cut_at[body] <= axis < cut_at[body] + BLADE_STEP, f"{(y, z)} cut at its axis"
+        out = math.hypot(y, z)
+        along = (shear.spans[:, 0] < out + radius) & (shear.spans[:, 1] > out - radius)
+        assert stroke.held[along] == pytest.approx(pinch), f"{(y, z)}: its slices stand at it"
+        assert shut[1:, along].min() == pytest.approx(pinch) and shut[-1, along] == pytest.approx(
+            pinch
+        )
+        stands, pinches[pinch] = stands | along, along
+    assert shut[0] == pytest.approx(shear.opening - BLADE_STEP), "each follows the blade at first"
+    assert (np.diff(shut[1:], axis=0) <= 1e-9).all(), "shutting, none turns back open"
+    assert np.isnan(stroke.held[~stands]).all() and (shut[-1, ~stands] < pruner.SLACK).all(), (
+        "the rest close with the blade"
+    )
+
     opened = stood(closing=False)
-    assert opened[0] == pytest.approx(pinch) and (np.diff(opened) >= -1e-9).all()
-    assert stroke.held is None and stroke.turned == 0.0
-    assert not stroke.cut and stroke.inside is None, "ready for the next stroke"
-    assert cane.placed[-1] == pytest.approx(HeldCane.REST), "back on the blade"
-    turned = max(cane.placed, key=lambda pose: pose[3])
-    assert turned[3] > 0 and np.linalg.norm(turned[:3]) == pytest.approx(
-        np.linalg.norm(HeldCane.REST[:3])
-    ), "swung about the pivot"
+    for pinch, along in pinches.items():
+        assert opened[0, along] == pytest.approx(pinch)
+    assert (np.diff(opened, axis=0) >= -1e-9).all(), "opening, none turns back shut"
+    assert np.isnan(stroke.held).all() and (stroke.turned == 0.0).all()
+    assert stroke.cuts == 0 and stroke.inside is None, "ready for the next stroke"
+    shapes, rest = blade_slices()
+    order = np.argsort(rest[:, 2])
+    assert set(canes.placed) == set(shapes[order][stands]), "only the slices that stood moved"
+    for shape, pose in zip(shapes, rest, strict=True):
+        if shape in canes.placed:
+            assert canes.placed[shape][-1] == pytest.approx(pose), "back on the blade"
+            turned = max(canes.placed[shape], key=lambda placed: placed[3])
+            assert turned[3] > 0 and np.linalg.norm(turned[:3]) == pytest.approx(
+                np.linalg.norm(pose[:3])
+            ), "swung about the pivot"
 
 
 @pytest.mark.parametrize(

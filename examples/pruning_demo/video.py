@@ -9,7 +9,7 @@ writes the frames to `OUT.mp4`, near-lossless, and the captions beside it as
 encodes the two into the video to upload.
 
 The storyboard is the constants below: `TAKES`, which case each cut is and
-how it is framed, the opening and closing shots, and `PACE`, how fast each
+how it is framed, the shots around the takes, and `PACE`, how fast each
 stage of a cut plays. Frames are sampled on the simulation's clock, one every
 so many physics steps however long those take to compute, so the video plays
 in simulated time.
@@ -95,7 +95,11 @@ class Take:
     """Each cut's `Cut.push`."""
     kept: tuple[int, ...] = (KEEP_BUDS,)
     """How many buds the cane keeps after each cut, the cuts made in this
-    order -- top down, so each has wood left under it to cut."""
+    order -- top down, so each has wood left under it to cut. Negative counts
+    from the top: -1 keeps all but the last."""
+    canes: int = 1
+    """How many canes each cut's stroke cuts: more than one where the mouth
+    gathers another on its way in."""
 
 
 # The close-ups are taken from the robot's side, a little over the mouth and
@@ -113,6 +117,7 @@ ACROSS = Shot(eye=(-0.7, 1.4, 0.6))
 cane at, which run down it against the robot's chassis."""
 
 TAKES = (
+    Take("Two canes in the mouth, both cut in one stroke", CLOSE, kept=(-1,), canes=2),
     Take("One cane, cut three times from the top down", ACROSS, kept=(6, 4, 2)),
     Take("A planned cut: the cane lies in the middle of the mouth", CLOSE),
     Take("Pushed back into the crotch of the blades", BEHIND, push=(0.0, 0.0, 0.035)),
@@ -123,17 +128,23 @@ TAKES = (
         push=(0.0, 0.035, 0.02),
     ),
 )
-"""The cases, each on its own cane, filmed in this order but for one rule:
-those that push come after those that do not. A push carries the open blades
-further than a planned cut does, through a neighbouring cane still standing,
-and that cane's own take would find it cut already -- so the takes that push
-go on every second cane along the cordon, after the takes on the canes
-between. Those go on the canes between nearest the robot, the first take on
-the nearest, which the arm reaches past no other: the take of several cuts
-is first. The vine's canes no take has, a cane between leaning away from the
-robot among them, are cut last, filmed `REST`: the arm reaches such a cane
-between the two either side of it, and can drape one over itself to ride
-into the mouths that follow."""
+"""The cases, filmed in this order but for one rule: those that push come
+after those that do not. Each has a cane of its own but the take of two
+canes, which cuts the top off a cane that a later take cuts again.
+
+A push carries the open blades further than a planned cut does, through a
+neighbouring cane still standing, and that cane's own take would find it cut
+already -- so the takes that push go on every second cane along the cordon,
+after the takes on the canes between. Those go on the canes between nearest
+the robot, the first on the nearest, which the arm reaches past no other: the
+take of several cuts. The take of two canes comes first of all, at the top of
+the cane next to that nearest one along the cordon: on the vine filmed, that
+top stands a few centimetres behind the nearest cane's along the approach, and
+the mouth coming in on it gathers the nearest cane's top into its crotch. The
+vine's canes no take has, a cane between leaning away from the robot among
+them, are cut last, filmed `REST`: the arm reaches such a cane between the two
+either side of it, and can drape one over itself to ride into the mouths that
+follow."""
 
 ROW, VINE = 1, 4
 """The row pruned, and which of its vines in driving order: away from the
@@ -148,9 +159,13 @@ OPENING = Shot(
 """Down the alley behind the robot as it drives up to the vine."""
 
 REST = Shot(eye=(-1.5, -1.6, 2.2), look=(0.0, 0.0, 1.1), lens=28.0)
-"""The vine, from over the robot: while the arm swings out to a take's cane,
-brushing through the canes on its way, and while the canes no take has are
-cut."""
+"""The vine, from over the robot, while the canes no take has are cut."""
+
+SWING = Shot(eye=(-2.6, -0.9, 0.3), look=(0.0, -0.3, 0.0))
+"""From the alley behind the robot, level with the cut the arm swings out to
+at the start of a take, and wide: the whole arm as it reaches the cane, its
+elbow riding high over a low cut. A take's own camera can stand where the arm
+passes on its way."""
 
 CLOSING = Shot(
     eye=(-0.5, 2.0, 3.5), look=(0.8, -0.6, 0.7), caption="The vine pruned, its neighbours not yet"
@@ -179,12 +194,15 @@ def schedule(row: list[Cut], mouth: np.ndarray, side: np.ndarray) -> list[tuple[
     cordon, `mouth` where the shear starts out from, and `side` the
     horizontal direction from the robot to the row.
 
-    The takes that do not push go on the canes between nearest the robot, in
-    their order, the first on the nearest of all; then the takes that push on
-    every second cane, nearest neighbour first; then, nearest neighbour first
-    again, every cane no take has. See `TAKES`.
+    The take of two canes goes first, on the cane next to the nearest cane
+    between along the cordon, which is cut again later. Then the takes that do
+    not push go on the canes between nearest the robot, in their order, the
+    first on the nearest of all; then the takes that push on every second
+    cane, nearest neighbour first; then, nearest neighbour first again, every
+    cane no take has. See `TAKES`.
     """
-    still = [take for take in TAKES if not any(take.push)]
+    gathering = [take for take in TAKES if take.canes > 1]
+    still = [take for take in TAKES if not any(take.push) and take not in gathering]
     pushing = [take for take in TAKES if any(take.push)]
     between, spaced = row[1::2], row[0::2]
     if len(between) < len(still) or len(spaced) < len(pushing):
@@ -199,6 +217,13 @@ def schedule(row: list[Cut], mouth: np.ndarray, side: np.ndarray) -> list[tuple[
     rest = nearest_first(
         toward[len(still) :] + spaced[len(pushing) :], order[-1][0].pose[:3, 3] if order else mouth
     )
+    if gathering:
+        at = next(i for i, cut in enumerate(row) if cut is toward[0])
+        beside = min(
+            (row[i] for i in (at - 1, at + 1) if 0 <= i < len(row)),
+            key=lambda cut: np.linalg.norm(cut.pose[:3, 3] - toward[0].pose[:3, 3]),
+        )
+        order = [(beside, take) for take in gathering] + order
     return order + [(cut, None) for cut in rest]
 
 
@@ -361,8 +386,9 @@ def main():
             sim, robot, machine, driver, stops, to_row, shears, planner=planner, render=False
         )
         # Frames due, counted a fraction a physics step: an eighth, at the
-        # simulation's own speed.
-        due, cut, done, entering = 0.0, None, None, False
+        # simulation's own speed. `canes` is how many the cut under way has
+        # cut in its stroke so far.
+        due, cut, done, entering, canes = 0.0, None, None, False, 0
         made: collections.Counter[Take | None] = collections.Counter()
         try:
             for step, pruning in enumerate(run):
@@ -373,16 +399,20 @@ def main():
                     # A cut is over once the next one starts: checked then, as
                     # a cut lower down the cane would take its buds too.
                     if cut is not None:
+                        take = takes.get(id(cut))
                         cutting = not attached(cut.removed, shears, stage)
-                        made[takes.get(id(cut))] += cutting
+                        made[take] += cutting and (take is None or canes >= take.canes)
                         print(
                             f"[INFO]: {'made' if cutting else 'missed'} the cut on"
-                            f" {cut.cane.prim} by {film.frames / FPS:.1f} s"
+                            f" {cut.cane.prim} by {film.frames / FPS:.1f} s; its stroke cut {canes}"
                         )
                     if working is None:
                         done = film.frames
                     entering = takes.get(id(working)) is not takes.get(id(cut))
-                    cut = working
+                    cut, canes = working, 0
+                if working is not None:
+                    # The stroke's count is cleared once the blade opens.
+                    canes = max(canes, pruning.stroke.cuts)
                 take = takes.get(id(cut))
                 doing = pruning.stage_name if isinstance(pruning, Pruning) else None
                 swinging = doing in ("move", "tip", "home")
@@ -392,10 +422,10 @@ def main():
                 due -= 1
                 if cut is None:
                     shot, point = CLOSING if done is not None else OPENING, vine.position
-                elif take is None or (entering and pruning.stage_name == "move"):
-                    # Swinging out to a take's cane, the arm can cross where
-                    # the close-up's camera stands.
+                elif take is None:
                     shot, point = REST, vine.position
+                elif entering and pruning.stage_name == "move":
+                    shot, point = SWING, cut.pose[:3, 3]
                 else:
                     middle = np.mean([each.pose[:3, 3] for each in cuts_of[take]], axis=0)
                     shot, point = take.shot, middle
@@ -411,10 +441,11 @@ def main():
         print(f"[INFO]: {film.frames} frames, {film.frames / FPS:.1f} s, written to {out}")
         # The canes bend chaotically, so no two runs are quite alike: a blade
         # can catch a neighbouring cane, which its own take then finds cut
-        # already. Such a run fails, and Kit exits with its status.
+        # already, or the cane a take of two needs can stay clear of the
+        # mouth. Such a run fails, and Kit exits with its status.
         short = [take.caption for take in TAKES if made[take] < len(take.kept)]
         if short:
-            raise RuntimeError(f"not every cut of these takes was made: {short}")
+            raise RuntimeError(f"these takes did not cut all they show: {short}")
 
 
 if __name__ == "__main__":

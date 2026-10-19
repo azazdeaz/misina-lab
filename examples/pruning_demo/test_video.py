@@ -13,8 +13,9 @@ from pruner import Cane, Cut  # noqa: E402
 
 def test_the_takes_go_on_the_canes_nearest_the_robot_and_the_others_are_cut_last():
     """Six canes on two arms of a cordon, the trunk between them, leaning
-    toward the robot or away: every cane is cut once, the takes first, in
-    `TAKES`' order but those that push after the others. Those that do not
+    toward the robot or away: the take of two canes first, on the cane next
+    to the nearest along the cordon, then every cane once, the takes first,
+    in `TAKES`' order but those that push after the others. Those that do not
     push go on the canes between nearest the robot, the first on the nearest,
     and those that push on every second cane; the canes no take has -- here
     the cane between leaning away -- come last."""
@@ -26,9 +27,12 @@ def test_the_takes_go_on_the_canes_nearest_the_robot_and_the_others_are_cut_last
 
     order = video.schedule(row, np.array([0.3, 0.0, 0.0]), np.array([0.0, 1.0, 0.0]))
 
+    [(beside, two)] = order[:1]
+    assert two.canes > 1 and beside is row[4], "first, beside the nearest cane"
+    order = order[1:]
     assert sorted(map(id, (cut for cut, _ in order))) == sorted(map(id, row)), "each cane once"
     pushing = [take for take in video.TAKES if any(take.push)]
-    still = [take for take in video.TAKES if not any(take.push)]
+    still = [take for take in video.TAKES if take not in pushing and take is not two]
     takes = len(still) + len(pushing)
     assert [take for _, take in order[:takes]] == still + pushing, "the takes first"
     assert [id(cut) for cut, _ in order[: len(still)]] == [id(row[3]), id(row[5])][: len(still)]
