@@ -171,24 +171,28 @@ class ColliderView:
 
 def _mesh(kind: int, scale: np.ndarray, source) -> tuple[np.ndarray, np.ndarray]:
     """The vertices and flat triangle indices drawing a shape that is no
-    primitive: a mesh's own, unscaled, and a height field or a plane meshed
-    the way Newton's viewer meshes them."""
+    primitive: a mesh's own, unscaled, and the top of a height field or a
+    plane, `SKIN` above it."""
     from newton import GeoType, Mesh
 
     if kind == GeoType.HFIELD:
-        # Rows run along y and columns along x; the mesh wants x first.
-        heights = source.min_z + source.data * (source.max_z - source.min_z)
-        source = Mesh.create_heightfield(
-            heightfield=heights.T,
-            extent_x=2 * source.hx,
-            extent_y=2 * source.hy,
-            ground_z=source.min_z,
-            compute_inertia=False,
+        # Rows run along y and columns along x. Each cell is split from its
+        # -x-y corner to its +x+y one, into the two triangles Newton collides;
+        # `Mesh.create_heightfield` splits along the other diagonal, which is
+        # off them wherever a cell is not flat.
+        nrow, ncol = source.nrow, source.ncol
+        x, y = np.meshgrid(
+            np.linspace(-source.hx, source.hx, ncol), np.linspace(-source.hy, source.hy, nrow)
         )
-    elif kind == GeoType.PLANE:
+        z = source.min_z + source.data * (source.max_z - source.min_z) + SKIN
+        cell = (np.arange(nrow - 1)[:, None] * ncol + np.arange(ncol - 1)).ravel()
+        corners = (cell, cell + 1, cell + ncol + 1, cell, cell + ncol + 1, cell + ncol)
+        return np.column_stack([x.ravel(), y.ravel(), z.ravel()]), np.stack(corners, 1).ravel()
+    if kind == GeoType.PLANE:
         # A zero extent is an infinite plane, drawn a kilometre across.
         width, length = (float(v) if v > 0 else 1000.0 for v in scale[:2])
-        source = Mesh.create_plane(width, length, compute_inertia=False)
+        plane = Mesh.create_plane(width, length, compute_inertia=False)
+        return np.asarray(plane.vertices) + (0.0, 0.0, SKIN), np.asarray(plane.indices).ravel()
     return np.asarray(source.vertices), np.asarray(source.indices).ravel()
 
 

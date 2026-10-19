@@ -235,3 +235,25 @@ def test_every_collider_is_drawn_where_newton_has_it(monkeypatch):
         for body in rig.bodies
         for capsule in stage.GetPrimAtPath(rig.model.body_label[body]).GetChildren()
     ), "every capsule shown"
+
+
+def test_a_height_field_is_drawn_as_the_triangles_newton_collides():
+    """Rows run along y and columns along x, and each cell is split along its
+    -x-y to +x+y diagonal. A saddle cell, low on that diagonal and high on the
+    other, is drawn low through its middle, where Newton has it."""
+    from newton import GeoType, Heightfield
+
+    # Two rows across y, three columns across x; the -x cell is the saddle.
+    heights = np.array([[0.0, 1.0, 2.0], [1.0, 0.0, 3.0]])
+    field = Heightfield(heights, nrow=2, ncol=3, hx=1.0, hy=0.5)
+    vertices, indices = colliders._mesh(GeoType.HFIELD, np.ones(3), field)
+
+    def at(x: float, y: float) -> int:
+        [index] = np.flatnonzero((vertices[:, 0] == x) & (vertices[:, 1] == y))
+        return int(index)
+
+    triangles = [set(triangle) for triangle in indices.reshape(-1, 3).tolist()]
+    low, high = {at(-1.0, -0.5), at(0.0, 0.5)}, {at(0.0, -0.5), at(-1.0, 0.5)}
+    assert sum(low <= triangle for triangle in triangles) == 2
+    assert not any(high <= triangle for triangle in triangles)
+    assert vertices[at(1.0, 0.5), 2] == pytest.approx(3.0 + colliders.SKIN)
