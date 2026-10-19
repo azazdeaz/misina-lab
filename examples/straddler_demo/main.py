@@ -9,11 +9,11 @@ The row the drive starts on, the physics backend and the viewer are
 command-line choices, e.g. `--row 3 --physics newton_mjwarp --viz newton`;
 `--help` lists the full launcher set.
 The default backend is Newton coupled with VBD, which bends the vineyard's
-flexible shoots -- see `vinerylab.isaaclab.physics`. Under any other the stray
+flexible shoots -- see `vinery_lab.isaaclab.physics`. Under any other the stray
 shoots are spawned static.
 
 `--trim` hangs a hedger under the frame, which cuts every stray shoot reaching
-across it -- see `straddler.Trimmer` and `vinerylab.isaaclab.cutting`.
+across it -- see `straddler.Trimmer` and `vinery_lab.isaaclab.cutting`.
 """
 
 import argparse
@@ -27,15 +27,15 @@ from isaaclab.app import add_launcher_args, launch_simulation
 from isaaclab.assets import Articulation
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
-from vinerylab.isaaclab import (
+from vinery_lab.isaaclab import (
     ParcelCfg,
     ShootCfg,
     TerrainCfg,
     VineyardCfg,
     make_physics_cfg_newton,
 )
-from vinerylab.isaaclab.newton_patches import fix_heightfield_offsets
-from vinerylab.isaaclab.physics import steps_rods
+from vinery_lab.isaaclab.newton_patches import fix_heightfield_offsets
+from vinery_lab.isaaclab.physics import steps_rods
 
 from driver import DECIMATION, SIM_DT, Driver
 from route import row_route
@@ -154,7 +154,7 @@ def trimming(
     import torch
     from isaaclab.utils.math import quat_apply
 
-    from vinerylab.isaaclab.cutting import Shears
+    from vinery_lab.isaaclab.cutting import Shears
 
     shears = Shears()
     # (bar, corner/along/up, xyz) in the base frame.

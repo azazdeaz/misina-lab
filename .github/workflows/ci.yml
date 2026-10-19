@@ -43,7 +43,7 @@ jobs:
       # its `_core`; unlike `extension-module` it still links libpython, so it
       # works outside a wheel build. `--all-targets` reaches the test modules
       # and the viewer binaries.
-      - run: cargo clippy --workspace --all-targets --features vinerylab/python,greenhouse-lab/python -- -D warnings
+      - run: cargo clippy --workspace --all-targets --features vinery-lab/python,greenhouse-lab/python -- -D warnings
 
       - run: cargo test --workspace
 

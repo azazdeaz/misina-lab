@@ -1,6 +1,6 @@
 # Changelog
 
-Every release of misina-lab, vinerylab and greenhouse-lab, newest first. The
+Every release of misina-lab, vinery-lab and greenhouse-lab, newest first. The
 three release together under one version, so a version is one section, and
 each entry starts with the package it is about. The layout follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Until 1.0.0, a minor
@@ -50,16 +50,16 @@ Scene document format 8. The first release.
   stepped by the VBD solver beside MJWarp for the robot, and spawned static on
   a backend that cannot step them. `misina_lab.isaaclab.cutting` cuts a rod
   anywhere along it while the simulation runs.
-- **vinerylab**: a parametric vineyard. Rows on rolling terrain with bumps a
+- **vinery-lab**: a parametric vineyard. Rows on rolling terrain with bumps a
   wheel feels, posts and trellis wires, vines trained up to the fruiting wire
   and along it, leaves as detailed meshes, a cover crop in the alleys and weeds
   under the vines. Every plant, shoot and leaf is its own prim, and the same
   seed gives the same vineyard. Level of detail and mesh variance trade
   fidelity for frame rate.
-- **vinerylab**: stray shoots as flexible rods a robot pushes aside and cuts,
+- **vinery-lab**: stray shoots as flexible rods a robot pushes aside and cuts,
   and a dormant mode: bare canes with a bud at every node, every one of them
   cuttable.
-- **vinerylab**: `VineyardCfg`, and the viewer as a
+- **vinery-lab**: `VineyardCfg`, and the viewer as a
   [web playground](https://azazdeaz.github.io/vinery-lab/).
 - **greenhouse-lab**: the rows of a high-wire tomato greenhouse. Floor, heating
   pipe rails, gutters with slabs and blocks, crop wires, and the crop on them:

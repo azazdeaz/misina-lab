@@ -1,7 +1,7 @@
 """The params classes as Python sees them: keyword construction, and a stub that
 matches the compiled module.
 
-Needs only the extensions, not Isaac Lab, so it runs everywhere `import vinerylab`
+Needs only the extensions, not Isaac Lab, so it runs everywhere `import vinery_lab`
 does; the greenhouse's stub is checked where `greenhouse_lab` is installed too.
 """
 
@@ -13,7 +13,7 @@ from types import ModuleType
 
 import pytest
 
-import vinerylab
+import vinery_lab
 
 
 def params_attrs(params_cls: type) -> set[str]:
@@ -45,10 +45,10 @@ def stub_classes(package: ModuleType) -> dict[str, set[str]]:
 
 
 def test_a_fragment_takes_its_fields_as_keywords():
-    pole = vinerylab.PoleParams(radius=0.05, sides=12)
+    pole = vinery_lab.PoleParams(radius=0.05, sides=12)
     assert pole.radius == pytest.approx(0.05)
     assert pole.sides == 12
-    assert vinerylab.PoleParams().sides == 8, "an omitted field keeps its default"
+    assert vinery_lab.PoleParams().sides == 8, "an omitted field keeps its default"
     assert "sides: 12" in repr(pole)
 
 
@@ -59,10 +59,10 @@ def test_a_fragment_takes_its_fields_as_keywords():
 )
 def test_a_wrong_keyword_or_type_is_a_type_error(kwargs):
     with pytest.raises(TypeError):
-        vinerylab.PoleParams(**kwargs)
+        vinery_lab.PoleParams(**kwargs)
 
 
-@pytest.mark.parametrize("name", ["vinerylab", "greenhouse_lab"])
+@pytest.mark.parametrize("name", ["vinery_lab", "greenhouse_lab"])
 def test_the_stub_declares_what_the_module_exports(name):
     """The generated stub and the compiled module agree, class for class and
     field for field. A stale extension, or a class the module forgot to
@@ -76,7 +76,7 @@ def test_the_stub_declares_what_the_module_exports(name):
 
 
 def test_the_aggregate_holds_live_fragments():
-    params = vinerylab.VineyardParams(pole=vinerylab.PoleParams(sides=5))
+    params = vinery_lab.VineyardParams(pole=vinery_lab.PoleParams(sides=5))
     assert params.pole.sides == 5
     params.terrain.detail = 8
     assert params.terrain.detail == 8, "an attribute edit lands on the shared object"

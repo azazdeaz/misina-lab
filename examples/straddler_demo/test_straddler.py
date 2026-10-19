@@ -14,7 +14,7 @@ import pytest
 
 straddler = pytest.importorskip("straddler", reason="Isaac Lab is not installed")
 
-from vinerylab.isaaclab import ParcelCfg, VineyardCfg  # noqa: E402
+from vinery_lab.isaaclab import ParcelCfg, VineyardCfg  # noqa: E402
 
 MACHINE = straddler.Straddler()
 

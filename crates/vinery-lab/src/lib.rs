@@ -1,4 +1,4 @@
-//! `vinerylab` — procedural vineyard scenes.
+//! `vinery-lab` — procedural vineyard scenes.
 //!
 //! The scene is built in Bevy as ordinary meshes and transforms, and comes out
 //! as a [`SceneDoc`](misina_lab::scene::doc::SceneDoc): a plain JSON
@@ -22,14 +22,14 @@ pub struct Vineyard;
 impl Generator for Vineyard {
     type Params = elements::VineyardParams;
     const NAME: &'static str = "Vineyard";
-    const PACKAGE: &'static str = "vinerylab";
+    const PACKAGE: &'static str = "vinery_lab";
 
     fn plugin(app: &mut App) {
         elements::plugin(app);
     }
 }
 
-/// The extension module is `vinerylab._core`, re-exported by the Python
+/// The extension module is `vinery_lab._core`, re-exported by the Python
 /// package's `__init__.py` — PyO3 takes the module's init symbol from this
 /// function's name, so it has to match the last component of `module-name`
 /// in `pyproject.toml`. What it holds is written by the `generator!` call in
@@ -48,7 +48,7 @@ mod tests {
     use misina_lab::codegen;
 
     /// The parameters page, relative to this crate; the Python targets are
-    /// under `python/vinerylab/` and need no naming.
+    /// under `python/vinery_lab/` and need no naming.
     const DOCS: &str = "../../docs/parameters.md";
 
     fn root() -> PathBuf {
@@ -93,7 +93,7 @@ mod tests {
     ///
     /// ```text
     /// cargo test dump_scene -- --ignored --nocapture
-    /// python -m vinerylab.usd scene.json scene.usda --force
+    /// python -m vinery_lab.usd scene.json scene.usda --force
     /// ```
     #[test]
     #[ignore]

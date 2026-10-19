@@ -1,6 +1,6 @@
 """Tests for the demo's alley route.
 
-`route` reaches Isaac Lab through `vinerylab.isaaclab`, so this is skipped
+`route` reaches Isaac Lab through `vinery_lab.isaaclab`, so this is skipped
 entirely where that isn't installed.
 """
 

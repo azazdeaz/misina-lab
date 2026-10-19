@@ -14,7 +14,7 @@ try:
 except ImportError:
     pytest.skip("Isaac Lab is not installed", allow_module_level=True)
 
-# Past the skip: `vinerylab` itself needs only usd-core, so numpy comes with
+# Past the skip: `vinery-lab` itself needs only usd-core, so numpy comes with
 # Isaac Lab or not at all.
 import numpy as np  # noqa: E402
 import warp as wp  # noqa: E402

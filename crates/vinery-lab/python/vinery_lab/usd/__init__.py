@@ -2,7 +2,7 @@
 
 The builder and the `Ground` reader are the core's; `python -m misina_lab.usd
 scene.json scene.usd` builds a document the viewer saved. Kept out of
-`vinerylab/__init__.py` so that plain `import vinerylab` keeps working without
+`vinery_lab/__init__.py` so that plain `import vinery_lab` keeps working without
 `usd-core` installed.
 """
 

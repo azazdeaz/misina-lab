@@ -371,7 +371,7 @@ def test_a_nodes_attributes_are_typed_custom_attributes_in_the_generators_namesp
 ):
     """Typed by the JSON value alone, and namespaced so a label cannot collide
     with a schema's attribute or another generator's."""
-    attribute = stage.GetPrimAtPath(LEAF).GetAttribute(f"vinerylab:{name}")
+    attribute = stage.GetPrimAtPath(LEAF).GetAttribute(f"vinery_lab:{name}")
     assert attribute.IsCustom()
     assert attribute.GetTypeName() == value_type
     assert attribute.Get() == value
@@ -383,8 +383,8 @@ def test_an_instances_attributes_stay_on_the_instance(stage: Usd.Stage):
     instance shares, and no reason for a second prototype."""
     leaf = stage.GetPrimAtPath(LEAF)
     assert leaf.IsInstance()
-    assert leaf.GetAttribute("vinerylab:flag").Get() is True
-    assert not stage.GetPrimAtPath(f"{PARTS}/Leaf_1").GetAttribute("vinerylab:flag")
+    assert leaf.GetAttribute("vinery_lab:flag").Get() is True
+    assert not stage.GetPrimAtPath(f"{PARTS}/Leaf_1").GetAttribute("vinery_lab:flag")
 
     twin = stage.DefinePrim(f"{LEAF}_Twin")
     twin.GetReferences().AddInternalReference(f"{PARTS}/Leaf_1")

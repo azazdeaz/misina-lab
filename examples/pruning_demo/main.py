@@ -10,7 +10,7 @@ instead: `teleop`.
 
 The row pruned, the physics backend and the viewer are command-line choices;
 `--help` lists the full launcher set. The default backend is Newton coupled
-with VBD, the one that bends and cuts a cane -- see `vinerylab.isaaclab
+with VBD, the one that bends and cuts a cane -- see `vinery_lab.isaaclab
 .physics`. Under any other the canes spawn static and nothing can be cut.
 """
 
@@ -28,7 +28,7 @@ from isaaclab.app import add_launcher_args, launch_simulation
 from isaaclab.assets import Articulation
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
-from vinerylab.isaaclab import (
+from vinery_lab.isaaclab import (
     CoverCfg,
     ParcelCfg,
     ShootCfg,
@@ -37,8 +37,8 @@ from vinerylab.isaaclab import (
     VineyardCfg,
     make_physics_cfg_newton,
 )
-from vinerylab.isaaclab.newton_patches import fix_heightfield_offsets
-from vinerylab.isaaclab.physics import steps_rods
+from vinery_lab.isaaclab.newton_patches import fix_heightfield_offsets
+from vinery_lab.isaaclab.physics import steps_rods
 
 from bumblebee import (
     ARM_HOME,
@@ -54,7 +54,7 @@ from pruner import Cut, Pruning, Tally, Vine, nearest_first, plan, read_vines
 from teleop import Teleop, show_keys
 
 if TYPE_CHECKING:
-    from vinerylab.isaaclab import Shears
+    from vinery_lab.isaaclab import Shears
 
 # The scene is generated on first use and cached on these parameters, so a
 # second run of this script spawns it without re-running the generator.
@@ -317,9 +317,9 @@ def start(
     it what the robot works: the driver for the alley beside `row`, the row's
     vines in driving order, the direction from the alley to the row, and the
     shears that cut its canes -- None under a backend that bends no cane."""
-    # Imported here: `vinerylab.usd` pulls in `pxr`, and Kit's own copy
+    # Imported here: `vinery_lab.usd` pulls in `pxr`, and Kit's own copy
     # only wins the import if nothing loaded the pip one first.
-    from vinerylab.usd import Ground
+    from vinery_lab.usd import Ground
 
     stage = sim_utils.get_current_stage()
     heading, to_row = row_geometry(stage, row)
@@ -330,7 +330,7 @@ def start(
 
     shears = None
     if steps_rods(sim.cfg.physics):
-        from vinerylab.isaaclab import Shears
+        from vinery_lab.isaaclab import Shears
 
         shears = Shears()
     else:

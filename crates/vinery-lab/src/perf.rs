@@ -2,7 +2,7 @@
 //! [`misina_lab::perf`] reports, placed between this generator's build
 //! systems, and the bench that reads them headlessly.
 //!
-//! `VINERYLAB_PERF=1 cargo run` turns on both halves — see `main.rs`. The
+//! `VINERY_LAB_PERF=1 cargo run` turns on both halves — see `main.rs`. The
 //! bench runs the same schedule with the asset storage present, so the
 //! geometry really gets built, and reports the same breakdown without a
 //! window:

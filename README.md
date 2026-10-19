@@ -47,7 +47,7 @@ Open-source parametric vineyard generator for developing and testing vineyard ro
 ## Install
 
 ```bash
-pip install vinerylab
+pip install vinery-lab
 ```
 
 Wheels are built for Linux x86_64 and Python 3.12 and later; anywhere else
@@ -113,7 +113,7 @@ uv run main.py
 
  - The generator is built on [misina-lab](crates/misina-lab/README.md), the framework
  under it, which holds everything that is not about vines.
- - The vineyard can be composed with a [`VineyardCfg`](crates/vinerylab/python/vinerylab/isaaclab/vineyard_cfg.py) object,
+ - The vineyard can be composed with a [`VineyardCfg`](crates/vinery-lab/python/vinery_lab/isaaclab/vineyard_cfg.py) object,
  which is a standard Isaac Lab `FileCfg` config class. See `VINEYARD_CFG` in the [quadruped demo](examples/isaaclab_demo/main.py).
  - Every parameter, with its default and range, is listed in [docs/parameters.md](docs/parameters.md).
  - The options are many, so prefer to use the parameter editor GUI and copy the configuration snippet to your script.
@@ -129,7 +129,7 @@ uv run main.py
  - Paste it into your Isaac Lab environment config and spawn it:
 
 ```python
-from vinerylab.isaaclab import VineyardCfg, ParcelCfg, SceneCfg, VineCfg
+from vinery_lab.isaaclab import VineyardCfg, ParcelCfg, SceneCfg, VineCfg
 
 VINEYARD_CFG = VineyardCfg(
     scene=SceneCfg(seed=42),

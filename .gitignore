@@ -2,7 +2,7 @@
 # `uv sync` writes one; the root package is a library, so it is not pinned.
 /uv.lock
 /.venv
-/crates/vinerylab/python/vinerylab/*.so
+/crates/vinery-lab/python/vinery_lab/*.so
 /crates/greenhouse-lab/python/greenhouse_lab/*.so
 __pycache__/
 

@@ -20,6 +20,6 @@ def load(path: str) -> dict[str, Any]:
 def test_versions_follow_the_workspace() -> None:
     version = load("Cargo.toml")["workspace"]["package"]["version"]
     assert load("python/misina-lab/pyproject.toml")["project"]["version"] == version
-    for generator in ("crates/vinerylab", "crates/greenhouse-lab"):
+    for generator in ("crates/vinery-lab", "crates/greenhouse-lab"):
         dependencies = load(f"{generator}/pyproject.toml")["project"]["dependencies"]
         assert f"misina-lab=={version}" in dependencies, generator

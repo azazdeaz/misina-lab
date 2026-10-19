@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 VINE = VineyardCfg.PLANT
 """The prim name every vine takes, its index appended -- `PART` in
-`crates/vinerylab/src/elements/vine.rs`. A vine's canes and its wood collide
+`crates/vinery-lab/src/elements/vine.rs`. A vine's canes and its wood collide
 as one group; see `rods.tune_rods`."""
 
 VINE_GROUPS = PLANT_GROUPS

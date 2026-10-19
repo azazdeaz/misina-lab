@@ -5,18 +5,18 @@
 #
 #   docs/video/record.sh [tour.json] [out.mp4]
 #
-# Defaults to tour.json beside this script and target/video/vinerylab.mp4.
+# Defaults to tour.json beside this script and target/video/vinery-lab.mp4.
 # Needs cargo, ffmpeg and a display: the window opens on the desktop, at the
 # storyboard's size, and ignores the pointer while it records.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 tour=$(realpath "${1:-$here/tour.json}")
-out=$(realpath -m "${2:-$here/../../target/video/vinerylab.mp4}")
+out=$(realpath -m "${2:-$here/../../target/video/vinery-lab.mp4}")
 mkdir -p "$(dirname "$out")"
 raw=$(mktemp --suffix .mp4)
 trap 'rm -f "$raw"' EXIT
 
 cd "$here/../.."
-VINERYLAB_TOUR=$tour VINERYLAB_RECORD=$raw cargo run --release --quiet --bin vinerylab
+VINERY_LAB_TOUR=$tour VINERY_LAB_RECORD=$raw cargo run --release --quiet --bin vinery-lab
 # The recorder's encode is quick and fragmented; this one is the upload's.
 "$here/encode.sh" "$raw" "$out"

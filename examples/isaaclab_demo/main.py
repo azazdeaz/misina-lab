@@ -6,7 +6,7 @@ and the walking from `driver`.
 The physics backend and the viewer are command-line choices, e.g.
 `--physics newton_mjwarp --viz newton`; `--help` lists the full launcher set.
 The default backend is Newton coupled with VBD, which bends the vineyard's
-flexible shoots -- see `vinerylab.isaaclab.physics`. Under any other the stray
+flexible shoots -- see `vinery_lab.isaaclab.physics`. Under any other the stray
 shoots are spawned static.
 """
 
@@ -19,14 +19,14 @@ from isaaclab.app import add_launcher_args, launch_simulation
 from isaaclab.assets import Articulation
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
-from vinerylab.isaaclab import (
+from vinery_lab.isaaclab import (
     ParcelCfg,
     ShootCfg,
     TerrainCfg,
     VineyardCfg,
     make_physics_cfg_newton,
 )
-from vinerylab.isaaclab.newton_patches import fix_heightfield_offsets
+from vinery_lab.isaaclab.newton_patches import fix_heightfield_offsets
 
 from driver import DECIMATION, SIM_DT, Driver
 from route import alley_route

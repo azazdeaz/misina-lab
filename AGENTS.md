@@ -4,7 +4,7 @@ Parametric vineyard generator for robotics simulation, mainly Isaac Lab. A
 Bevy app builds the scene as ordinary meshes and transforms, exports it as a
 plain JSON scene document, and Python turns that into a USD stage. The same
 crate ships as an interactive viewer and as a Python extension module,
-`vinerylab`. A second generator on the same framework, `greenhouse-lab`,
+`vinery_lab`. A second generator on the same framework, `greenhouse-lab`,
 builds the rows of a tomato greenhouse.
 
 [README.md](README.md) is the user-facing side: features, the Isaac Lab
@@ -17,7 +17,7 @@ repo itself.
 cargo run --release                                          # viewer / parameter editor
 cargo run --release -p greenhouse-lab                        # the greenhouse's
 cargo fmt --all
-cargo clippy --workspace --all-targets --features vinerylab/python,greenhouse-lab/python -- -D warnings
+cargo clippy --workspace --all-targets --features vinery-lab/python,greenhouse-lab/python -- -D warnings
 cargo test --workspace
 uv run ruff check . && uv run ruff format --check .
 uv run mypy
@@ -34,7 +34,7 @@ that need it skip themselves; run those from a demo venv — see
 ### Rust
 
 Three crates in one Cargo workspace: `crates/misina-lab` is the framework —
-everything that knows nothing about vines — and `crates/vinerylab` and
+everything that knows nothing about vines — and `crates/vinery-lab` and
 `crates/greenhouse-lab` are the generators built on it. The seam is
 `misina_lab::Generator`: one marker type per generator, which every framework
 surface is keyed on. The framework has a map of its own,
@@ -46,11 +46,11 @@ vineyard, and then the greenhouse.
 
 | Path | What it is |
 | --- | --- |
-| [vinerylab/src/lib.rs](crates/vinerylab/src/lib.rs) | crate root: the `Vineyard` generator and the `_core` Python module |
-| [vinerylab/src/main.rs](crates/vinerylab/src/main.rs) | the `vinerylab` binary: the viewer plus the layout gizmos and the per-layer timing |
-| [vinerylab/src/elements/](crates/vinerylab/src/elements/) | one module per vineyard thing; `mod.rs` holds the pipeline contract, the ground and layout wiring, and the `generator!` call |
-| [vinerylab/src/elements/util/](crates/vinerylab/src/elements/util/) | the named colours and responses, layout solver, planting walk — everything under `elements/` that is not an element |
-| [vinerylab/src/perf.rs](crates/vinerylab/src/perf.rs) | the per-layer marks and the bench |
+| [vinery-lab/src/lib.rs](crates/vinery-lab/src/lib.rs) | crate root: the `Vineyard` generator and the `_core` Python module |
+| [vinery-lab/src/main.rs](crates/vinery-lab/src/main.rs) | the `vinery-lab` binary: the viewer plus the layout gizmos and the per-layer timing |
+| [vinery-lab/src/elements/](crates/vinery-lab/src/elements/) | one module per vineyard thing; `mod.rs` holds the pipeline contract, the ground and layout wiring, and the `generator!` call |
+| [vinery-lab/src/elements/util/](crates/vinery-lab/src/elements/util/) | the named colours and responses, layout solver, planting walk — everything under `elements/` that is not an element |
+| [vinery-lab/src/perf.rs](crates/vinery-lab/src/perf.rs) | the per-layer marks and the bench |
 | [greenhouse-lab/src/lib.rs](crates/greenhouse-lab/src/lib.rs) | crate root: the `Greenhouse` generator and its `_core` Python module |
 | [greenhouse-lab/src/elements/](crates/greenhouse-lab/src/elements/) | the layout, the floor, one module per fixture and one per layer of the crop; `mod.rs` holds the stage sets and the `generator!` call |
 
@@ -58,20 +58,20 @@ vineyard, and then the greenhouse.
 
 Three packages in one uv workspace, mirroring the crates: `python/misina-lab`
 is the framework's Python side, pure Python over `usd-core` and mapped in the
-framework's `AGENTS.md`; `crates/vinerylab/python/vinerylab` is the
+framework's `AGENTS.md`; `crates/vinery-lab/python/vinery_lab` is the
 vineyard's, a maturin package holding the compiled `_core` and the generated
 cfg classes; `crates/greenhouse-lab/python/greenhouse_lab` is the
 greenhouse's, laid out the same way.
 
 | Path | What it is |
 | --- | --- |
-| [vinerylab/isaaclab/vineyard_cfg.py](crates/vinerylab/python/vinerylab/isaaclab/vineyard_cfg.py) | `@configclass` fragments mirroring the Rust params (generated), and `VineyardCfg` over them |
-| [vinerylab/isaaclab/physics.py](crates/vinerylab/python/vinerylab/isaaclab/physics.py) | the vineyard's names and numbers over the framework's `rods`: which prim a vine is, the demos' substeps |
-| [vinerylab/isaaclab/vineyard.py](crates/vinerylab/python/vinerylab/isaaclab/vineyard.py) | the spawner under the vineyard's names, for the demos |
-| [vinerylab/isaaclab/newton_patches.py](crates/vinerylab/python/vinerylab/isaaclab/newton_patches.py) | workarounds for the pinned Newton, applied by the demos; not imported by the package |
-| [vinerylab/_core.pyi](crates/vinerylab/python/vinerylab/_core.pyi) | typed signatures for the compiled extension (generated) |
+| [vinery_lab/isaaclab/vineyard_cfg.py](crates/vinery-lab/python/vinery_lab/isaaclab/vineyard_cfg.py) | `@configclass` fragments mirroring the Rust params (generated), and `VineyardCfg` over them |
+| [vinery_lab/isaaclab/physics.py](crates/vinery-lab/python/vinery_lab/isaaclab/physics.py) | the vineyard's names and numbers over the framework's `rods`: which prim a vine is, the demos' substeps |
+| [vinery_lab/isaaclab/vineyard.py](crates/vinery-lab/python/vinery_lab/isaaclab/vineyard.py) | the spawner under the vineyard's names, for the demos |
+| [vinery_lab/isaaclab/newton_patches.py](crates/vinery-lab/python/vinery_lab/isaaclab/newton_patches.py) | workarounds for the pinned Newton, applied by the demos; not imported by the package |
+| [vinery_lab/_core.pyi](crates/vinery-lab/python/vinery_lab/_core.pyi) | typed signatures for the compiled extension (generated) |
 
-Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinerylab`,
+Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinery_lab`,
 `import greenhouse_lab` and `import misina_lab` work without it.
 
 ### Everything else
@@ -82,7 +82,7 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinerylab`,
 | [examples/isaaclab_demo/](examples/isaaclab_demo/) | a quadruped walking the alleys; its own uv project |
 | [examples/straddler_demo/](examples/straddler_demo/) | a straddling robot driving every row, `--trim` to hedge it; its own uv project |
 | [examples/pruning_demo/](examples/pruning_demo/) | a Bumblebee-like arm pruning a dormant row to two-bud spurs, and `record.sh`, which films it; its own uv project |
-| [assets/leaves/](crates/vinerylab/assets/leaves/) | traced leaf outlines, compiled in with `include_str!` |
+| [assets/leaves/](crates/vinery-lab/assets/leaves/) | traced leaf outlines, compiled in with `include_str!` |
 | [web/index.html](web/index.html) | host page for the wasm playground |
 | [docs/video/](docs/video/) | the README video: `record.sh` and the storyboard it plays, `encode.sh`, which both videos are encoded with, and `publish.sh`, which uploads either and points its README at it |
 
@@ -106,7 +106,7 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinerylab`,
   it. [editing-parameters.md](crates/misina-lab/docs/editing-parameters.md)
   is the how-to.
 - **Generated files are not hand-edited.** `cargo test` fails while
-  `_core.pyi`, `isaaclab/vineyard_cfg.py` (both under `crates/vinerylab/python/vinerylab/`) or
+  `_core.pyi`, `isaaclab/vineyard_cfg.py` (both under `crates/vinery-lab/python/vinery_lab/`) or
   `docs/parameters.md` are stale; `cargo test regen_params -- --ignored`
   rewrites them. The greenhouse's are the same files under
   `crates/greenhouse-lab/`, rewritten with `-p greenhouse-lab`.
@@ -115,7 +115,7 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinerylab`,
   changelog's header says when it bumps the scene document format or changes
   a cfg class.
 - **The `python` feature is off by default**, so a plain `cargo clippy` never
-  sees the PyO3 side. Pass `--features vinerylab/python,greenhouse-lab/python`,
+  sees the PyO3 side. Pass `--features vinery-lab/python,greenhouse-lab/python`,
   as CI does.
   `extension-module` is a different feature: it unlinks libpython, so it is
   for maturin builds only and breaks `cargo run` and `cargo test`.

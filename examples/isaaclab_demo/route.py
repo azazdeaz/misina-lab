@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from vinerylab.isaaclab import VineyardCfg
-from vinerylab.isaaclab.vineyard import resolve_usd_path
+from vinery_lab.isaaclab import VineyardCfg
+from vinery_lab.isaaclab.vineyard import resolve_usd_path
 
 STRIDE = 1.0  # m between waypoints along an alley
 RUNOUT = 3.0  # m an alley carries on past its rows' end posts, into the headland
@@ -42,7 +42,7 @@ def alley_route(cfg: VineyardCfg) -> np.ndarray:
     # copy of `pxr` only wins the import if nothing loaded the pip one first.
     from pxr import Usd, UsdGeom
 
-    from vinerylab.usd import ROOT, Ground
+    from vinery_lab.usd import ROOT, Ground
 
     stage = Usd.Stage.Open(resolve_usd_path(cfg))
     ground = Ground(stage)

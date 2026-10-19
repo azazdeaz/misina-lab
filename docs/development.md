@@ -7,11 +7,11 @@ PEP 517 build backend.
 
 The repo is a uv workspace of three packages. `python/misina-lab` is plain
 Python: the USD builder and the Isaac Lab spawner every generator shares.
-`crates/vinerylab` is a maturin project in its *mixed* layout: hand-written
-Python lives in `crates/vinerylab/python/vinerylab/`, and the compiled Rust
+`crates/vinery-lab` is a maturin project in its *mixed* layout: hand-written
+Python lives in `crates/vinery-lab/python/vinery_lab/`, and the compiled Rust
 extension is built into it as the `_core` submodule, which `__init__.py`
 re-exports. Only the `isaaclab` subpackages import Isaac Lab, so plain
-`import vinerylab` stays usable without it. `crates/greenhouse-lab` is laid
+`import vinery_lab` stays usable without it. `crates/greenhouse-lab` is laid
 out the same way, as `greenhouse_lab`; `--reinstall-package greenhouse-lab`
 rebuilds it.
 
@@ -22,7 +22,7 @@ How the binding surface is shaped — why fragments are `Py<T>`, what
 ### Iterating on the wrapper itself
 
     uv sync                                  # at the repo root; builds the extension
-    uv sync --reinstall-package vinerylab    # after a Rust change
+    uv sync --reinstall-package vinery-lab    # after a Rust change
 
 ### Consuming it as a dependency (e.g. examples/isaaclab_demo)
 
@@ -32,7 +32,7 @@ How the binding surface is shaped — why fragments are `Py<T>`, what
 
 If you only changed Rust source (not pyproject.toml), force a rebuild:
 
-    uv sync --reinstall-package vinerylab
+    uv sync --reinstall-package vinery-lab
 
 ### Build the distributions
 
@@ -48,7 +48,7 @@ of building Bevy once per generator.
 `.github/workflows/ci.yml` runs all of these on every push and pull request:
 
     cargo fmt --all -- --check
-    cargo clippy --workspace --all-targets --features vinerylab/python,greenhouse-lab/python -- -D warnings
+    cargo clippy --workspace --all-targets --features vinery-lab/python,greenhouse-lab/python -- -D warnings
     cargo test --workspace
     ruff check . && ruff format --check .
     mypy
@@ -82,7 +82,7 @@ in front of a commit.
 
 ## Releasing
 
-`misina-lab`, `vinerylab` and `greenhouse-lab` release to PyPI together, under
+`misina-lab`, `vinery-lab` and `greenhouse-lab` release to PyPI together, under
 the workspace version, `[workspace.package]` in the root `Cargo.toml`. The
 generators' wheels take it from their crates. Two other places spell it out:
 `version` in `python/misina-lab/pyproject.toml`, and the `misina-lab==` pin in
@@ -130,20 +130,20 @@ Press `S` to write the scene out as `scene.json`, and build it with:
 
     python -m misina_lab.usd scene.json scene.usd
 
-`VINERYLAB_PERF=1 cargo run` logs a per-layer breakdown on any frame that
-rebuilt something — the marks are `crates/vinerylab/src/perf.rs`, the report
+`VINERY_LAB_PERF=1 cargo run` logs a per-layer breakdown on any frame that
+rebuilt something — the marks are `crates/vinery-lab/src/perf.rs`, the report
 `crates/misina-lab/src/perf.rs`.
 
-`VINERYLAB_RECORD=demo.mp4 cargo run --release` records the window for the
+`VINERY_LAB_RECORD=demo.mp4 cargo run --release` records the window for the
 whole run. One captured frame becomes one video frame, so the stall a rebuild
 causes costs a frame rather than the freeze a screen recorder would keep —
 which is the point of it, for demo videos. Frames are piped to `ffmpeg`, which
-has to be on `PATH`; the extension picks the container. `VINERYLAB_RECORD_FPS`
+has to be on `PATH`; the extension picks the container. `VINERY_LAB_RECORD_FPS`
 sets the rate, 30 by default, and is also how fast the window is sampled. See
 `crates/misina-lab/src/record.rs`.
 
-`VINERYLAB_TOUR=docs/video/tour.json cargo run --release` plays a storyboard
-of camera moves and panel edits, then quits. With `VINERYLAB_RECORD` set too
+`VINERY_LAB_TOUR=docs/video/tour.json cargo run --release` plays a storyboard
+of camera moves and panel edits, then quits. With `VINERY_LAB_RECORD` set too
 its clock advances one video frame per rendered frame, so the recording is
 smooth however long the rebuilds take; `docs/video/record.sh` records the
 README video that way. See `crates/misina-lab/src/tour.rs`, and
@@ -164,17 +164,17 @@ The same viewer, compiled to wasm and published by the manually triggered
 
     rustup target add wasm32-unknown-unknown
     cargo install wasm-bindgen-cli --version 0.2.127   # must match Cargo.lock
-    cargo build --profile wasm-release --target wasm32-unknown-unknown --bin vinerylab
+    cargo build --profile wasm-release --target wasm32-unknown-unknown --bin vinery-lab
     mkdir -p site && cp web/index.html site/
     wasm-bindgen --target web --no-typescript --out-dir site \
-      target/wasm32-unknown-unknown/wasm-release/vinerylab.wasm
+      target/wasm32-unknown-unknown/wasm-release/vinery-lab.wasm
     python3 -m http.server -d site 8000
 
 Serve it rather than opening the file: the module is fetched, and `localhost`
 is a secure context, which both WebGPU and the clipboard require.
 
 Two things differ from the native build. The renderer is WebGPU — the `webgpu`
-feature in `crates/vinerylab/Cargo.toml` is target-gated, and WebGL2 would lose compute shaders,
+feature in `crates/vinery-lab/Cargo.toml` is target-gated, and WebGL2 would lose compute shaders,
 which this many meshes need. And the `S` key is compiled out, since there is no
 filesystem to write `scene.json` to; **Copy Isaac Lab cfg** is the whole export
 path on the web.
