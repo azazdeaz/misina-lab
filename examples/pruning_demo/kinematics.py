@@ -65,18 +65,6 @@ def rpy_of(matrix: np.ndarray) -> tuple[float, float, float]:
     )
 
 
-def along(direction) -> np.ndarray:
-    """The rotation taking +Z onto `direction`, for a shape built about its
-    own Z axis that has to lie along a link."""
-    z = np.array([0.0, 0.0, 1.0])
-    d = np.asarray(direction, dtype=float)
-    d = d / np.linalg.norm(d)
-    axis = np.cross(z, d)
-    if np.linalg.norm(axis) < 1e-9:
-        return np.eye(3) if d[2] > 0 else rotation((1, 0, 0), math.pi)
-    return rotation(axis / np.linalg.norm(axis), math.acos(float(np.clip(z @ d, -1.0, 1.0))))
-
-
 def frames(chain: tuple[Joint, ...], q) -> np.ndarray:
     """Each joint's child frame at joint positions `q`, in the base frame.
     Shape is (n, 4, 4)."""

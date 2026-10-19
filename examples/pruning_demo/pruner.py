@@ -51,11 +51,11 @@ CLOSE_IN = 0.01
 """How far the mouth moves per control tick on the straight approach, in
 meters: half a metre a second, at the controller's rate."""
 
-JOINT_STEP = 0.05
+JOINT_STEP = 0.04
 """How far a joint moves per control tick on a planned move, in radians or
 meters: a move takes as many ticks as its longest joint swing needs. It is
-the arm's top speed, 2.5 rad/s at the controller's rate, under a UR5's
-3.1."""
+the arm's top speed, 2 rad/s at the controller's rate, under the 2.1 a
+UR10's base and shoulder are rated for."""
 
 TIP = 1.2
 """How far the blades are turned down, in radians, to tip out a piece cut

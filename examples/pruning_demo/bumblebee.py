@@ -2,11 +2,12 @@
 
 Bumblebee (Silwal et al., 2021) is a Clearpath Warthog driving the alley with
 a UR5 on a 1.35 m linear slide across its deck and a bypass shear in the arm's
-hand. This is that layout from primitives: a skid-steer chassis on four
-wheels, a rail along the deck's row-side edge carrying a carriage on a
-prismatic joint, a six-joint arm with the UR5's link offsets standing on the
-carriage, and a shear head whose one blade swings on a revolute joint. Every
-dimension is a field of `Bumblebee`; `urdf` writes the robot from them and
+hand. This is that layout with a UR10 in the UR5's place: a skid-steer
+chassis on four wheels and a rail along its body's row-side edge carrying a
+carriage on a prismatic joint, from primitives; the stock UR10 Isaac Sim
+ships, standing on the carriage; and a shear head whose one blade swings on a
+revolute joint. Every dimension of the chassis is a field of `Bumblebee`;
+`urdf` writes the robot from them and the UR10's own URDF, and
 `Bumblebee.chain` is the same joints for `kinematics`, so the arm the solver
 poses is the arm the simulation steps.
 
@@ -26,11 +27,14 @@ deck, and the arm reaches out that way.
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import hashlib
+import importlib.util
 import math
 import pathlib
 import tempfile
+import xml.etree.ElementTree as ElementTree
 
 import numpy as np
 
@@ -38,7 +42,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
 
-from kinematics import Joint, along, rpy_of, transform
+from kinematics import Joint, rpy_of, transform
 
 CORNERS = ("front_left", "front_right", "rear_left", "rear_right")
 WHEEL_JOINTS = [f"wheel_{corner}" for corner in CORNERS]
@@ -62,29 +66,54 @@ HAND = "wrist_3_link"
 BLADE = "blade_link"
 """The body the moving blade is, swinging on `SHEAR_JOINT`."""
 
-# -- The UR5, as its URDF places each joint in the frame of the link before
-# it. Zero everywhere is the arm lying out along +X.
-UR5 = (
-    Joint("shoulder_pan_joint", (0.0, 0.0, 0.089159)),
-    Joint("shoulder_lift_joint", (0.0, 0.13585, 0.0), (0.0, math.pi / 2, 0.0), (0.0, 1.0, 0.0)),
-    Joint("elbow_joint", (0.0, -0.1197, 0.425), axis=(0.0, 1.0, 0.0), limits=(-math.pi, math.pi)),
-    Joint(
-        "wrist_1_joint", (0.0, 0.0, 0.39225), (0.0, math.pi / 2, 0.0), (0.0, 1.0, 0.0), effort=28.0
-    ),
-    Joint("wrist_2_joint", (0.0, 0.093, 0.0), effort=28.0),
-    Joint("wrist_3_joint", (0.0, 0.0, 0.09465), axis=(0.0, 1.0, 0.0), effort=28.0),
+UR10_URDF = (
+    pathlib.Path(importlib.util.find_spec("isaacsim").submodule_search_locations[0])
+    / "exts/isaacsim.asset.importer.urdf/data/urdf/robots/ur10/urdf/ur10.urdf"
 )
-ARM_JOINTS = [joint.name for joint in UR5]
+"""The UR10 that Isaac Sim's URDF importer ships: Universal Robots' meshes,
+cylinder colliders, and the ur_description joint table. Zero everywhere is
+the arm lying out along +X."""
+
+_UR10 = ElementTree.parse(UR10_URDF).getroot()
+_MOVING = [joint for joint in _UR10.findall("joint") if joint.get("type") == "revolute"]
+_LINKS = [_MOVING[0].find("parent").get("link"), *(j.find("child").get("link") for j in _MOVING)]
+"""The UR10's links from its base out, one per joint in `_MOVING` past the
+base: its `ee_link`, a frame with no part of the arm in it, is left off."""
+
+
+def _numbers(text: str) -> tuple[float, ...]:
+    return tuple(float(v) for v in text.split())
+
+
+def _read(joint: ElementTree.Element) -> Joint:
+    """A URDF joint element as `kinematics` reads it."""
+    origin, limit = joint.find("origin"), joint.find("limit")
+    return Joint(
+        joint.get("name"),
+        _numbers(origin.get("xyz")),
+        _numbers(origin.get("rpy")),
+        _numbers(joint.find("axis").get("xyz")),
+        limits=(float(limit.get("lower")), float(limit.get("upper"))),
+        effort=float(limit.get("effort")),
+        velocity=float(limit.get("velocity")),
+    )
+
+
+# The elbow is held to half a turn either way, as ur_description's limited
+# arm has it, so the solver never folds the forearm through the upper arm.
+UR10 = tuple(
+    dataclasses.replace(joint, limits=(-math.pi, math.pi)) if joint.name == "elbow_joint" else joint
+    for joint in map(_read, _MOVING)
+)
+ARM_JOINTS = [joint.name for joint in UR10]
 SHOULDER_JOINTS, WRIST_JOINTS = ARM_JOINTS[:3], ARM_JOINTS[3:]
 
-TOOL = transform((0.0, 0.0823, 0.0), (-math.pi / 2, 0.0, 0.0))
+TOOL = transform(
+    _numbers(_UR10.find("joint[@name='ee_fixed_joint']/origin").get("xyz")),
+    (-math.pi / 2, 0.0, 0.0),
+)
 """The flange frame off the last wrist: +Z out of the hand, where a tool
 bolts on."""
-
-# Link radii and masses, in the order of `UR5`, with the base's first. The
-# masses are the UR5's own; the radii draw links of about its girth.
-ARM_RADII = (0.06, 0.06, 0.055, 0.045, 0.04, 0.04, 0.035)
-ARM_MASSES = (4.0, 3.7, 8.393, 2.275, 1.219, 1.219, 0.1879)
 
 ARM_HOME = (0.0, -2.0, 2.2, -1.8, -1.57, 0.0)
 """Joint positions the arm is folded to for driving: elbow up, hand over the
@@ -92,21 +121,22 @@ deck. The slide and the shear start at zero, mid-rail and closed."""
 
 # -- Actuation. Position drives on the arm, the slide and the shear, and
 # velocity drives on the wheels.
-SHOULDER_STIFFNESS = 2000.0
-SHOULDER_DAMPING = 200.0
+SHOULDER_STIFFNESS = 6000.0
+SHOULDER_DAMPING = 600.0
 """The three joints carrying the arm's weight: stiff, so that weight sags
-the mouth a couple of centimetres off its pose at most. The mouth is a few
-centimetres across, and a cane outside it when the blades meet is not cut."""
+the mouth a couple of centimetres off its pose at most -- the shoulder holds
+up to 90 N m of it with the arm reaching out. The mouth is a few centimetres
+across, and a cane outside it when the blades meet is not cut."""
 WRIST_STIFFNESS = 100.0
 WRIST_DAMPING = 10.0
-"""The three wrist joints, which carry little: gains a twentieth of the
-shoulder's, so a wrist's 28 N m is not saturated by a few tenths of a radian
+"""The three wrist joints, which carry little: gains a sixtieth of the
+shoulder's, so a wrist's 56 N m is not saturated by a few tenths of a radian
 of error."""
 ARMATURE = {"shoulder": 0.1, "wrist": 0.02, "shear": 0.002}
 """Reflected rotor inertia added to each joint, in kg m^2, the way a geared
-servo carries its motor's. Without it a wrist -- a link of a few hundred
-grams on a 28 N m drive -- turns a tenth of a radian in one physics substep
-and chatters about its target instead of settling on it."""
+servo carries its motor's. Without it the last wrist -- a link of two
+hundred grams on a 56 N m drive -- turns a tenth of a radian in one physics
+substep and chatters about its target instead of settling on it."""
 SLIDE_STIFFNESS = 4000.0
 SLIDE_DAMPING = 400.0
 SHEAR_STIFFNESS = 20.0
@@ -123,10 +153,8 @@ MATERIALS = {
     "chassis": "0.93 0.72 0.10 1",
     "tire": "0.05 0.05 0.05 1",
     "steel": "0.55 0.57 0.60 1",
-    "arm": "0.32 0.38 0.48 1",
 }
-"""Colours, as URDF rgba: a yellow chassis, rubber, galvanized steel and the
-blue-grey of an industrial arm."""
+"""Colours, as URDF rgba: a yellow chassis, rubber and galvanized steel."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -208,9 +236,9 @@ class Shear:
 class Bumblebee:
     """One machine, in meters and kilograms.
 
-    The chassis is a Clearpath Warthog at its published size; the slide and
-    the arm's offsets are the paper's and the UR5's. Everything is free to
-    move with `dataclasses.replace`.
+    The chassis is a Clearpath Warthog at its published size and the slide
+    the paper's; the arm is the stock UR10 whatever the machine. Everything
+    here is free to move with `dataclasses.replace`.
     """
 
     length: float = 1.52
@@ -275,15 +303,16 @@ class Bumblebee:
     @property
     def rail(self) -> tuple[float, float, float]:
         """Where the rail's top surface is, at mid-stroke, in the base frame:
-        on the deck's +Y edge."""
-        return (0.0, self.width / 2 - 0.1, self.deck + self.rail_height)
+        along the chassis body's +Y edge, the rail's 8 cm flush with its
+        side, so the posts under it stand on the body."""
+        return (0.0, self.width / 2 - self.wheel_width - 0.04, self.deck + self.rail_height)
 
     @property
     def chain(self) -> tuple[Joint, ...]:
         """The slide and the arm, as `kinematics` reads them: seven joints from
         the base frame to the last wrist, `TOOL` still to come."""
         x, y, z = self.rail
-        first = dataclasses.replace(UR5[0], xyz=(0.0, 0.0, self.carriage + UR5[0].xyz[2]))
+        first = dataclasses.replace(UR10[0], xyz=(0.0, 0.0, self.carriage + UR10[0].xyz[2]))
         slide = Joint(
             SLIDE_JOINT,
             (x, y, z),
@@ -293,7 +322,7 @@ class Bumblebee:
             effort=1000.0,
             velocity=0.5,
         )
-        return (slide, first, *UR5[1:])
+        return (slide, first, *UR10[1:])
 
     def blade(self, angle: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """The moving blade's plate with the shear at `angle`, in the `HAND`
@@ -349,14 +378,14 @@ def bumblebee_cfg(machine: Bumblebee, prim_path: str) -> ArticulationCfg:
                 joint_names_expr=SHOULDER_JOINTS,
                 stiffness=SHOULDER_STIFFNESS,
                 damping=SHOULDER_DAMPING,
-                effort_limit=UR5[0].effort,
+                effort_limit={joint.name: joint.effort for joint in UR10[:3]},
                 armature=ARMATURE["shoulder"],
             ),
             "wrist": ImplicitActuatorCfg(
                 joint_names_expr=WRIST_JOINTS,
                 stiffness=WRIST_STIFFNESS,
                 damping=WRIST_DAMPING,
-                effort_limit=UR5[-1].effort,
+                effort_limit=UR10[-1].effort,
                 armature=ARMATURE["wrist"],
             ),
             "slide": ImplicitActuatorCfg(
@@ -488,44 +517,29 @@ def _wheel(m: Bumblebee, joint: str, corner: str, x: float, y: float) -> str:
 
 
 def _arm(m: Bumblebee, joints: list[Joint]) -> str:
-    """The arm on the carriage: a fixed base link, then one link per joint,
-    each drawn as a cylinder reaching to where the next joint starts."""
+    """The UR10 on the carriage: its links as `UR10_URDF` draws and weighs
+    them, its base renamed `ARM_BASE` and its meshes found by absolute path,
+    joined by `joints`, the chain's."""
     parts = [
         f"""
   <joint name="arm_mount" type="fixed">
     <parent link="carriage"/>
     <child link="{ARM_BASE}"/>
     <origin xyz="0 0 {m.carriage}"/>
-  </joint>
-  <link name="{ARM_BASE}">
-{_link_shape(joints[0].xyz[2] - m.carriage, 0.0, ARM_RADII[0], "arm")}
-    <inertial>
-      <mass value="{ARM_MASSES[0]}"/>
-{_cylinder_inertia(ARM_MASSES[0], ARM_RADII[0], 0.1)}
-    </inertial>
-  </link>"""
+  </joint>"""
     ]
+    names = [ARM_BASE, *_LINKS[1:]]
+    for stock, name in zip(_LINKS, names, strict=True):
+        link = copy.deepcopy(_UR10.find(f"link[@name='{stock}']"))
+        link.set("name", name)
+        for mesh in link.iter("mesh"):
+            mesh.set("filename", str((UR10_URDF.parent / mesh.get("filename")).resolve()))
+        parts.append("  " + ElementTree.tostring(link, encoding="unicode").rstrip())
     # The arm's first joint is `m.chain`'s, offset by the carriage the mount
     # above already climbs.
     first = dataclasses.replace(joints[0], xyz=(0.0, 0.0, joints[0].xyz[2] - m.carriage))
-    reaches = [*(joint.xyz for joint in joints[1:]), tuple(TOOL[:3, 3])]
-    parent = ARM_BASE
-    for joint, reach, radius, mass in zip(
-        [first, *joints[1:]], reaches, ARM_RADII[1:], ARM_MASSES[1:], strict=True
-    ):
-        child = joint.name.replace("_joint", "_link")
-        length = float(np.linalg.norm(reach))
+    for joint, parent, child in zip([first, *joints[1:]], names[:-1], names[1:], strict=True):
         parts.append(_joint(joint, parent, child))
-        parts.append(f"""
-  <link name="{child}">
-{_link_shape(length, radius, radius, "arm", reach)}
-    <inertial>
-      <origin xyz="{reach[0] / 2} {reach[1] / 2} {reach[2] / 2}"/>
-      <mass value="{mass}"/>
-{_cylinder_inertia(mass, radius, max(length, 0.05))}
-    </inertial>
-  </link>""")
-        parent = child
     return "\n".join(parts)
 
 
@@ -594,19 +608,6 @@ def _joint(joint: Joint, parent: str, child: str) -> str:
     <axis xyz="{" ".join(str(v) for v in joint.axis)}"/>
     <limit lower="{joint.limits[0]}" upper="{joint.limits[1]}" effort="{joint.effort}" velocity="{joint.velocity}"/>
   </joint>"""
-
-
-def _link_shape(
-    length: float, base: float, radius: float, material: str, reach=(0.0, 0.0, 1.0)
-) -> str:
-    """A link's cylinder: from its origin along `reach`, a stub where the next
-    joint sits on top of this one."""
-    reach = np.asarray(reach, dtype=float)
-    length = max(length, 0.06)
-    direction = reach if np.linalg.norm(reach) > 1e-9 else np.array([0.0, 0.0, 1.0])
-    axis = along(direction)
-    centre = tuple(axis @ np.array([0.0, 0.0, length / 2]))
-    return _cylinder(centre, rpy_of(axis), max(base, radius), length, material)
 
 
 def _box(xyz, size, material: str, tags: tuple[str, ...] = ("visual", "collision")) -> str:

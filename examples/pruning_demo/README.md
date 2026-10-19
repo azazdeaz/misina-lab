@@ -28,7 +28,7 @@ nothing to do.
 
 
 
-https://github.com/user-attachments/assets/65e43466-2f64-4a45-a0ad-c5bb07786d7a
+https://github.com/user-attachments/assets/734cec5f-e143-4997-ae75-63b5e4646b8b
 
 
 
@@ -87,8 +87,9 @@ re-recording it and changing what it shows.
 ## What it shows
 
 The layout is [Bumblebee's](https://arxiv.org/abs/2112.00291) (Silwal et al.,
-2021): a Clearpath Warthog in the alley, a UR5 on a 1.35 m slide across its
-deck, and a bypass shear in its hand. So is the pipeline, minus the cameras:
+2021): a Clearpath Warthog in the alley, an arm on a 1.35 m slide across its
+deck -- a UR10 here, where the paper has a UR5 -- and a bypass shear in its
+hand. So is the pipeline, minus the cameras:
 
 1. **The rule.** Keep two buds on every cane and cut midway between the second
    and the third. The scene is generated dormant, so every cane is a rod a
@@ -125,7 +126,7 @@ cuts reachable, cuts made, cuts made at the right place -- the kept bud still
 on the vine and the next one gone -- and seconds per vine. Bumblebee reports
 87% of cuts made at the right place, 213 s per vine and 68% of canes reachable
 from one side. On the default scene the demo reaches all 72 cuts of its row
-and makes every one at the right place, at 18 s of simulated time per vine.
+and makes every one at the right place, at 20 s of simulated time per vine.
 Because the simulation knows the true plant, the score keeps "chose the right
 cut" apart from "made the cut", which a field trial cannot.
 
@@ -190,17 +191,15 @@ closes on through it.
 ## The robot
 
 `Bumblebee` in `bumblebee.py` is a dataclass of dimensions, and the URDF is
-generated from it. The chassis is a Warthog at its published size and mass, the
-slide is the paper's, and the arm has the UR5's link offsets, so its reach is a
-UR5's. `Bumblebee.chain` is the same joints for `kinematics.py`, which poses
-the arm with damped least squares; the solver and the simulation come from one
-description.
-
-The geometry is primitives, so there is no manufacturer's description in here
-to be bound by. Isaac Sim's asset library carries a UR5e and a Ridgeback with a
-UR5 on it, but no Warthog, and an arm asset cannot be bolted onto a generated
-base without merging two articulations into one; a generated arm was the
-shorter road.
+generated from it. The chassis is a Warthog at its published size and mass and
+the slide is the paper's, both drawn from primitives. The arm is the stock UR10
+that Isaac Sim's URDF importer ships, Universal Robots' meshes and all: its
+links are copied into the generated URDF as they are, standing on the
+carriage, so the arm is part of the robot's one articulation and rides the
+slide. Isaac Lab's `UR10_CFG` would spawn it as an articulation of its own,
+fixed to the world. `Bumblebee.chain` reads the same joints out of that URDF
+for `kinematics.py`, which poses the arm with damped least squares; the solver
+and the simulation come from one description.
 
 ## Layout
 
@@ -208,7 +207,7 @@ shorter road.
 | --- | --- |
 | `main.py` | the vineyard, the sky, the robot, the simulation loop |
 | `bumblebee.py` | the robot: its dimensions, the URDF built from them, the actuators, the shear |
-| `kinematics.py` | forward and inverse kinematics of the generated chain |
+| `kinematics.py` | forward and inverse kinematics of the arm on its slide |
 | `pruner.py` | the ground truth off the stage, the rule, the cut sequence, the score |
 | `driver.py` | driving the skid steer from stop to stop |
 | `teleop.py` | the keyboard driving the base, jogging the mouth and working the shear |

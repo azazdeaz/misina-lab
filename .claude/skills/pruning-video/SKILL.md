@@ -131,10 +131,11 @@ first.
 
 **Keep the camera clear.** The close-ups stand on the robot's side of the
 row, a little above the mouth and behind it, on the side the moving blade
-opens to. The arm comes in from the other side, so the forearm stays out of
-the picture whichever way the solver bends the wrist. A camera on the far
-side of the row has the robot's chassis behind the cane: good contrast for a
-wide shot, a busy background for a close-up.
+opens to. The arm mostly comes in from the other side, but a push against the
+fixed blade brings the UR10's wrist round over `CLOSE`'s spot, so that take is
+filmed from `BEHIND`. A close-up gone black is the camera inside the arm. A
+camera on the far side of the row has the robot's chassis behind the cane:
+good contrast for a wide shot, a busy background for a close-up.
 
 **Finding a shot** is quicker from one paused moment than from a recording:
 in a scratch copy of `video.py`'s `main`, stop iterating `run_simulator` at
