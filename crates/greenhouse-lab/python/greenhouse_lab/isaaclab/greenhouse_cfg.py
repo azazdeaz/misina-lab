@@ -181,6 +181,13 @@ class LeafCfg:
     leaves are clustered and this is how many representatives the clustering may
     keep.
     """
+    detail: float = 1.0
+    """How finely a leaf is meshed, as a multiplier: at 1 a leaflet's margin keeps
+    within 0.6 mm of its curves, about a pixel to a camera half a meter away, and a
+    full-grown leaf comes to about 1500 triangles; about 500 at 0.1 and 4500 at 4.
+    Coarser drops the finest teeth first, then rounds off the sinuses, and keeps the
+    lobes.
+    """
 
 
 @configclass

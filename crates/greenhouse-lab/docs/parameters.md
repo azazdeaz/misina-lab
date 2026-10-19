@@ -105,6 +105,7 @@ A leaf is a petiole and a rachis with a terminal leaflet, three or four pairs of
 | `length` | float | `0.45` | 0.3 to 0.6 | Length of a full-grown leaf, from the stem to the tip of its terminal leaflet, in meters. Each leaf draws a little more or less. |
 | `droop` | float | `90.0` | 0 to 150 | How far an old leaf's rachis bends down from where it leaves the stem to its tip, in degrees. The young leaves near the head droop less. |
 | `variations` | int | `32` | 1 to 128 | How many distinct leaf meshes the scene may hold. A budget, not a count: the leaves are clustered and this is how many representatives the clustering may keep. |
+| `detail` | float | `1.0` | 0.1 to 4 | How finely a leaf is meshed, as a multiplier: at 1 a leaflet's margin keeps within 0.6 mm of its curves, about a pixel to a camera half a meter away, and a full-grown leaf comes to about 1500 triangles; about 500 at 0.1 and 4500 at 4. Coarser drops the finest teeth first, then rounds off the sinuses, and keeps the lobes. |
 
 ## Trusses
 

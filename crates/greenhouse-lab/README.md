@@ -29,7 +29,7 @@ stem lying beside it.
 | Gutter | a steel channel, hanging or standing, with stone wool slabs and a block at every plant | height, mount, plant spacing |
 | Wires | two crop wires over every gutter, for the V the stems are trained in | height, spread |
 | Stems | two to a plant, each grown up its twine to a hook on its wire and lowered along the gutter from then on; a leaf at every node and a truss in every third internode, the leaves stripped below the top few with a stub left at each | the crop's age, harvest height, trusses on a stem, leaves kept, extra stems, trusses turned to the path |
-| Leaves | a compound leaf: a petiole and a rachis with a terminal leaflet, three or four pairs of laterals and small leaflets between them, each leaflet outlined from its veins; small and upright at the head, drooping further down. Visual only, with no collider | length, droop |
+| Leaves | a compound leaf: a petiole and a rachis with a terminal leaflet, three or four pairs of laterals and small leaflets between them, each leaflet outlined from its veins; small and upright at the head, drooping further down. Visual only, with no collider | length, droop, mesh detail |
 | Trusses | peduncle, rachis and a pedicel to every fruit, with a `Cut` and a `Bend` frame | fruit count and diameter, branched, peduncle length, diameter and angle, missing fruit |
 | Fruit | every fruit its own prim, with a calyx of five or six sepals and a stage from fruit set to red: fruit grow toward the head, a stem ripens from the bottom up, a truss from its base to its tip, and a fruit from its blossom end | ripe trusses on a stem, the spread in a truss, the ripe colour, height to width, ribbing, jointed pedicels |
 

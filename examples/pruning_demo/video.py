@@ -104,13 +104,15 @@ class Take:
 
 # The close-ups are taken from the robot's side, a little over the mouth and
 # behind it, on the side its moving blade opens to: clear of the arm, which
-# comes in from the other side. From there the fixed blade is on the right.
+# mostly comes in from the other side. From there the fixed blade is on the
+# right.
 CLOSE = Shot(eye=(-0.35, -0.3, 0.25), lens=35.0, f_stop=48.0)
 """The cuts' close-up."""
 
 BEHIND = Shot(eye=(-0.45, -0.2, 0.25), lens=35.0, f_stop=48.0)
 """Further round behind the mouth: a cane pushed toward the row bends across
-the picture."""
+the picture, and a mouth pushed against the fixed blade is seen past the
+wrist, which that push brings round over where `CLOSE` stands."""
 
 ACROSS = Shot(eye=(-0.7, 1.4, 0.6))
 """From across the row and back far enough for every point a take cuts the
@@ -121,7 +123,7 @@ TAKES = (
     Take("One cane, cut three times from the top down", ACROSS, kept=(6, 4, 2)),
     Take("A planned cut: the cane lies in the middle of the mouth", CLOSE),
     Take("Pushed back into the crotch of the blades", BEHIND, push=(0.0, 0.0, 0.035)),
-    Take("Pushed aside by the fixed blade before the cut", CLOSE, push=(0.0, -0.035, 0.0)),
+    Take("Pushed aside by the fixed blade before the cut", BEHIND, push=(0.0, -0.035, 0.0)),
     Take(
         "Pushed aside by the moving blade, which carries it across",
         CLOSE,
