@@ -139,13 +139,18 @@ const TAPER: f32 = 0.3;
 const CURVE: f32 = 1.8;
 
 /// Steps along the midline, vertices round the rachis, and rings per meter
-/// along it.
+/// along it at a `detail` of 1.
 const STATIONS: usize = 24;
 const SIDES: usize = 5;
-const DETAIL: f64 = 40.0;
+const RINGS: f64 = 40.0;
 
-/// Floor on what Python may set, so that every leaf still builds.
+/// How far a leaflet's margin may stray from its curves at a `detail` of 1,
+/// in meters: about a pixel to a camera half a meter away.
+pub const TOLERANCE: f64 = 0.0006;
+
+/// Floors on what Python may set, so that every leaf still builds.
 const MIN_LENGTH: f32 = 0.02;
+const MIN_DETAIL: f32 = 0.01;
 
 /// A tomato leaf's green, matte from its hairs.
 const COLOR: u32 = 0x41672A;
@@ -252,6 +257,13 @@ pub struct LeafParams {
     /// the clustering may keep.
     #[reflect(@Slider { min: 1.0, max: 128.0, step: 1.0 }, @Label("Leaf variations"))]
     pub variations: u32,
+    /// How finely a leaf is meshed, as a multiplier: at 1 a leaflet's margin
+    /// keeps within 0.6 mm of its curves, about a pixel to a camera half a
+    /// meter away, and a full-grown leaf comes to about 1500 triangles; about
+    /// 500 at 0.1 and 4500 at 4. Coarser drops the finest teeth first, then
+    /// rounds off the sinuses, and keeps the lobes.
+    #[reflect(@Slider { min: 0.1, max: 4.0, step: 0.05 }, @Label("Leaf detail"))]
+    pub detail: f32,
 }
 
 impl Default for LeafParams {
@@ -260,6 +272,7 @@ impl Default for LeafParams {
             length: 0.45,
             droop: 90.0,
             variations: 32,
+            detail: 1.0,
         }
     }
 }
@@ -273,7 +286,7 @@ pub fn plugin(app: &mut App) {
             reauthor.run_if(resource_changed::<LeafParams>),
             build.run_if(
                 configs_changed::<LeafConfig>
-                    // `variations` reaches no config.
+                    // `variations` and `detail` reach no config.
                     .or_eager(resource_changed::<LeafParams>),
             ),
         )
@@ -351,15 +364,23 @@ fn off_midrib(at: Vec3, along: Vec3, side: f32, spread: f32, hang: f32) -> Trans
 }
 
 /// A leaflet of `shape`, `length` long, folded along its midrib and drooping
-/// `droop` radians by its tip, in its own frame.
-fn sheet(shape: &Leaflet, length: f32, droop: f64, rng: &mut Rng) -> Result<MeshData> {
-    let outline = shape.outline(length as f64, rng);
+/// `droop` radians by its tip, in its own frame. Its margin keeps within
+/// `tolerance` of its curves.
+fn sheet(
+    shape: &Leaflet,
+    length: f32,
+    droop: f64,
+    tolerance: f64,
+    rng: &mut Rng,
+) -> Result<MeshData> {
+    let outline = shape.outline(length as f64, tolerance, rng);
     let points = outline.points.len() as f64;
     let keel = FOLD / (shape.width * length as f64);
     Ok(bent(outline, droop, keel, points)?)
 }
 
-/// One leaf in its own frame: the rachis, and every leaflet hung off it.
+/// One leaf in its own frame: the rachis, and every leaflet hung off it,
+/// meshed as finely as [`LeafParams::detail`] says.
 ///
 /// Draws, off the leaf's leaflet stream: the petiole's length; per pair how
 /// far apart its laterals sit, and per lateral, left before right, its size,
@@ -367,7 +388,9 @@ fn sheet(shape: &Leaflet, length: f32, droop: f64, rng: &mut Rng) -> Result<Mesh
 /// outline and theirs; then per gap, left before right, whether it holds an
 /// intercalary leaflet and, if so, its place, size, spread, hang, droop and
 /// outline; and last the terminal leaflet's outline.
-fn leaf_mesh(config: &LeafConfig) -> Result<MeshData> {
+fn leaf_mesh(config: &LeafConfig, detail: f32) -> Result<MeshData> {
+    let detail = detail.max(MIN_DETAIL) as f64;
+    let tolerance = TOLERANCE / detail;
     let mut rng = Rng::new(config.seed ^ LEAFLET_STREAM);
     let midline = Midline::new(config);
     let length = config.length;
@@ -400,7 +423,7 @@ fn leaf_mesh(config: &LeafConfig) -> Result<MeshData> {
             };
             let s = petiole + gap * j as f32 + side * apart;
             let frame = off_midrib(midline.at(s), midline.along(s), side, spread, hang);
-            sheets.push(sheet(&shape, size, droop, &mut rng)?.transformed(&frame));
+            sheets.push(sheet(&shape, size, droop, tolerance, &mut rng)?.transformed(&frame));
             if secondary {
                 for side in [1.0, -1.0] {
                     let on = off_midrib(
@@ -410,7 +433,13 @@ fn leaf_mesh(config: &LeafConfig) -> Result<MeshData> {
                         SECONDARY_SPREAD.to_radians(),
                         hang,
                     );
-                    let leaflet = sheet(&Leaflet::INTERCALARY, SECONDARY * size, droop, &mut rng)?;
+                    let leaflet = sheet(
+                        &Leaflet::INTERCALARY,
+                        SECONDARY * size,
+                        droop,
+                        tolerance,
+                        &mut rng,
+                    )?;
                     sheets.push(leaflet.transformed(&(frame * on)));
                 }
             }
@@ -435,7 +464,8 @@ fn leaf_mesh(config: &LeafConfig) -> Result<MeshData> {
                 spread.to_radians(),
                 hang,
             );
-            sheets.push(sheet(&Leaflet::INTERCALARY, size, droop, &mut rng)?.transformed(&frame));
+            let leaflet = sheet(&Leaflet::INTERCALARY, size, droop, tolerance, &mut rng)?;
+            sheets.push(leaflet.transformed(&frame));
         }
     }
 
@@ -443,7 +473,8 @@ fn leaf_mesh(config: &LeafConfig) -> Result<MeshData> {
     let (along, tip) = (midline.along(top), midline.along(length));
     let droop = along.angle_between(tip) as f64;
     let frame = off_midrib(midline.at(top), along, 0.0, 0.0, 0.0);
-    sheets.push(sheet(&Leaflet::TERMINAL, length - top, droop, &mut rng)?.transformed(&frame));
+    let terminal = sheet(&Leaflet::TERMINAL, length - top, droop, tolerance, &mut rng)?;
+    sheets.push(terminal.transformed(&frame));
 
     // The rachis, from the stem's axis into the terminal leaflet's stalk.
     let reach = top + (length - top) * Leaflet::TERMINAL.stalk as f32;
@@ -460,7 +491,7 @@ fn leaf_mesh(config: &LeafConfig) -> Result<MeshData> {
         points,
         radii,
         SIDES,
-        DETAIL,
+        RINGS * detail,
         Bark::none(),
     ))?);
     Ok(merge_meshes(&sheets))
@@ -489,7 +520,9 @@ fn build(
         0.0,
         &LeafMetric,
     );
-    let meshes = par_map(&book.representatives, |_, config| leaf_mesh(config));
+    let meshes = par_map(&book.representatives, |_, config| {
+        leaf_mesh(config, params.detail)
+    });
     let mut geometry = Vec::with_capacity(meshes.len());
     for (index, mesh) in meshes.into_iter().enumerate() {
         let color = shade(
@@ -512,13 +545,17 @@ fn build(
 mod tests {
     use super::*;
 
-    /// Every leaf the defaults call for builds, hangs from the stem's axis,
-    /// reaches about its length and stays inside a triangle budget; and a
-    /// young leaf at the head is shorter, more upright and less drooping than
-    /// an old one, on average over the seeds.
+    /// Every leaf the defaults call for builds at the coarsest, the default
+    /// and the finest detail the panel offers, hangs from the stem's axis and
+    /// reaches about its length; it costs fewer triangles the coarser it is,
+    /// and stays inside a budget at the default; and a young leaf at the head
+    /// is shorter, more upright and less drooping than an old one, on average
+    /// over the seeds.
     #[test]
     fn a_leaf_hangs_from_its_node_and_settles_as_it_ages() {
         let params = LeafParams::default();
+        let details = [0.1, params.detail, 4.0];
+        let mut triangles = [0; 3];
         let (mut young, mut old) = ([0.0; 3], [0.0; 3]);
         for seed in 0..24 {
             for rank in [0, 4, 8, 20] {
@@ -530,28 +567,37 @@ mod tests {
                         sum[2] += config.droop;
                     }
                 }
-                let mesh = leaf_mesh(&config).unwrap();
-                let (near, far) = mesh
-                    .points
-                    .iter()
-                    .fold((f32::MAX, 0.0f32), |(near, far), p| {
-                        let d = Vec3::from(*p).length();
-                        (near.min(d), far.max(d))
-                    });
-                let at = format!("seed {seed}, rank {rank}");
-                assert!(
-                    near <= RADIUS * config.length + 1e-5,
-                    "{at}: {near} m off the axis"
-                );
-                assert!(
-                    (0.75..=1.0).contains(&(far / config.length)),
-                    "{at}: reaches {far} m of {}",
-                    config.length
-                );
-                let triangles = mesh.to_mesh().indices().unwrap().len() / 3;
-                assert!(triangles < 2500, "{at}: {triangles} triangles");
+                for (k, detail) in details.into_iter().enumerate() {
+                    let mesh = leaf_mesh(&config, detail).unwrap();
+                    let (near, far) =
+                        mesh.points
+                            .iter()
+                            .fold((f32::MAX, 0.0f32), |(near, far), p| {
+                                let d = Vec3::from(*p).length();
+                                (near.min(d), far.max(d))
+                            });
+                    let at = format!("seed {seed}, rank {rank}, detail {detail}");
+                    assert!(
+                        near <= RADIUS * config.length + 1e-5,
+                        "{at}: {near} m off the axis"
+                    );
+                    assert!(
+                        (0.75..=1.0).contains(&(far / config.length)),
+                        "{at}: reaches {far} m of {}",
+                        config.length
+                    );
+                    let count = mesh.to_mesh().indices().unwrap().len() / 3;
+                    if detail == params.detail {
+                        assert!(count < 2500, "{at}: {count} triangles");
+                    }
+                    triangles[k] += count;
+                }
             }
         }
+        assert!(
+            triangles[0] < triangles[1] && triangles[1] < triangles[2],
+            "triangles at {details:?}: {triangles:?}"
+        );
         assert!(
             (0..3).all(|i| young[i] < old[i]),
             "length, angle and droop: young {young:?}, old {old:?}"

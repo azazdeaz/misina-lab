@@ -229,6 +229,7 @@ mod tests {
             ("lowered", edited(|p| p.stem.lowered = 0.0)),
             ("leaves kept", edited(|p| p.stem.leaves_kept = 12)),
             ("leaf length", edited(|p| p.leaf.length = 0.5)),
+            ("leaf detail", edited(|p| p.leaf.detail = 0.5)),
             ("peduncle", edited(|p| p.truss.peduncle_length = 0.1)),
             ("ripeness", edited(|p| p.fruit.ripe_trusses = 2.5)),
             ("seed", edited(|p| p.scene.seed = 7)),

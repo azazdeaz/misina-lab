@@ -95,12 +95,6 @@ const TOOTH_SPACING: f64 = 5.0;
 const EDGE_POINTS: usize = 16;
 const SINUS_POINTS: usize = 8;
 
-/// How far the margin may stray from the curves it is sampled from, in
-/// meters: about a pixel to a camera half a meter away. The points it can do
-/// without are dropped, which keeps the lobes and the sinuses, costs the
-/// finest teeth, and leaves a small leaflet fewer points than a large one.
-const TOLERANCE: f64 = 0.0006;
-
 /// A leaflet's shape. Lengths are fractions of the leaflet's own length, from
 /// the petiolule's free end to the apex.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -170,15 +164,19 @@ impl Leaflet {
         jitter: 0.5,
     };
 
-    /// The outline, `length` long.
+    /// The outline, `length` long, its margin within `tolerance` of the
+    /// curves it is sampled from, both in meters. The points it can do
+    /// without are dropped: a coarser tolerance costs the finest teeth first,
+    /// then the sinuses' round bottoms, and a small leaflet keeps fewer points
+    /// than a large one.
     ///
-    /// Draws from `rng` the same amount whatever the jitter: side by side,
-    /// the -Y side first, and along a side first every vein's position, angle
-    /// and reach, then every lobe's tip half-angle and the depth of the sinus
-    /// after it.
-    pub fn outline(&self, length: f64, rng: &mut Rng) -> Outline {
+    /// Draws from `rng` the same amount whatever the jitter and the
+    /// tolerance: side by side, the -Y side first, and along a side first
+    /// every vein's position, angle and reach, then every lobe's tip
+    /// half-angle and the depth of the sinus after it.
+    pub fn outline(&self, length: f64, tolerance: f64, rng: &mut Rng) -> Outline {
         let half = STALK_WIDTH / 2.0;
-        let tolerance = TOLERANCE / length.max(1e-6);
+        let tolerance = tolerance / length.max(1e-6);
         let right = self.side(-1.0, tolerance, rng);
         let left = self.side(1.0, tolerance, rng);
         let ring = std::iter::once(DVec2::new(0.0, -half))
@@ -429,6 +427,7 @@ fn serrate(edge: &mut [DVec2], depth: f64, toward_end: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::elements::leaf::TOLERANCE;
     use misina_lab::geometry::outline::outline_mesh;
 
     const ALL: [(&str, Leaflet); 3] = [
@@ -449,7 +448,7 @@ mod tests {
                     ..shape
                 };
                 let length = if seed % 2 == 0 { 0.1 } else { 0.005 };
-                let outline = ragged.outline(length, &mut Rng::new(seed));
+                let outline = ragged.outline(length, TOLERANCE, &mut Rng::new(seed));
                 let reach = outline.points.iter().fold(0.0f64, |m, p| m.max(p.x));
                 assert!(
                     (reach - length).abs() < 1e-9,
