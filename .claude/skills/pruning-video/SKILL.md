@@ -7,11 +7,11 @@ description: Re-records the pruning demo's video in Isaac Sim with examples/prun
 
 The pruning demo's video is about a minute of the robot pruning one vine in
 Isaac Sim: down the alley as it drives up, then each case of the shear
-meeting a cane, captioned — one cane cut three times, a planned cut, the cane
-pushed back into the crotch of the blades, pushed aside by the fixed blade,
-pushed aside by the moving blade — then the vine's last cane cut in a wider
-shot, and the arm folding home as the robot drives on. It is one command
-away:
+meeting a cane, captioned — two canes cut in one stroke, one cane cut three
+times, a planned cut, the cane pushed back into the crotch of the blades,
+pushed aside by the fixed blade, pushed aside by the moving blade — then the
+vine's last cane cut in a wider shot, and the arm folding home as the robot
+drives on. It is one command away:
 
 ```bash
 examples/pruning_demo/record.sh
@@ -34,8 +34,8 @@ hides the trellis wires, which have no collider yet.
 2. Check the log and the video against the list below. The log has a
    `caption '<text>' at T s` line as each caption comes up, `T` seconds into
    the video — the opening's, each take's as the arm swings out to its cane,
-   the closing's — and a `made the cut on <cane> by T s` line, or `missed`,
-   as each cut ends.
+   the closing's — and a `made the cut on <cane> by T s; its stroke cut N`
+   line, or `missed`, as each cut ends, `N` the canes its stroke cut.
    `ffmpeg -ss T -i target/video/pruning.mp4 -frames:v 1 -update 1 frame.png`
    takes the frame at `T`. A video that fails one is not done: change the
    storyboard, never the video.
@@ -47,21 +47,26 @@ hides the trellis wires, which have no collider yet.
    `https://github.com/user-attachments/assets/…` line alone. Its header says
    what it needs; it posts, so run it once the video is right.
 
-`video.py` fails the run when a take's cut was not made, and `record.sh`
-records again, five times at most. The canes bend chaotically, and the GPU
-solvers are not bit-reproducible once the rendering load changes, so no two
-storyboards' runs are quite alike: now and then a blade catches a
-neighbouring cane, or a cane slips the mouth. About half the runs make every
-cut. A run that fails five times is not bad luck: read its logs.
+`video.py` fails the run when a take's cut was not made, or its stroke cut
+fewer canes than the take's `canes`, and `record.sh` records again, five
+times at most. The canes bend chaotically, and the GPU solvers are not
+bit-reproducible once the rendering load changes, so no two storyboards' runs
+are quite alike: now and then a blade catches a neighbouring cane, or a cane
+slips the mouth. About half the runs make every cut. A run that fails five
+times is not bad luck: read its logs.
 
 A video is right when:
 
 - every cut is made; the run fails otherwise.
+- the shear stays in the picture as the arm swings out to each take's
+  cane, the high cuts' too.
 - in each close-up the shear is in the middle of the picture and sharp,
   the cane in its mouth while the blade closes, and nothing — the arm, a
   post — crosses the mouth. Sample a take every fifth of a second:
   `ffmpeg -ss T -t 5 -i target/video/pruning.mp4 -vf "fps=5,scale=384:-2,tile=5x5" -frames:v 1 -update 1 take.png`
 - each cut piece is seen to fall.
+- in the take of two canes, the second rides into the mouth beside the first
+  before the blades close.
 - each caption sits under its own take and is legible at the README's
   width, about 830 px.
 - the file is under 10 MB, the most GitHub takes on a free plan.
@@ -74,17 +79,21 @@ The storyboard is the constants at the top of
 [video.py](../../../examples/pruning_demo/video.py); read their docstrings
 first.
 
-- **`TAKES`** are the cases, each on its own cane, filmed in their order but
-  that the takes with a `push` come last. They go on every second cane along
-  the cordon, after the takes on the canes between: a push carries the open
-  blades through a neighbouring cane still standing. The takes without one go
-  on the canes between nearest the robot, the first on the nearest, which
-  the arm reaches past no other — so the take of several cuts is first. The
-  vine's canes no take has are cut last, filmed from `REST`: among them the
-  cane between that leans away from the robot, which the arm reaches between
-  the canes either side of it, draping one over itself to ride into the
-  mouths that follow. `schedule` assigns the canes, and `test_video.py`
-  checks it. A take has a caption, a `Shot`, a `push` and `kept`.
+- **`TAKES`** are the cases, filmed in their order but that the takes with a
+  `push` come last. They go on every second cane along the cordon, after the
+  takes on the canes between: a push carries the open blades through a
+  neighbouring cane still standing. The takes without one go on the canes
+  between nearest the robot, the first on the nearest, which the arm reaches
+  past no other. The take of two canes comes before them all, at the top of
+  the cane next to that nearest one along the cordon, which a later take
+  cuts again: on the vine filmed, that top stands 6 cm behind the nearest
+  cane's along the approach, and the mouth coming in on it gathers the
+  nearer top into its crotch. The vine's canes no take has are cut last,
+  filmed from `REST`: among them the cane between that leans away from the
+  robot, which the arm reaches between the canes either side of it, draping
+  one over itself to ride into the mouths that follow. `schedule` assigns
+  the canes, and `test_video.py` checks it. A take has a caption, a `Shot`,
+  a `push`, `kept` and `canes`.
 - **`push`** is `Cut.push`: how far the mouth moves on from the cut point
   before the shear closes, in the cut's own frame — x along the pivot, y
   across the mouth, z along the blades. +z drives the cane into the crotch,
@@ -93,10 +102,15 @@ first.
   level with that centre, 5 cm out from the pivot, so a push toward it needs
   some +z as well, or the cane slips off the tip.
 - **`kept`** is the buds the cane keeps after each of the take's cuts, made
-  in that order: top down, so each cut has wood left below it.
+  in that order: top down, so each cut has wood left below it. -1 keeps all
+  but the top bud.
+- **`canes`** is how many canes each of the take's strokes cuts. A take of
+  two canes needs the second to lie across the mouth's way in: in front of
+  the cut along the approach, within the open mouth across it.
 - **A `Shot`** is where the camera stands and looks, relative to the point it
-  frames — the middle of a take's cut points, or the foot of the vine for
-  `OPENING`, `REST` and `CLOSING` — in meters along the alley the way the
+  frames — the middle of a take's cut points, the cut the arm swings out to
+  for `SWING`, or the foot of the vine for `OPENING`, `REST` and `CLOSING` —
+  in meters along the alley the way the
   robot drives, across it toward the row, and up; then a focal length, an
   f-number, and a caption for when no take's is up. Depth of field is strong
   for the number: f/48 already softens a close-up's background, and 0 turns
@@ -105,7 +119,8 @@ first.
 - **The camera** eases from one shot to the next over `EASE` seconds, and
   cuts instead when the move is longer than `CUT`, so it never flies through
   the robot or the row. Each swing out to a take's cane is filmed from
-  `REST`, as the arm can cross where a close-up's camera stands.
+  `SWING`, behind the robot and level with the cut, as the arm can cross
+  where a take's own camera stands.
 - **`PACE`** slows down the stages of a take's cut by `Pruning.stage_name`,
   and the arm's swings in every cut — out to the cane, tipping out a piece
   that fell into the mouth — and folding home; the frame rate stays `FPS`.

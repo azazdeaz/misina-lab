@@ -93,9 +93,49 @@ moves with the length, and the joint between them goes. Everything past the
 cut falls away as a chain of its own. Build one after the first reset and
 keep it; it tracks which rods are cut.
 
+## Moving a collider
+
+`Shears.colliders(body)` lists a body's collision shapes with their poses in
+the body's frame, and `Shears.place(shape, pose)` moves one of them in that
+frame while the simulation runs, with the same in-place write a cut makes.
+A tool that closes on a rod needs it. A rigid part that goes on closing
+squeezes the rod against whatever the rod lies on, and the solver answers by
+shoving the rod out sideways, so the part's collider has to stop at the rod
+while the part itself, as drawn, closes on through it.
+
+Build the part's collider as slices, one shape each, and it can stop slice
+by slice: the slices that reach a rod stand there, and the others go on
+with the part and keep colliding where it is drawn. Two rods at different
+places along the part each stop their own slices. Which slice stops, and
+at what pose, is the tool's own geometry, so that rule lives with the tool.
+
+## Seeing the colliders
+
+Kit draws a PhysX scene's colliders on request, from the physics schema on
+the stage. A Newton model's it knows nothing of, so `ColliderView` draws
+them: every collision shape of the running model as a translucent primitive
+of its shape and size, blue for the static scene, green for a rod and magenta
+for any other body.
+
+```python
+from misina_lab.isaaclab import ColliderView
+
+colliders = ColliderView()  # after the first reset, like Shears
+while simulation_app.is_running():
+    sim.step()
+    colliders.update()
+```
+
+A shape on a body is drawn under the body's prim, so it moves with the
+body as the body's own meshes do, at no cost per frame. What does cost is
+a shape changed in its body's frame -- a cut rod's two segments, a tool's
+slice standing at a rod -- and `update()` redraws exactly those, each time
+it is called.
+
 ## Where it lives
 
 - [`misina_lab/isaaclab/spawn.py`](../../../python/misina-lab/misina_lab/isaaclab/spawn.py): `GeneratedSceneCfg`, `spawn_generated`, `resolve_usd_path`, `to_params`, and the cache key
 - [`misina_lab/isaaclab/rods.py`](../../../python/misina-lab/misina_lab/isaaclab/rods.py): `make_physics_cfg_newton`, `tune_rods`, and the numbers
-- [`misina_lab/isaaclab/cutting.py`](../../../python/misina-lab/misina_lab/isaaclab/cutting.py): `Shears`
+- [`misina_lab/isaaclab/cutting.py`](../../../python/misina-lab/misina_lab/isaaclab/cutting.py): `Shears`, and `Shears.colliders` and `Shears.place` for a collider that moves
+- [`misina_lab/isaaclab/colliders.py`](../../../python/misina-lab/misina_lab/isaaclab/colliders.py): `ColliderView`
 - [`src/scene/mod.rs`](../src/scene/mod.rs): `cable`, what the Rust side authors

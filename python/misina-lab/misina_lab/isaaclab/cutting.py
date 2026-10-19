@@ -186,24 +186,27 @@ class Shears:
                 cuts += self.cut(int(self.bodies[i]), float(fraction))
         return cuts
 
-    def collider(self, body: int) -> tuple[int, np.ndarray]:
-        """Body `body`'s one collision shape: its model index, and its pose in
-        the body's frame as a position and (x, y, z, w) rotation in one array
-        of 7 -- what `place` moves it from."""
+    def colliders(self, body: int) -> tuple[np.ndarray, np.ndarray]:
+        """Body `body`'s collision shapes: their model indices, and each one's
+        pose in the body's frame as a position and (x, y, z, w) rotation in
+        one array of 7 -- what `place` moves it from. Shapes (N,) and (N, 7),
+        in model order. A part built of several, a blade sliced along its
+        length, has each placed on its own."""
         from newton import ShapeFlags
 
         model = self._model
         colliding = (model.shape_flags.numpy() & int(ShapeFlags.COLLIDE_SHAPES)) != 0
         shapes = np.flatnonzero((model.shape_body.numpy() == body) & colliding)
-        if len(shapes) != 1:
-            raise ValueError(f"body {body} has {len(shapes)} collision shapes, not one")
-        return int(shapes[0]), model.shape_transform.numpy()[shapes[0]].copy()
+        if not len(shapes):
+            raise ValueError(f"body {body} has no collision shape")
+        return shapes, model.shape_transform.numpy()[shapes].copy()
 
     def place(self, shape: int, pose: np.ndarray) -> None:
         """Move shape `shape` to `pose` in its body's frame -- a position and
         (x, y, z, w) rotation in one array of 7 -- in every copy the solvers
         step from. A collider moved while the simulation runs, the way a cut
-        resizes one: a blade's, standing at a rod the blade closes through."""
+        resizes one: a slice of a blade, standing at a rod the blade closes
+        through."""
         _write([copy.shape_transform for copy in self._shape_copies], shape, lambda _: pose)
 
     def pose(self, body: int) -> np.ndarray:
@@ -316,6 +319,7 @@ class Shears:
 def _write(arrays, index: int, change: Callable) -> None:
     """Replace element `index` of each of `arrays` by `change` of its value,
     in place: a copy the graph reads keeps its address."""
+    index = int(index)  # warp slices by Python int only
     for array in arrays:
         element = array[index : index + 1]
         value = element.numpy()
