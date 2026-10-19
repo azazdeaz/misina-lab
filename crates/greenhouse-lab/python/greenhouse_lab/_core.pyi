@@ -218,6 +218,13 @@ class LeafParams:
     leaves are clustered and this is how many representatives the clustering may
     keep.
     """
+    detail: float
+    """How finely a leaf is meshed, as a multiplier: at 1 a leaflet's margin keeps
+    within 0.6 mm of its curves, about a pixel to a camera half a meter away, and a
+    full-grown leaf comes to about 1500 triangles; about 500 at 0.1 and 4500 at 4.
+    Coarser drops the finest teeth first, then rounds off the sinuses, and keeps the
+    lobes.
+    """
 
     def __init__(
         self,
@@ -225,6 +232,7 @@ class LeafParams:
         length: float = 0.45,
         droop: float = 90.0,
         variations: int = 32,
+        detail: float = 1.0,
     ) -> None: ...
     def __repr__(self) -> str: ...
 

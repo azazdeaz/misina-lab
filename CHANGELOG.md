@@ -32,6 +32,9 @@ Two kinds of change break a project that worked on the release before:
   down. The stem below them is stripped, with a stub at each node, so the
   lowest two trusses always hang on bare stem. Leaves are visual only, with
   no collider. New: `StemCfg.leaves_kept` and `LeafCfg`.
+- **greenhouse-lab**: `LeafCfg.detail` sets how finely a leaf is meshed, as
+  a multiplier: a full-grown leaf is about 1500 triangles at the default 1,
+  500 at 0.1 and 4500 at 4. Coarser drops the leaflets' finest teeth first.
 
 ### Changed
 
