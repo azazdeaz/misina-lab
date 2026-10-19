@@ -188,8 +188,8 @@ above.
 | Missing fruit | probability 0–0.3 | 0.05 | Cheap variety for perception |
 
 The rest is fixed, with one good version and no knob: the slab, block and
-drip look, the white film, hooks and twine, the two-wire V, stem taper, one
-traced leaflet outline, and the calyx.
+drip look, the white film, hooks and twine, the two-wire V, stem taper, the
+terminal, lateral and intercalary leaflet shapes, and the calyx.
 
 A young crop needs no knob of its own. A lowered length of 0 with no ripe
 trusses gives the crop before its first lowering.
@@ -276,7 +276,8 @@ The same layered pipeline the vineyard uses, in build order:
 4. **Stems:** one strand per stem, unique, since each stem's lowered run
    differs. A stem authors a leaf config at every node and a truss config at
    every third.
-5. **Leaves:** a compound leaf of traced leaflet outlines, quantized.
+5. **Leaves:** a compound leaf of leaflet outlines built from their veins
+   ([leaflet.rs](../crates/greenhouse-lab/src/elements/leaflet.rs)), quantized.
 6. **Trusses:** peduncle, rachis and pedicels as one strand mesh, quantized.
    A truss authors a fruit config at each pedicel tip.
 7. **Fruit:** quantized by size, shape and stage, coloured per point.

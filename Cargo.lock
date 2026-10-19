@@ -3320,6 +3320,7 @@ dependencies = [
  "misina-lab",
  "nalgebra 0.35.0",
  "pyo3",
+ "spade",
 ]
 
 [[package]]

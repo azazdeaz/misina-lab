@@ -3,7 +3,8 @@
 //! [`layout`] solves where the rows and paths go and spawns a prim for each,
 //! the fixtures fill those prims, and the crop grows on them: [`stem`] roots
 //! a plant on every block and hangs trusses off its stems, [`truss`] hangs
-//! fruit off those, and [`fruit`] shapes and colours them. Every element
+//! fruit off those, and [`fruit`] shapes and colours them. [`leaflet`]
+//! outlines a tomato leaflet; no element places one yet. Every element
 //! holds its params and a build system that replaces everything it spawned
 //! whenever its params or the layout change. The panel, the config snippet and the Python classes
 //! are read off the params structs — see
@@ -16,6 +17,7 @@ pub mod floor;
 pub mod fruit;
 pub mod gutter;
 pub mod layout;
+pub mod leaflet;
 pub mod rail;
 pub mod stem;
 pub mod truss;
