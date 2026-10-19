@@ -412,6 +412,12 @@ impl Library<'_> {
     /// Records that a registered collider's surface is a height field in xy,
     /// sampled every `resolution` meters — see
     /// [`PartEntry::heightfield_resolution`](doc::PartEntry::heightfield_resolution).
+    ///
+    /// A consumer fits the nearest whole number of spans of `resolution`
+    /// across each axis of the mesh, so its field is the mesh only where both
+    /// counts are the mesh's own;
+    /// [`Ground::resampling_spacing`](crate::terrain::Ground::resampling_spacing)
+    /// is such a spacing for a grid.
     pub fn heightfield(&mut self, part: &Geometry, resolution: f32) {
         if let Some(entry) = self.prototypes.get_mut(&part.reference.0) {
             entry.heightfield_resolution = Some(resolution);

@@ -39,6 +39,14 @@ Two kinds of change break a project that worked on the release before:
   and lists all of a body's collision shapes, so a part built of several, a
   blade in slices, can have each moved on its own with `Shears.place`.
 
+### Fixed
+
+- **misina-lab**: The ground's collider under Newton is the ground mesh again
+  on a field whose two axes step differently. The height field Newton builds
+  from it was sampled at the finer axis's spacing, which put its rows between
+  the mesh's along the other axis: millimetres off the drawn ground on gentle
+  ground, more on rough.
+
 ## [0.1.0] - Unreleased
 
 Scene document format 8. The first release.
