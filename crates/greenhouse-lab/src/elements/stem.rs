@@ -8,7 +8,8 @@
 //! ```text
 //!         ┬   the hook on the wire, its twine reel HOOK below
 //!         │   the head, tied under the reel
-//!         │   a truss every third node, the lowest at `harvest_height`
+//!         │   a leaf at each node down from the head, `leaves_kept` of them
+//!         │   a truss every third internode, the lowest at `harvest_height`
 //!        ╱    the rise, out to its wire
 //!   ════╯     the lowered run, `lowered` long, beside the gutter
 //!  ▣          the block
@@ -20,20 +21,26 @@
 //! every stretch of the row stands as dense as the rest.
 //!
 //! The live height from `harvest_height` to the head is shared out between
-//! `trusses`, so how much stem a truss takes follows from the wire height:
-//! 0.34 m at the defaults, inside the 25–35 cm a week's growth gives.
+//! `trusses`, three nodes to a truss, so how much stem a truss takes follows
+//! from the wire height: 0.34 m at the defaults, inside the 25–35 cm a week's
+//! growth gives. A leaf grows at every node, the leaves winding round the
+//! stem, and a truss in every third internode. Growers strip all but the top
+//! `leaves_kept` leaves, and every leaf in the harvest band round the lowest
+//! two trusses; a stripped leaf leaves a stub.
 //!
 //! No two stems lie along the gutter alike, so each is a mesh of its own and
-//! nothing here is quantized. A stem authors a [`TrussConfig`] at every third
-//! node of its rise, and [`truss`](super::truss) builds them.
+//! nothing here is quantized. A stem authors a [`LeafConfig`] at each node
+//! that keeps its leaf and a [`TrussConfig`] in every third internode, and
+//! [`leaf`](super::leaf) and [`truss`](super::truss) build them.
 //!
 //! ```text
 //! Row_02/Plant_017       Xform on the block's top
 //!   Stem_0               Xform
-//!     Tube               -> parts/Stem_n, this stem's own
+//!     Tube               -> parts/Stem_n, this stem's own, with its stubs
 //!     Hook               -> parts/Hook_0, on the wire
 //!     Twine              -> parts/Twine_n, wound down the rise
-//!     Truss_00 …         a TrussConfig, on the stem's axis at its node
+//!     Leaf_00 …          a LeafConfig, on the stem's axis at its node
+//!     Truss_00 …         a TrussConfig, on the stem's axis between two nodes
 //! ```
 
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
@@ -50,6 +57,7 @@ use nalgebra::Point3;
 
 use super::gutter::{self, GutterParams};
 use super::layout::{GreenhouseLayout, Row};
+use super::leaf::{LeafConfig, LeafParams};
 use super::truss::{Node, TrussConfig, TrussParams};
 use super::wire::WireParams;
 use super::{Grow, SceneParams};
@@ -60,12 +68,30 @@ const TUBE: &str = "Stem";
 const TWINE: &str = "Twine";
 const HOOK: &str = "Hook";
 
-/// Salts splitting a plant's draws and a stem's off the scene seed.
+/// Salts splitting a plant's draws, a stem's and each leaf's off the scene
+/// seed.
 const PLANT_STREAM: u64 = 0x9E37_79B9_7F4A_7C15;
 const STEM_STREAM: u64 = 0xBF58_476D_1CE4_E5B9;
+const LEAF_STREAM: u64 = 0x632B_E59B_D9B4_E019;
 
-/// Nodes per truss: a truss at every third node, a leaf at each of the rest.
+/// Nodes per truss: a leaf at every node, and a truss in every third
+/// internode.
 const NODES_PER_TRUSS: u32 = 3;
+
+/// Trusses at the foot of a stem that hang on bare stem, with the stem up to
+/// the next one, whatever `leaves_kept` asks: the harvest band, stripped for
+/// the picking.
+const BARE_TRUSSES: u32 = 2;
+
+/// The turn round the stem from one leaf to the next, in radians: the golden
+/// angle of a spiral phyllotaxis. How far each turn strays from it, as a
+/// fraction.
+const DIVERGENCE: f32 = 2.4;
+const DIVERGENCE_JITTER: f64 = 0.1;
+
+/// The stub a stripped leaf leaves: its radius, its reach from the stem's
+/// axis, in meters, and its angle off the stem, in radians.
+const STUB: (f32, f32, f32) = (0.003, 0.025, 1.1);
 
 /// The most stems a plant carries: two, and an extra one.
 const MAX_STEMS: usize = 3;
@@ -165,9 +191,10 @@ const PLASTIC: Response = Response {
 ///
 /// Each stem lies `lowered` meters along the gutter, then rises to its hook,
 /// with its head a hook's length below the wire. The stem between
-/// `harvest_height` and the head carries `trusses` trusses at every third
-/// node, so how much stem a truss takes follows from the wire height rather
-/// than being set.
+/// `harvest_height` and the head carries `trusses` trusses with three leaves
+/// to each, so how much stem a truss takes follows from the wire height
+/// rather than being set. Only the top `leaves_kept` leaves are left on; the
+/// stem below them is stripped bare.
 #[derive(Resource, Reflect, Clone, Debug, PartialEq)]
 #[cfg_attr(
     feature = "python",
@@ -182,6 +209,11 @@ pub struct StemParams {
     /// Trusses on a stem, from the lowest still on it up to the head.
     #[reflect(@Slider { min: 6.0, max: 12.0, step: 1.0 })]
     pub trusses: u32,
+    /// Leaves on a stem, counted down from the head. Growers strip the ones
+    /// below, so the stem under them is bare, and the lowest two trusses
+    /// always hang on bare stem however many are kept.
+    #[reflect(@Slider { min: 10.0, max: 21.0, step: 1.0 })]
+    pub leaves_kept: u32,
     /// Length of bare stem lying beside the gutter, in meters: how far into
     /// the season the crop is, at about 25 cm of lowering a week. 0 is a crop
     /// before its first lowering.
@@ -202,6 +234,7 @@ impl Default for StemParams {
         Self {
             harvest_height: 1.2,
             trusses: 9,
+            leaves_kept: 16,
             lowered: 2.0,
             extra_stems: 0.0,
             turned_to_path: 0.8,
@@ -214,8 +247,8 @@ impl Default for StemParams {
 struct Owned;
 
 pub fn plugin(app: &mut App) {
-    // `TrussParams` is not gated on: `truss` re-applies it to the configs
-    // authored here, in place.
+    // `LeafParams` and `TrussParams` are not gated on: `leaf` and `truss`
+    // re-apply them to the configs authored here, in place.
     app.init_resource::<StemParams>().add_systems(
         PreUpdate,
         author
@@ -333,9 +366,15 @@ struct Stem {
     twine: Vec<Vec3>,
     /// The hook's place on its wire.
     hook: Vec3,
-    /// Each truss, lowest first: its node on the stem's axis, the yaw it
+    /// Each truss, lowest first: its place on the stem's axis, the yaw it
     /// faces, and what it takes from the stem there.
     trusses: Vec<(Vec3, f32, Node)>,
+    /// Each node of the rise, the head's first: its place on the stem's axis
+    /// and the yaw its leaf faces.
+    nodes: Vec<(Vec3, f32)>,
+    /// How many nodes from the head may keep their leaf: those above the
+    /// harvest band.
+    leafy: usize,
 }
 
 /// Grows the stem rooted at `root` that starts round on `side`, lowered
@@ -345,7 +384,8 @@ struct Stem {
 /// length, where across and up in the run it lies, the hook's place along the
 /// wire, the bow's bearing and the ripening offset, then three per truss —
 /// whether it was turned to the path, how far it wanders off it, and the
-/// bearing it faces when it was not.
+/// bearing it faces when it was not — and last the yaw of the leaf at the
+/// head and, node by node down, how far the next one turns from it.
 fn grow(
     root: Vec3,
     side: f32,
@@ -405,15 +445,18 @@ fn grow(
         radius * (1.0 - HEAD_TAPER * t * t * (3.0 - 2.0 * t))
     };
 
-    // A control point at every node, the bare ones below the harvest included.
+    // A control point at every node, half a node off the trusses, from the
+    // head down to the bend, and at the head itself.
     let node = (head - harvest) / (live.trusses * NODES_PER_TRUSS) as f32;
-    let below = ((harvest - bend.z) / node).floor() as i32;
+    let heights: Vec<f32> = (0..)
+        .map(|i| head - (i as f32 + 0.5) * node)
+        .take_while(|z| *z > bend.z + node / 2.0)
+        .collect();
     let mut radii = vec![radius; points.len() + 1];
     points.push(bend);
-    for n in (1 - below)..=(live.trusses * NODES_PER_TRUSS) as i32 {
-        let z = harvest + n as f32 * node;
-        points.push(rise(z));
-        radii.push(thin(z));
+    for z in heights.iter().rev().chain([&head]) {
+        points.push(rise(*z));
+        radii.push(thin(*z));
     }
 
     let trusses = (0..live.trusses)
@@ -449,13 +492,37 @@ fn grow(
         z -= TWINE_STEP;
     }
 
+    // The leaves wind round the stem from the head down.
+    let mut yaw = rng.unit() as f32 * TAU;
+    let nodes = heights
+        .iter()
+        .map(|z| {
+            let at = (rise(*z), yaw);
+            yaw += DIVERGENCE * rng.range(1.0 - DIVERGENCE_JITTER, 1.0 + DIVERGENCE_JITTER) as f32;
+            at
+        })
+        .collect();
+    let band = harvest + (BARE_TRUSSES * NODES_PER_TRUSS) as f32 * node;
+
     Stem {
         points,
         radii,
         twine,
         hook: top + Vec3::Z * HOOK_LENGTH,
         trusses,
+        nodes,
+        leafy: heights.iter().take_while(|z| **z > band).count(),
     }
+}
+
+/// What stripping a leaf leaves on the stem, at its node `at`: a stub of the
+/// petiole, facing `yaw`.
+fn stub(at: Vec3, yaw: f32) -> MeshData {
+    let (radius, reach, angle) = STUB;
+    cylinder_mesh(radius, radius * 0.7, reach, 5).transformed(
+        &Transform::from_translation(at)
+            .with_rotation(Quat::from_rotation_z(yaw) * Quat::from_rotation_y(angle)),
+    )
 }
 
 /// A strand through `points`, `offset` into its plant's frame.
@@ -492,6 +559,7 @@ fn author(
     mut commands: Commands,
     mut library: Library,
     params: Res<StemParams>,
+    leaf_params: Res<LeafParams>,
     truss_params: Res<TrussParams>,
     gutter: Res<GutterParams>,
     wire: Res<WireParams>,
@@ -557,13 +625,26 @@ fn author(
         }
     }
 
-    // Each stem's tube and twine, grown in parallel and registered serially:
-    // `Assets<Mesh>` takes one writer.
+    // Each stem's tube, with a stub at every stripped node, and its twine,
+    // grown in parallel and registered serially: `Assets<Mesh>` takes one
+    // writer.
+    let kept = |stem: &Stem| (params.leaves_kept as usize).min(stem.leafy);
     let meshes = par_map(&stems, |_, (_, plant, _, stem)| -> Result<(Mesh, Mesh)> {
         let origin = Vec3::new(layout.plants[*plant], 0.0, root_z);
+        let mut tube = vec![strand_mesh(&strand(
+            &stem.points,
+            &stem.radii,
+            origin,
+            SIDES,
+        ))?];
+        tube.extend(
+            stem.nodes[kept(stem)..]
+                .iter()
+                .map(|(at, yaw)| stub(*at - origin, *yaw)),
+        );
         let twine = vec![TWINE_RADIUS; stem.twine.len()];
         Ok((
-            strand_mesh(&strand(&stem.points, &stem.radii, origin, SIDES))?.to_mesh(),
+            merge_meshes(&tube).to_mesh(),
             strand_mesh(&strand(&stem.twine, &twine, origin, TWINE_SIDES))?.to_mesh(),
         ))
     });
@@ -573,7 +654,7 @@ fn author(
         PLASTIC.surface(srgb(TWINE_COLOR)),
     );
     let mut plant_prim = Entity::PLACEHOLDER;
-    let mut order = 0u64;
+    let (mut order, mut leaf_order) = (0u64, 0u64);
     for (number, ((row, plant, index, stem), meshes)) in stems.iter().zip(meshes).enumerate() {
         let (tube, twine) = meshes?;
         let origin = Vec3::new(layout.plants[*plant], 0.0, root_z);
@@ -606,6 +687,22 @@ fn author(
                     Transform::from_translation(stem.hook - origin),
                 ));
                 parent.spawn((Name::new("Twine"), twine));
+                // The leaves kept, the lowest first. Each draws off its stem
+                // and its rank from the head, so keeping more or fewer leaves
+                // re-rolls none of the rest; a stem has fewer than 256 nodes.
+                let kept = kept(stem);
+                for (rank, (at, yaw)) in stem.nodes[..kept].iter().enumerate().rev() {
+                    leaf_order += 1;
+                    let seed = scene.seed ^ LEAF_STREAM ^ salt((number as u64) << 8 | rank as u64);
+                    parent.spawn((
+                        Name::new(format!("Leaf_{:02}", kept - 1 - rank)),
+                        Transform::from_translation(*at - origin)
+                            .with_rotation(Quat::from_rotation_z(*yaw)),
+                        Visibility::default(),
+                        LeafConfig::new(&leaf_params, seed, rank as u32),
+                        Order(leaf_order),
+                    ));
+                }
                 for (k, (at, yaw, node)) in stem.trusses.iter().enumerate() {
                     order += 1;
                     parent.spawn((
@@ -628,20 +725,41 @@ mod tests {
 
     use super::*;
     use crate::elements::{GreenhouseParams, grown, in_scene, small};
+    use misina_lab::scene::UsdReference;
     use misina_lab::testing::{named_children, prim_path};
 
+    /// How far `p` is from the polyline through `axis`.
+    fn off_axis(p: Vec3, axis: &[Vec3]) -> f32 {
+        axis.windows(2)
+            .map(|w| {
+                let d = w[1] - w[0];
+                let t = ((p - w[0]).dot(d) / d.length_squared()).clamp(0.0, 1.0);
+                p.distance(w[0] + d * t)
+            })
+            .fold(f32::MAX, f32::min)
+    }
+
     /// On every stem the lowest truss hangs at the harvest height and the
-    /// rest one stem's growth apart above it, 25 to 35 cm at the defaults;
+    /// rest one stem's growth apart above it, 25 to 35 cm at the defaults,
     /// and every truss carries its peduncle and the two frames a gripper
-    /// takes it by. At the defaults, and on a low gutter under a high wire.
+    /// takes it by. A leaf hangs at each of the top `leaves_kept` nodes, on
+    /// the stem's axis half a node off the trusses, a childless prim that
+    /// references its mesh, and none in the harvest band round the lowest two
+    /// trusses. At the defaults, on a low gutter under a high wire, and on a
+    /// stem too short for the leaves asked for.
     #[test]
-    fn the_lowest_truss_hangs_at_the_harvest_height_with_its_frames() {
+    fn trusses_and_leaves_hang_at_the_stems_nodes() {
         let defaults: fn(&mut GreenhouseParams) = |_| {};
         let tall: fn(&mut GreenhouseParams) = |p| {
             (p.gutter.height, p.wire.height) = (0.3, 5.5);
             (p.stem.harvest_height, p.stem.trusses) = (0.8, 12);
         };
-        for (edit, growth) in [(defaults, 0.25..=0.35), (tall, 0.0..=1.0)] {
+        let short: fn(&mut GreenhouseParams) = |p| (p.stem.trusses, p.stem.leaves_kept) = (6, 21);
+        for (edit, growth) in [
+            (defaults, 0.25..=0.35),
+            (tall, 0.0..=1.0),
+            (short, 0.0..=1.0),
+        ] {
             let mut params = small();
             edit(&mut params);
             let stem = params.stem.clone();
@@ -651,7 +769,23 @@ mod tests {
                 .query_filtered::<Entity, With<TrussConfig>>()
                 .iter(world)
                 .collect();
-            let mut stems: BTreeMap<Entity, Vec<(String, Vec3)>> = BTreeMap::new();
+            let leaves: Vec<Entity> = world
+                .query_filtered::<Entity, With<LeafConfig>>()
+                .iter(world)
+                .collect();
+            // Each stem's trusses, then its leaves, by path and where each
+            // hangs.
+            let mut stems: BTreeMap<Entity, [Vec<(String, Vec3)>; 2]> = BTreeMap::new();
+            for leaf in leaves {
+                let path = prim_path(world, leaf);
+                let at = world.entity(leaf);
+                assert!(
+                    at.get::<Children>().is_none() && at.contains::<UsdReference>(),
+                    "{path} is not a childless geometry prim"
+                );
+                let on = at.get::<ChildOf>().unwrap().parent();
+                stems.entry(on).or_default()[1].push((path, in_scene(world, leaf).translation));
+            }
             for truss in trusses {
                 let path = prim_path(world, truss);
                 let held: Vec<String> = named_children(world, truss)
@@ -666,21 +800,49 @@ mod tests {
                 }
                 let on = world.entity(truss).get::<ChildOf>().unwrap().parent();
                 let node = in_scene(world, truss).translation;
-                stems.entry(on).or_default().push((path, node));
+                stems.entry(on).or_default()[0].push((path, node));
             }
             assert!(!stems.is_empty());
-            for (_, mut trusses) in stems {
+            for (on, [mut trusses, leaves]) in stems {
                 trusses.sort_by(|a, b| a.0.cmp(&b.0));
                 let (path, lowest) = &trusses[0];
+                let top = trusses[trusses.len() - 1].1;
                 assert_eq!(trusses.len(), stem.trusses as usize, "{path}");
                 assert!(
                     (lowest.z - stem.harvest_height).abs() < 1e-4,
                     "{path} hangs at {}",
                     lowest.z
                 );
-                let per =
-                    lowest.distance(trusses[trusses.len() - 1].1) / (trusses.len() - 1) as f32;
+                let per = lowest.distance(top) / (trusses.len() - 1) as f32;
                 assert!(growth.contains(&per), "{path}: {per} m of stem a truss");
+
+                // The axis through the trusses up to the head, under the hook.
+                let hook = named_children(world, on)
+                    .into_iter()
+                    .find(|(name, _)| name == "Hook")
+                    .unwrap();
+                let head = in_scene(world, hook.1).translation - Vec3::Z * HOOK_LENGTH;
+                let axis: Vec<Vec3> = trusses.iter().map(|(_, at)| *at).chain([head]).collect();
+                let nodes = NODES_PER_TRUSS * stem.trusses;
+                let node = (top.z - lowest.z) / (nodes - NODES_PER_TRUSS) as f32;
+                let band = lowest.z + (BARE_TRUSSES * NODES_PER_TRUSS) as f32 * node;
+                let mut kept: Vec<u32> = leaves
+                    .iter()
+                    .map(|(path, at)| {
+                        let n = (at.z - lowest.z) / node - 0.5;
+                        assert!((n - n.round()).abs() < 1e-3, "{path} is off its node: {n}");
+                        assert!(at.z > band, "{path} hangs in the harvest band");
+                        assert!(off_axis(*at, &axis) < 2e-3, "{path} is off the stem");
+                        n.round() as u32
+                    })
+                    .collect();
+                kept.sort();
+                let count = stem.leaves_kept.min(nodes - BARE_TRUSSES * NODES_PER_TRUSS);
+                assert_eq!(
+                    kept,
+                    (nodes - count..nodes).collect::<Vec<_>>(),
+                    "{path}: a leaf at each of the top {count} nodes"
+                );
             }
         }
     }

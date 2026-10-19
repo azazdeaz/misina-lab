@@ -95,6 +95,12 @@ const TOOTH_SPACING: f64 = 5.0;
 const EDGE_POINTS: usize = 16;
 const SINUS_POINTS: usize = 8;
 
+/// How far the margin may stray from the curves it is sampled from, in
+/// meters: about a pixel to a camera half a meter away. The points it can do
+/// without are dropped, which keeps the lobes and the sinuses, costs the
+/// finest teeth, and leaves a small leaflet fewer points than a large one.
+const TOLERANCE: f64 = 0.0006;
+
 /// A leaflet's shape. Lengths are fractions of the leaflet's own length, from
 /// the petiolule's free end to the apex.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -172,8 +178,9 @@ impl Leaflet {
     /// after it.
     pub fn outline(&self, length: f64, rng: &mut Rng) -> Outline {
         let half = STALK_WIDTH / 2.0;
-        let right = self.side(-1.0, rng);
-        let left = self.side(1.0, rng);
+        let tolerance = TOLERANCE / length.max(1e-6);
+        let right = self.side(-1.0, tolerance, rng);
+        let left = self.side(1.0, tolerance, rng);
         let ring = std::iter::once(DVec2::new(0.0, -half))
             .chain(right.iter().map(|p| DVec2::new(p.x, -p.y)))
             .chain([DVec2::X])
@@ -187,9 +194,10 @@ impl Leaflet {
     }
 
     /// One half of the margin, on the +Y side of the midrib: from where the
-    /// blade leaves the petiolule to just short of the apex. `side` is +1
-    /// for the side [`lopsided`](Self::lopsided) lengthens, -1 for the other.
-    fn side(&self, side: f64, rng: &mut Rng) -> Vec<DVec2> {
+    /// blade leaves the petiolule to just short of the apex, within
+    /// `tolerance` of its curves. `side` is +1 for the side
+    /// [`lopsided`](Self::lopsided) lengthens, -1 for the other.
+    fn side(&self, side: f64, tolerance: f64, rng: &mut Rng) -> Vec<DVec2> {
         let (jitter, lobes) = (self.jitter, self.lobes.max(1));
         let blade = 1.0 - self.stalk;
         let width = self.width * (1.0 + side * self.lopsided);
@@ -297,6 +305,7 @@ impl Leaflet {
             point.y = point.y.max(1e-4); // never across the midrib
         }
         out.push(DVec2::X);
+        simplify(&mut out, tolerance);
         untangle(&mut out);
         out.pop();
         out
@@ -336,6 +345,27 @@ fn edge(out: &mut Vec<DVec2>, [a, b, c, d]: [DVec2; 4], serration: f64, toward_e
         a * (s * s * s) + b * (3.0 * s * s * t) + c * (3.0 * s * t * t) + d * (t * t * t)
     }));
     serrate(&mut out[start..], serration, toward_end);
+}
+
+/// Drops every point of a polyline that strays less than `tolerance` from the
+/// chord between the points kept either side of it (Douglas–Peucker). Both
+/// ends are kept.
+fn simplify(line: &mut Vec<DVec2>, tolerance: f64) {
+    let last = line.len() - 1;
+    let mut keep = vec![false; line.len()];
+    (keep[0], keep[last]) = (true, true);
+    let mut spans = vec![(0, last)];
+    while let Some((a, b)) = spans.pop() {
+        let chord = (line[b] - line[a]).normalize_or(DVec2::X);
+        let off = |i: &usize| chord.perp_dot(line[*i] - line[a]).abs();
+        let far = (a + 1..b).max_by(|i, j| off(i).total_cmp(&off(j)));
+        if let Some(far) = far.filter(|i| off(i) > tolerance) {
+            keep[far] = true;
+            spans.extend([(a, far), (far, b)]);
+        }
+    }
+    let mut kept = keep.into_iter();
+    line.retain(|_| kept.next().unwrap());
 }
 
 /// Cuts every loop out of a polyline where it crosses itself, keeping the
@@ -408,7 +438,8 @@ mod tests {
     ];
 
     /// The frame every placed outline depends on, and a ring that fills: no
-    /// crossings at any seed, however ragged the jitter makes it.
+    /// crossings at any seed, however ragged the jitter makes it, nor at a
+    /// size where most of its points are dropped.
     #[test]
     fn every_leaflet_hangs_from_the_origin_and_fills() {
         for (name, shape) in ALL {
@@ -417,10 +448,11 @@ mod tests {
                     jitter: 1.0,
                     ..shape
                 };
-                let outline = ragged.outline(0.1, &mut Rng::new(seed));
+                let length = if seed % 2 == 0 { 0.1 } else { 0.005 };
+                let outline = ragged.outline(length, &mut Rng::new(seed));
                 let reach = outline.points.iter().fold(0.0f64, |m, p| m.max(p.x));
                 assert!(
-                    (reach - 0.1).abs() < 1e-9,
+                    (reach - length).abs() < 1e-9,
                     "{name} {seed}: apex at the length, {reach}"
                 );
                 assert!(

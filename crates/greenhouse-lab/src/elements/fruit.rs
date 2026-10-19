@@ -51,8 +51,8 @@ use misina_lab::quantize::{Metric, farthest_first};
 use misina_lab::rng::Rng;
 use misina_lab::scene::{Library, Order, Surface, UsdAttributes, configs_changed};
 
-use super::Grow;
 use super::truss::PEDICEL_RADIUS;
+use super::{Grow, smooth};
 
 /// The mesh-library prefix the fruit register under.
 pub const PART: &str = "Fruit";
@@ -409,12 +409,6 @@ fn reauthor(params: Res<FruitParams>, mut fruit: Query<&mut FruitConfig>) {
 }
 
 // ─── The mesh ───────────────────────────────────────────────────────
-
-/// `t` eased in and out over `0..1`.
-fn smooth(t: f32) -> f32 {
-    let t = t.clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
-}
 
 /// A closed surface through `rings`, from `top` down to `bottom`, every ring
 /// the same number of points counter-clockwise seen from above. Faces wind

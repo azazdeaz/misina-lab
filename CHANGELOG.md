@@ -25,6 +25,13 @@ Two kinds of change break a project that worked on the release before:
 - **misina-lab**: `ColliderView` draws every collider of the running Newton
   model in Kit's viewport, translucent, and follows the ones moved or resized
   while it runs. Kit draws only a PhysX scene's colliders.
+- **greenhouse-lab**: leaves. A compound tomato leaf at every node of a stem
+  from the head down, `leaves_kept` of them: a terminal leaflet, three or four
+  pairs of laterals and small leaflets between them, each leaflet outlined
+  from its veins. Leaves are small and upright at the head and droop further
+  down. The stem below them is stripped, with a stub at each node, so the
+  lowest two trusses always hang on bare stem. Leaves are visual only, with
+  no collider. New: `StemCfg.leaves_kept` and `LeafCfg`.
 
 ### Changed
 
