@@ -138,7 +138,9 @@ queries.
 
 **Rebuild only on change.** `run_if(configs_changed::<XConfig>)` is the
 dirty-tracking mechanism; curve tessellation is expensive enough that this
-matters.
+matters. It fires when a config is added, re-authored or removed, so a layer
+whose configs are all gone still runs once and clears its parts from the
+library.
 
 **A params edit is re-applied in place, not re-authored from above.** A
 layer owns the configs the layer above placed, so it runs a `reauthor` pass
@@ -157,9 +159,7 @@ and rebuilds the layer a second time.
 off no layer above, ground cover for one, places configs in an `author`
 system from the layout, the `Ground` and the scene params, gated on all of
 them and on its own params, and has no `reauthor`: re-authoring the layer
-*is* the in-place edit at its scale. Its `build` is gated on the same
-condition as well as on `configs_changed`, so a change that leaves nothing
-to build still clears the library.
+*is* the in-place edit at its scale.
 
 **A categorical param is a string naming one of the element's fixed list**,
 parsed once into a Rust enum with `ALL`, `NAMES` and `parse`, and declared on

@@ -46,6 +46,10 @@ Two kinds of change break a project that worked on the release before:
 
 ### Fixed
 
+- **misina-lab**: `configs_changed` also fires when a layer's configs are
+  removed, so an edit that leaves a layer nothing to build clears its parts
+  from the library. Such an edit used to leave the layer's old parts in the
+  scene document, unreferenced.
 - **misina-lab**: The ground's collider under Newton is the ground mesh again
   on a field whose two axes step differently. The height field Newton builds
   from it was sampled at the finer axis's spacing, which put its rows between
