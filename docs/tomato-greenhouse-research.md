@@ -136,7 +136,7 @@ Looking along a row, with Z up:
 | Leaves between trusses | 3 | | [Source.ag][sourceag] |
 | Stem per truss | 0.25–0.35 m | from 20–35 cm/week growth at about one truss a week | [Kim & Kubota][kim], [Duijvestijn][duijvestijn] |
 | Leaves kept | 16 | 14–18; 18–21 in the last month | [WUR thesis][thesis] |
-| Leaf | 0.45 m, 7 leaflets (est.) | 0.35–0.6 m, 5–9 leaflets (est.) | |
+| Leaf | 0.45 m, 7 or 9 leaflets | 0.35–0.6 m (est.); pressed leaves of 24–40 cm, with 3–4 lateral pairs and leaflets covering about 0.2 × length² | [Naturalis][naturalis] |
 | Stem length, end of season | | up to 12 m | [Duijvestijn][duijvestijn] |
 | Lowering | about 25 cm/week; hooks shifted along the wire; bare stem lies along the row | | [Duijvestijn][duijvestijn], [NL2000684C2][lowering-patent] |
 
@@ -178,7 +178,7 @@ above.
 | Wire height | 3.5–5.5 m | 4.5 m | How tall the crop stands |
 | Harvest height, the lowest unharvested truss | 0.8–1.8 m; 6–12 trusses from there to the head | 1.2 m (est.); 9 (est.) | Where the arm has to reach. Stems are solved to put trusses here, so stem per truss follows: 0.34 m at the defaults, inside the measured growth range |
 | Stem density | plant spacing 0.3–0.5 m; extra-stem share 0–0.5 | 0.36 m, 0 | Occlusion by neighbours, and trusses snagged between stems |
-| Leaves | kept 10–21; length 0.35–0.6 m | 16, 0.45 m | The main occlusion knob, behind the ~15% of trusses the Harvester leaves |
+| Leaves | kept 10–21; length 0.35–0.6 m; an old leaf's droop 0–150° | 16, 0.45 m, 90° (est.) | The main occlusion knob, behind the ~15% of trusses the Harvester leaves |
 | Truss | fruit count, fruit diameter, branched or simple | 6 × 60 mm, simple | What is cut; size drives occlusion and the gripper's approach. The TOV medium, TOV large and cherry presets are cfg values, not a choice field |
 | Peduncle | length, diameter, angle; share turned to the path | the Kondo means; 0.8 (est.) | Where the cut point is. Trusses turned into the crop are the hard ones |
 | Ripeness | ripe trusses per stem 0–3; colour spread within a truss | 1, 0.2 | Which trusses are due; the ready rule reads the terminal fruit |
@@ -274,9 +274,11 @@ The same layered pipeline the vineyard uses, in build order:
 3. **Fixtures:** rail, growth pipe, gutter, slab, block, drip and wires, all
    cylinders and boxes, as in `pole` and `wire`.
 4. **Stems:** one strand per stem, unique, since each stem's lowered run
-   differs. A stem authors a leaf config at every node and a truss config at
-   every third.
-5. **Leaves:** a compound leaf of leaflet outlines built from their veins
+   differs. A stem authors a leaf config at each node that keeps its leaf
+   and a truss config in every third internode.
+5. **Leaves:** a compound leaf
+   ([leaf.rs](../crates/greenhouse-lab/src/elements/leaf.rs)) of leaflet
+   outlines built from their veins
    ([leaflet.rs](../crates/greenhouse-lab/src/elements/leaflet.rs)), quantized.
 6. **Trusses:** peduncle, rachis and pedicels as one strand mesh, quantized.
    A truss authors a fruit config at each pedicel tip.
@@ -326,6 +328,7 @@ Dutch gutter slope.
 [lekhabo]: https://www.lekhabo.nl/lek-habo-groep/nieuws/395
 [lowering-patent]: https://patents.google.com/patent/NL2000684C2/nl
 [metazet]: https://metazet.com/teeltgoot/formflex-vg-teeltgoot/
+[naturalis]: https://bioportal.naturalis.nl/en/specimen/L.4471084
 [packer]: https://www.thepacker.com/news/packer-tech/precision-over-pressure-how-eternal-ag-solving-hardest-challenges-autonomous-tom
 [rb-hooks]: https://royalbrinkman.com/knowledge-center/crop-rotation/twine-tomato-hooks
 [rb-trolley]: https://royalbrinkman.com/mechanical-equipment/internal-transport/harvest-trolleys/

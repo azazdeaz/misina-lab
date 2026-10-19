@@ -3,15 +3,15 @@
 The rows of a Western European high-wire tomato greenhouse, generated for
 robotics simulation and authored to USD for Isaac Lab: the floor, the pipe
 rails, the gutters with their slabs and blocks, the crop wires, and the
-crop on them: stems, trusses and fruit. The building, its roof, glass and
-columns, is left to an HDR or a Gaussian splat. It is built on
+crop on them: stems, leaves, trusses and fruit. The building, its roof,
+glass and columns, is left to an HDR or a Gaussian splat. It is built on
 [misina-lab](../misina-lab/README.md), like the vineyard beside it.
 
 The dimensions and the variations follow
 [the research notes](../../docs/tomato-greenhouse-research.md), drawn from
 Dutch research compartments, supplier sheets and one measured truss study.
-The leaves come next. Until then a row is the harvest band as growers leave
-it, bare stem with the trusses hanging off it.
+A stem keeps its leaves from the head down and is stripped below them, as
+growers leave it, so the trusses in the harvest band hang off bare stem.
 
 ## What a row holds
 
@@ -21,7 +21,8 @@ it, bare stem with the trusses hanging off it.
 | Rail | two heating pipes in every path, on a support every meter, each segment a capsule collider | gauge, pipe diameter, height, unevenness up to and past the 2° spec |
 | Gutter | a steel channel, hanging or standing, with stone wool slabs and a block at every plant | height, mount, plant spacing |
 | Wires | two crop wires over every gutter, for the V the stems are trained in | height, spread |
-| Stems | two to a plant, each lowered along the gutter and rising to a hook on its wire, with its twine wound down it; a truss at every third node | harvest height, trusses on a stem, lowered length, extra stems, trusses turned to the path |
+| Stems | two to a plant, each lowered along the gutter and rising to a hook on its wire, with its twine wound down it; a leaf at every node and a truss in every third internode, the leaves stripped below the top few with a stub left at each | harvest height, trusses on a stem, leaves kept, lowered length, extra stems, trusses turned to the path |
+| Leaves | a compound leaf: a petiole and a rachis with a terminal leaflet, three or four pairs of laterals and small leaflets between them, each leaflet outlined from its veins; small and upright at the head, drooping further down. Visual only, with no collider | length, droop |
 | Trusses | peduncle, rachis and a pedicel to every fruit, with a `Cut` and a `Bend` frame | fruit count and diameter, branched, peduncle length, diameter and angle, missing fruit |
 | Fruit | every fruit its own prim, with a calyx of five or six sepals and a stage from fruit set to red: fruit grow toward the head, a stem ripens from the bottom up, a truss from its base to its tip, and a fruit from its blossom end | ripe trusses on a stem, the spread in a truss, the ripe colour, height to width, ribbing, jointed pedicels |
 
@@ -66,6 +67,7 @@ with its default and range.
     /Plant_017
       /Stem_0
         /Tube  /Hook  /Twine
+        /Leaf_00 …                    the lowest still on the stem first
         /Truss_00                     the lowest still on the stem
           /Peduncle  /Cut  /Bend
           /Fruit_00 …

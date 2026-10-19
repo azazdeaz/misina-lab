@@ -152,8 +152,9 @@ class StemParams:
 
     Each stem lies `lowered` meters along the gutter, then rises to its hook, with
     its head a hook's length below the wire. The stem between `harvest_height` and
-    the head carries `trusses` trusses at every third node, so how much stem a truss
-    takes follows from the wire height rather than being set.
+    the head carries `trusses` trusses with three leaves to each, so how much stem a
+    truss takes follows from the wire height rather than being set. Only the top
+    `leaves_kept` leaves are left on; the stem below them is stripped bare.
     """
 
     harvest_height: float
@@ -162,6 +163,11 @@ class StemParams:
     """
     trusses: int
     """Trusses on a stem, from the lowest still on it up to the head."""
+    leaves_kept: int
+    """Leaves on a stem, counted down from the head. Growers strip the ones below, so
+    the stem under them is bare, and the lowest two trusses always hang on bare stem
+    however many are kept.
+    """
     lowered: float
     """Length of bare stem lying beside the gutter, in meters: how far into the season
     the crop is, at about 25 cm of lowering a week. 0 is a crop before its first
@@ -181,9 +187,44 @@ class StemParams:
         *,
         harvest_height: float = 1.2,
         trusses: int = 9,
+        leaves_kept: int = 16,
         lowered: float = 2.0,
         extra_stems: float = 0.0,
         turned_to_path: float = 0.8,
+    ) -> None: ...
+    def __repr__(self) -> str: ...
+
+class LeafParams:
+    """The leaves: a compound leaf at each of a stem's top nodes, as many as the stem
+    keeps.
+
+    A leaf is a petiole and a rachis with a terminal leaflet, three or four pairs of
+    laterals and small leaflets between the pairs. The leaves near the head are still
+    growing, small and upright; a couple of trusses down they are full grown, and the
+    older they are the more they droop. Every leaf draws its own size, angle, droop
+    and leaflet count about these. Leaves are visual only, with no collider.
+    """
+
+    length: float
+    """Length of a full-grown leaf, from the stem to the tip of its terminal leaflet, in
+    meters. Each leaf draws a little more or less.
+    """
+    droop: float
+    """How far an old leaf's rachis bends down from where it leaves the stem to its tip,
+    in degrees. The young leaves near the head droop less.
+    """
+    variations: int
+    """How many distinct leaf meshes the scene may hold. A budget, not a count: the
+    leaves are clustered and this is how many representatives the clustering may
+    keep.
+    """
+
+    def __init__(
+        self,
+        *,
+        length: float = 0.45,
+        droop: float = 90.0,
+        variations: int = 32,
     ) -> None: ...
     def __repr__(self) -> str: ...
 
@@ -306,6 +347,7 @@ class GreenhouseParams:
     gutter: GutterParams
     wire: WireParams
     stem: StemParams
+    leaf: LeafParams
     truss: TrussParams
     fruit: FruitParams
 
@@ -317,6 +359,7 @@ class GreenhouseParams:
         gutter: GutterParams | None = None,
         wire: WireParams | None = None,
         stem: StemParams | None = None,
+        leaf: LeafParams | None = None,
         truss: TrussParams | None = None,
         fruit: FruitParams | None = None,
     ) -> None: ...
