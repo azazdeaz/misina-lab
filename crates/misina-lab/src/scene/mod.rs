@@ -312,9 +312,16 @@ impl Part {
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Order(pub u64);
 
-/// Run condition: some organ of this layer was added or re-authored.
-pub fn configs_changed<C: Component>(configs: Query<(), Changed<C>>) -> bool {
-    !configs.is_empty()
+/// Run condition: some organ of this layer was added, re-authored or removed.
+/// A removal counts so that a layer left with nothing to build still clears
+/// its parts from the library.
+pub fn configs_changed<C: Component>(
+    configs: Query<(), Changed<C>>,
+    mut removed: RemovedComponents<C>,
+) -> bool {
+    // Read them all: one left unread would count again next frame.
+    let removed = removed.read().count() > 0;
+    !configs.is_empty() || removed
 }
 
 /// An organ standing at `position`, tipped by `tilt` in its own frame and then
