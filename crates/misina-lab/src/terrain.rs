@@ -192,10 +192,10 @@ pub fn build(
     // which is legal because nothing in the scene is a rigid body.
     library.collide(&geometry, TRIANGLE_MESH);
     // The ground is also a height field in xy, and says so: a backend that
-    // collides one rasterizes the mesh at its own grid spacing rather than
-    // approximating it -- MuJoCo collides a mesh as its convex hull, which
-    // turns every hollow in the ground into a lid over it.
-    library.heightfield(&geometry, field.finest_spacing());
+    // collides one rasterizes the mesh at a spacing that lands on its
+    // vertices rather than approximating it -- MuJoCo collides a mesh as its
+    // convex hull, which turns every hollow in the ground into a lid over it.
+    library.heightfield(&geometry, field.resampling_spacing());
 
     commands.spawn((Terrain, Name::new(TERRAIN), geometry, ChildOf(root.0)));
 
@@ -337,10 +337,7 @@ impl Ground {
     /// grid hasn't been built yet.
     ///
     /// Each axis rounds its own spacing to whole spans, so this is not simply
-    /// `feature_size / detail`. Resampling the field -- which is what
-    /// [`Library::heightfield`](crate::scene::Library::heightfield) has a
-    /// consumer do -- has to match the narrower of the two to resolve every
-    /// span the mesh carries.
+    /// `feature_size / detail`.
     pub fn finest_spacing(&self) -> f32 {
         if self.xs.len() < 2 || self.ys.len() < 2 {
             return 0.0;
@@ -351,6 +348,37 @@ impl Ground {
                 .fold(f32::INFINITY, f32::min)
         };
         narrowest(&self.xs).min(narrowest(&self.ys))
+    }
+
+    /// The one spacing to resample this grid at, in meters, so that the
+    /// samples are the mesh's own vertices and the height field built from
+    /// them is the mesh. `0.0` if the grid hasn't been built yet.
+    ///
+    /// A consumer fits the nearest whole number of spans of it across each
+    /// axis's extent, as Newton's `rasterize_mesh_to_heightfield` does, while
+    /// each axis here rounded a span of its own. Any spacing that rounds to
+    /// both axes' span counts lands on both; this is the middle of that range
+    /// in spans per meter, which is the grid's own spacing when the grid is
+    /// square. An axis whose span count was clamped can leave no such
+    /// spacing, and then this is the finest one, which lands on the finer
+    /// axis and oversamples the other.
+    pub fn resampling_spacing(&self) -> f32 {
+        if self.xs.len() < 2 || self.ys.len() < 2 {
+            return 0.0;
+        }
+        // Spans per meter that round to the axis's own span count.
+        let density = |axis: &[f32]| {
+            let extent = f64::from(axis[axis.len() - 1] - axis[0]);
+            let spans = (axis.len() - 1) as f64;
+            ((spans - 0.5) / extent, (spans + 0.5) / extent)
+        };
+        let ((x_lo, x_hi), (y_lo, y_hi)) = (density(&self.xs), density(&self.ys));
+        let (lo, hi) = (x_lo.max(y_lo), x_hi.min(y_hi));
+        if lo < hi {
+            (2.0 / (lo + hi)) as f32
+        } else {
+            self.finest_spacing()
+        }
     }
 
     /// Height at `(x, y)`, bilinearly interpolated and clamped to the grid
@@ -493,6 +521,34 @@ mod tests {
         assert_eq!(m.points.len(), 21 * 11);
         assert_eq!(m.face_vertex_counts.len(), 20 * 10);
         assert_eq!(m.face_vertex_indices.len(), m.face_vertex_counts.len() * 4);
+    }
+
+    /// A consumer fits whole spans of the resampling spacing across each axis,
+    /// rounding. On a grid whose axes step differently, that has to come out
+    /// at each axis's own span count, or the height field's rows slide off the
+    /// mesh's vertices: the finer axis's spacing, 30/69 m here, fits 51 spans
+    /// across 22 m where the mesh has 50. A grid capped on one axis has no
+    /// spacing that fits both, and gets the finest.
+    #[test]
+    fn the_resampling_spacing_lands_on_every_grid_line() {
+        let uneven = terrain_grid(&TerrainParams {
+            length: 30.0,
+            width: 22.0,
+            feature_size: 14.0,
+            ..default()
+        });
+        let spacing = uneven.resampling_spacing();
+        for axis in [&uneven.xs, &uneven.ys] {
+            let extent = axis[axis.len() - 1] - axis[0];
+            assert_eq!((extent / spacing).round() as usize, axis.len() - 1);
+        }
+
+        let capped = terrain_grid(&TerrainParams {
+            length: 200.0,
+            ..default()
+        });
+        assert_eq!(capped.xs.len(), MAX_SAMPLES);
+        assert_eq!(capped.resampling_spacing(), capped.finest_spacing());
     }
 
     /// Neither end of a slider may divide by zero or build a mesh nothing can
@@ -780,25 +836,10 @@ mod tests {
         // is the shape to stand on. Instancing goes in exchange, so that the
         // collider lands on a real prim rather than inside a prototype.
         assert_eq!(part.collision.as_deref(), Some(TRIANGLE_MESH));
-        // Sampled at the mesh's narrowest span, so a height field built from it
-        // resolves every span of a grid that is rectilinear but uneven.
-        let narrowest = |axis: usize| {
-            let mut coords: Vec<f32> = part.points.iter().map(|point| point[axis]).collect();
-            coords.sort_by(f32::total_cmp);
-            coords
-                .windows(2)
-                .map(|pair| pair[1] - pair[0])
-                .filter(|gap| *gap > 1e-3) // the same grid line, off in its last bits
-                .fold(f32::INFINITY, f32::min)
-        };
-        let spacing = part
-            .heightfield_resolution
-            .expect("the ground says how finely it is sampled");
-        assert!(
-            (spacing - narrowest(0).min(narrowest(1))).abs() < 1e-3,
-            "authored {spacing}, mesh spans {} and {}",
-            narrowest(0),
-            narrowest(1)
+        assert_eq!(
+            part.heightfield_resolution,
+            Some(terrain_grid(&TerrainParams::default()).resampling_spacing()),
+            "sampled where a height field lands on the mesh's vertices"
         );
         assert!(!terrain.instanceable);
     }

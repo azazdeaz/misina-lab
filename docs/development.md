@@ -97,7 +97,7 @@ for each package and publishes them. A manual run of it from a branch builds
 them without publishing.
 
 Publishing goes through PyPI's trusted publishing, so no token is stored. Each
-project's publisher on PyPI names the `azazdeaz/vinery-lab` repository, the
+project's publisher on PyPI names the `azazdeaz/misina-lab` repository, the
 `release.yml` workflow and the `pypi` environment. A project not on PyPI yet
 takes a pending publisher, which its first upload turns into the project.
 Renaming the repository means updating all three publishers.

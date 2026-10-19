@@ -17,7 +17,7 @@ dynamic = ["version"]
 dependencies = ["misina-lab==0.1.0"]
 
 [project.urls]
-Repository = "https://github.com/azazdeaz/vinery-lab"
+Repository = "https://github.com/azazdeaz/misina-lab"
 
 [tool.uv.sources]
 misina-lab = { workspace = true }

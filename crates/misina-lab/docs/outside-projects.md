@@ -4,9 +4,8 @@ A generator outside this repository depends on both halves of misina-lab:
 the Rust crate by git, and the Python package by version. Its repository
 holds one crate that is the generator, its viewer and its Python extension
 module at once. This page is what that crate needs beyond the generator's
-code, which is written as the [README](../README.md) shows. Below, `<repo>`
-stands for the URL of the git repository this crate is in, and `<commit>`
-for the commit a generator pins.
+code, which is written as the [README](../README.md) shows. Below,
+`<commit>` stands for the commit a generator pins.
 
 ## The layout
 
@@ -47,7 +46,7 @@ edition = "2024"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-misina-lab = { git = "<repo>", rev = "<commit>" }
+misina-lab = { git = "https://github.com/azazdeaz/misina-lab", rev = "<commit>" }
 bevy = "0.20.0"
 pyo3 = { version = "0.29", features = ["abi3-py312"], optional = true }
 
@@ -181,7 +180,7 @@ dynamic = ["version"]
 dependencies = ["misina-lab==0.1.0"]
 
 [tool.uv.sources]
-misina-lab = { git = "<repo>", rev = "<commit>", subdirectory = "python/misina-lab" }
+misina-lab = { git = "https://github.com/azazdeaz/misina-lab", rev = "<commit>", subdirectory = "python/misina-lab" }
 
 [tool.maturin]
 features = ["extension-module"]

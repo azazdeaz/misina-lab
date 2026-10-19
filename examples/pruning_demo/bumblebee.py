@@ -16,9 +16,10 @@ canes, so a cane the shear comes in on is pushed aside or funnelled into the
 mouth, and the moving blade carries it across the mouth onto the fixed one.
 Held there, it is cut where the moving blade's edge reaches its axis: tick by
 tick while the shear closes, `pruner.Stroke` looks along `Bumblebee.blade` at
-the blade's angle with `Shears.crossing` and cuts the first cane it closes on,
-and keeps the moving blade's collider standing at the cane while the blade
-itself closes on through it.
+the blade's angle with `Shears.crossing` and cuts every cane it closes on.
+The moving blade collides as `Shear.slices` pieces end to end along it, and
+`Stroke` stands each piece that reaches a held cane at the cane while the
+blade itself closes on through it; the rest go on with the blade.
 
 The robot drives with the row on its left: the rail is on the +Y edge of the
 deck, and the arm reaches out that way.
@@ -186,6 +187,13 @@ class Shear:
     """The body the blades are set in: a cube of this edge, holding the drive
     a real shear has -- Bumblebee's takes about 320 N to part an 8 mm cane."""
 
+    slices: int = 8
+    """How many pieces the moving blade collides as, end to end along it. A
+    piece that reaches a held cane stands there while the blade closes on
+    through it, and the others go on with the blade, so a centimetre each at
+    the default size -- about a cane across -- leaves the rest of the blade
+    colliding where it is drawn."""
+
     @property
     def bypass(self) -> float:
         """The moving plate's offset from the fixed one along the pivot: a
@@ -202,6 +210,13 @@ class Shear:
         half = self.opening / 2
         d = self.blade / (1 + math.sin(half))
         return -d * math.sin(half), d * math.cos(half)
+
+    @property
+    def spans(self) -> np.ndarray:
+        """Where each of the moving blade's `slices` lies along it, as (from,
+        to) out from the pivot, shape (slices, 2)."""
+        ends = np.linspace(0.0, self.blade, self.slices + 1)
+        return np.column_stack([ends[:-1], ends[1:]])
 
     @property
     def reach(self) -> float:
@@ -541,7 +556,7 @@ def _shear(m: Bumblebee) -> str:
   </joint>
   <link name="shear_link">
 {_box((0.0, 0.0, -s.head / 2), (s.head, s.head, s.head), "steel")}
-{_plate(s, 0.0, 1)}
+{_plate(s, 0.0, 1, [(0.0, s.blade)])}
     <inertial>
       <origin xyz="0 0 {-s.head / 2}"/>
       <mass value="0.5"/>
@@ -555,7 +570,7 @@ def _shear(m: Bumblebee) -> str:
     <limit lower="0" upper="{s.opening}" effort="10" velocity="6"/>
   </joint>
   <link name="{BLADE}">
-{_plate(s, s.bypass, -1)}
+{_plate(s, s.bypass, -1, s.spans)}
     <inertial>
       <origin xyz="0 0 {s.blade / 2}"/>
       <mass value="0.05"/>
@@ -565,10 +580,22 @@ def _shear(m: Bumblebee) -> str:
     return head
 
 
-def _plate(s: Shear, x: float, side: int) -> str:
+def _plate(s: Shear, x: float, side: int, spans) -> str:
     """One blade: a plate `x` along the pivot with its cutting edge on the
-    link's XZ plane, lying back from it towards `side` (+1 or -1) in Y."""
-    return _box((x, side * s.width / 2, s.blade / 2), (s.thickness, s.width, s.blade), "steel")
+    link's XZ plane, lying back from it towards `side` (+1 or -1) in Y. Drawn
+    whole, and colliding as one box per `spans`, each (from, to) out along it."""
+    y = side * s.width / 2
+    return "\n".join(
+        [
+            _box((x, y, s.blade / 2), (s.thickness, s.width, s.blade), "steel", ("visual",)),
+            *(
+                _box(
+                    (x, y, (z0 + z1) / 2), (s.thickness, s.width, z1 - z0), "steel", ("collision",)
+                )
+                for z0, z1 in spans
+            ),
+        ]
+    )
 
 
 def _joint(joint: Joint, parent: str, child: str) -> str:
@@ -583,12 +610,12 @@ def _joint(joint: Joint, parent: str, child: str) -> str:
   </joint>"""
 
 
-def _box(xyz, size, material: str) -> str:
+def _box(xyz, size, material: str, tags: tuple[str, ...] = ("visual", "collision")) -> str:
     shape = (
         f'      <origin xyz="{xyz[0]} {xyz[1]} {xyz[2]}"/>\n'
         f'      <geometry><box size="{size[0]} {size[1]} {size[2]}"/></geometry>'
     )
-    return _shaped(shape, ("visual", "collision"), material)
+    return _shaped(shape, tags, material)
 
 
 def _cylinder(xyz, rpy, radius: float, length: float, material: str) -> str:

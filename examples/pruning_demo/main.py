@@ -9,7 +9,8 @@ and the cutting `pruner`. With `--teleop` the keyboard drives and cuts
 instead: `teleop`.
 
 The row pruned, the physics backend and the viewer are command-line choices;
-`--help` lists the full launcher set. The default backend is Newton coupled
+`--help` lists the full launcher set, and `--colliders` draws every collider
+the physics steps over the scene. The default backend is Newton coupled
 with VBD, the one that bends and cuts a cane -- see `vinery_lab.isaaclab
 .physics`. Under any other the canes spawn static and nothing can be cut.
 """
@@ -29,6 +30,7 @@ from isaaclab.assets import Articulation
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
 from vinery_lab.isaaclab import (
+    ColliderView,
     CoverCfg,
     ParcelCfg,
     ShootCfg,
@@ -106,6 +108,14 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Hand the robot to the keyboard instead of the planner: the left hand drives, "
             "the right hand jogs the shear and cuts. The keys are in the README."
+        ),
+    )
+    parser.add_argument(
+        "--colliders",
+        action="store_true",
+        help=(
+            "Draw every collider the physics steps, translucent over the scene, kept in step "
+            "with the ones moved or resized while it runs: the shear's slices, a cut cane."
         ),
     )
     parser.add_argument(
@@ -367,9 +377,14 @@ def main():
             teleop = Teleop(machine, driver, shears)
             teleop.listen()
             show_keys()
+        colliders = ColliderView() if args_cli.colliders else None
         print(f"[INFO]: Setup complete, {len(vines)} vines to prune...")
-        for _ in run_simulator(sim, robot, machine, driver, vines, to_row, shears, teleop):
-            pass
+        steps = run_simulator(sim, robot, machine, driver, vines, to_row, shears, teleop)
+        for step, _ in enumerate(steps):
+            # Colliders only move on a control tick, when the stroke places
+            # the shear's slices or a cut reshapes a cane.
+            if colliders and step % DECIMATION == 0:
+                colliders.update()
 
 
 if __name__ == "__main__":

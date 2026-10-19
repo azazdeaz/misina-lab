@@ -2,8 +2,9 @@
 //!
 //! [`layout`] solves where the rows and paths go and spawns a prim for each,
 //! the fixtures fill those prims, and the crop grows on them: [`stem`] roots
-//! a plant on every block and hangs trusses off its stems, [`truss`] hangs
-//! fruit off those, and [`fruit`] shapes and colours them. Every element
+//! a plant on every block and hangs leaves and trusses off its stems, [`leaf`]
+//! builds the leaves from [`leaflet`] outlines, [`truss`] hangs fruit off the
+//! trusses, and [`fruit`] shapes and colours them. Every element
 //! holds its params and a build system that replaces everything it spawned
 //! whenever its params or the layout change. The panel, the config snippet and the Python classes
 //! are read off the params structs — see
@@ -16,6 +17,8 @@ pub mod floor;
 pub mod fruit;
 pub mod gutter;
 pub mod layout;
+pub mod leaf;
+pub mod leaflet;
 pub mod rail;
 pub mod stem;
 pub mod truss;
@@ -36,6 +39,7 @@ pub enum Grow {
     /// The floor, the rails, the gutters and the wires.
     Fixtures,
     Stems,
+    Leaves,
     Trusses,
     Fruit,
 }
@@ -48,6 +52,7 @@ pub fn plugin(app: &mut App) {
                 Grow::Layout,
                 Grow::Fixtures,
                 Grow::Stems,
+                Grow::Leaves,
                 Grow::Trusses,
                 Grow::Fruit,
             )
@@ -61,6 +66,7 @@ pub fn plugin(app: &mut App) {
             gutter::plugin,
             wire::plugin,
             stem::plugin,
+            leaf::plugin,
             truss::plugin,
             fruit::plugin,
         ));
@@ -94,6 +100,8 @@ misina_lab::generator! {
         pub wire: wire::WireParams,
         #[reflect(@Label("Stems"))]
         pub stem: stem::StemParams,
+        #[reflect(@Label("Leaves"))]
+        pub leaf: leaf::LeafParams,
         #[reflect(@Label("Trusses"))]
         pub truss: truss::TrussParams,
         pub fruit: fruit::FruitParams,
@@ -109,6 +117,12 @@ pub const STEEL: Response = Response {
 /// A box spanning `min` to `max`.
 pub fn cuboid(min: Vec3, max: Vec3) -> MeshData {
     box_mesh(1.0).transformed(&Transform::from_translation((min + max) / 2.0).with_scale(max - min))
+}
+
+/// `t` eased in and out over `0..1`.
+pub fn smooth(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 #[cfg(test)]
@@ -213,6 +227,8 @@ mod tests {
             ("unevenness", edited(|p| p.rail.unevenness = 1.5)),
             ("wire height", edited(|p| p.wire.height = 4.0)),
             ("lowered", edited(|p| p.stem.lowered = 0.0)),
+            ("leaves kept", edited(|p| p.stem.leaves_kept = 12)),
+            ("leaf length", edited(|p| p.leaf.length = 0.5)),
             ("peduncle", edited(|p| p.truss.peduncle_length = 0.1)),
             ("ripeness", edited(|p| p.fruit.ripe_trusses = 2.5)),
             ("seed", edited(|p| p.scene.seed = 7)),

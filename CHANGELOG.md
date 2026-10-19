@@ -20,6 +20,38 @@ Two kinds of change break a project that worked on the release before:
 
 ## [Unreleased]
 
+### Added
+
+- **misina-lab**: `ColliderView` draws every collider of the running Newton
+  model in Kit's viewport, translucent, and follows the ones moved or resized
+  while it runs. Kit draws only a PhysX scene's colliders.
+- **greenhouse-lab**: leaves. A compound tomato leaf at every node of a stem
+  from the head down, `leaves_kept` of them: a terminal leaflet, three or four
+  pairs of laterals and small leaflets between them, each leaflet outlined
+  from its veins. Leaves are small and upright at the head and droop further
+  down. The stem below them is stripped, with a stub at each node, so the
+  lowest two trusses always hang on bare stem. Leaves are visual only, with
+  no collider. New: `StemCfg.leaves_kept` and `LeafCfg`.
+
+### Changed
+
+- **misina-lab**: `Shears.colliders(body)` replaces `Shears.collider(body)`
+  and lists all of a body's collision shapes, so a part built of several, a
+  blade in slices, can have each moved on its own with `Shears.place`.
+- The repository is now
+  [azazdeaz/misina-lab](https://github.com/azazdeaz/misina-lab), and the web
+  playground moved with it to
+  [azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/).
+  The old repository URL redirects; the old playground URL does not.
+
+### Fixed
+
+- **misina-lab**: The ground's collider under Newton is the ground mesh again
+  on a field whose two axes step differently. The height field Newton builds
+  from it was sampled at the finer axis's spacing, which put its rows between
+  the mesh's along the other axis: millimetres off the drawn ground on gentle
+  ground, more on rough.
+
 ## [0.1.0] - Unreleased
 
 Scene document format 8. The first release.
@@ -60,7 +92,7 @@ Scene document format 8. The first release.
   and a dormant mode: bare canes with a bud at every node, every one of them
   cuttable.
 - **vinery-lab**: `VineyardCfg`, and the viewer as a
-  [web playground](https://azazdeaz.github.io/vinery-lab/).
+  [web playground](https://azazdeaz.github.io/misina-lab/).
 - **greenhouse-lab**: the rows of a high-wire tomato greenhouse. Floor, heating
   pipe rails, gutters with slabs and blocks, crop wires, and the crop on them:
   stems with their twine and hooks, trusses with a `Cut` and a `Bend` frame

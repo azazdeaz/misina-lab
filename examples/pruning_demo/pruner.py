@@ -12,15 +12,15 @@ mouth -- the blades along the approach, the pivot along the cane -- aimed
 afresh when its turn comes and again at the stand-off, and reached in two
 stages, a planned move to `STANDOFF` out and a straight line in, and the
 cuts on a vine are taken nearest neighbour first. Once the arm has settled
-the shear closes, and the moving blade cuts the first cane it closes on:
-the cut is where the blade's edge reaches that cane's axis once it lies
-against the fixed blade, made by `Shears` at that point, and a cane the
-blade never reaches -- pushed out of the mouth on the way in, or never in
-it -- is a miss. `Stroke` is that closing and opening, a tick at a time,
-the moving blade's collider stood at the cane once the blades hold it so
-the blade closes through the cane rather than crushing it; `Pruning` runs
-the whole sequence one vine at a time, and `Tally` keeps the paper's own
-score: cuts made, cuts made at the right place, and how long a vine took.
+the shear closes, and the moving blade cuts every cane it closes on: each
+cut is where the blade's edge reaches that cane's axis once it lies against
+the fixed blade, made by `Shears` at that point, and a cane the blade never
+reaches -- pushed out of the mouth on the way in, or never in it -- is a
+miss. `Stroke` is that closing and opening, a tick at a time, each slice of
+the moving blade's collider stood at a cane once the blades hold it so the
+blade closes through the cane rather than crushing it; `Pruning` runs the
+whole sequence one vine at a time, and `Tally` keeps the paper's own score:
+cuts made, cuts made at the right place, and how long a vine took.
 """
 
 from __future__ import annotations
@@ -96,8 +96,8 @@ SLACK = 0.05
 to count as there: the drive settles a little off its target."""
 
 GRIP = 0.001
-"""How far off a cane's surface the moving blade's collider stands once the
-blades hold it, in meters: a hair clear of the wood, not in it."""
+"""How far off a cane's surface a slice of the moving blade's collider stands
+once the blades hold it, in meters: a hair clear of the wood, not in it."""
 
 REACH_TOLERANCE = (0.01, 0.1)
 """How close the solver has to get a cut pose, in meters and radians, for
@@ -314,19 +314,21 @@ def reach(chain, tool: np.ndarray, pose: np.ndarray, q) -> tuple[np.ndarray, boo
 
 class Stroke:
     """The shear's moving blade, driven a control tick at a time: shut,
-    cutting one cane, or open again.
+    cutting every cane it closes on, or open again.
 
-    The blade's collider follows the blade until the cane it carries across
-    the mouth lies against the fixed blade. From there it stands where it is
-    while the blade closes on through the cane -- nothing is crushed between
-    the blades, and nothing the cane leans on is pulled from under it -- and
-    follows the blade again once that has opened back past it.
+    The blade collides as `Shear.slices` pieces end to end along it. Each
+    follows the blade until a cane it carries across the mouth lies against
+    the fixed blade and the piece reaches it. From there that piece stands
+    where it is while the blade closes on through the cane -- nothing is
+    crushed between the blades, and nothing the cane leans on is pulled from
+    under it -- and follows the blade again once that has opened back past
+    it. The pieces clear of every cane close with the blade, so its tip and
+    its root collide where they are drawn.
 
-    A stroke makes one cut, on the first cane against the fixed blade whose
-    axis the blade's edge passes. A cane the open blade was in already as the
-    stroke began -- gone into, not closed on -- is cut only if the edge passes
-    no other by the time the blades meet. Any other cane in the mouth is left
-    standing.
+    Every cane against the fixed blade is cut as the blade's edge passes its
+    axis, each at its own tick, and every cane between the blades as they
+    meet. One the open blade was in already as the stroke began -- gone
+    into, not closed on -- is cut only then, if it is between them still.
     """
 
     def __init__(self, machine: Bumblebee, shears: Shears):
@@ -337,103 +339,103 @@ class Stroke:
         self.machine, self.shears = machine, shears
         self.jaw = machine.shear.opening
         """The blade angle to hold."""
-        self.cut = False
-        """Whether the stroke has made its cut; cleared once the blade is sent
+        self.cuts = 0
+        """How many canes the stroke has cut; cleared once the blade is sent
         open."""
         self.inside: np.ndarray | None = None
         """The rod bodies the open blade was in already as the stroke began;
-        cleared with `cut`."""
-        self.held: float | None = None
-        """The blade angle the collider stands at, while the blade is shut
-        past it."""
+        cleared with `cuts`."""
         self.angle = machine.shear.opening
         """The blade's angle at the last tick."""
-        self.turned = 0.0
-        """How far back from the blade the collider was last placed, in
-        radians."""
         blade = next(i for i, label in enumerate(shears.labels) if label.endswith("/" + BLADE))
-        self._shape, self._rest = shears.collider(blade)
+        shapes, rest = shears.colliders(blade)
+        if len(shapes) != machine.shear.slices:
+            raise ValueError(
+                f"the moving blade collides as {len(shapes)} shapes, not its"
+                f" {machine.shear.slices} slices"
+            )
+        # Out from the pivot, the order `Shear.spans` gives them in.
+        order = np.argsort(rest[:, 2])
+        self._shapes, self._rest = shapes[order], rest[order]
+        self.held = np.full(len(shapes), np.nan)
+        """The blade angle each slice stands at while the blade is shut past
+        it, out from the pivot; NaN where it rides the blade."""
+        self.turned = np.zeros(len(shapes))
+        """How far back from the blade each slice was last placed, in
+        radians."""
 
     def tick(self, hand: np.ndarray, shear: float, closing: bool) -> bool:
         """Turn the target a `BLADE_STEP` shut, or open, and place the
-        collider. `hand` is the pose of the body the shear is on in world
-        coordinates and `shear` the blade's angle: shutting, the plate at
-        that angle makes the stroke's cut, once it has reached a cane to cut.
-        Returns whether the blade has got there -- the two blades met, or the
-        mouth fully open."""
+        slices. `hand` is the pose of the body the shear is on in world
+        coordinates and `shear` the blade's angle: shutting, the plate at that
+        angle cuts each cane it has reached. Returns whether the blade has got
+        there -- the two blades met, or the mouth fully open."""
         s = self.machine.shear
-        # The collider is written once a tick and rides the blade until the
-        # next, so it is placed for where the blade will be by then.
+        # A slice is written once a tick and rides the blade until the next,
+        # so it is placed for where the blade will be by then.
         ahead = shear + min(0.0, shear - self.angle)
         self.angle = shear
         if closing:
             self.jaw = max(self.jaw - BLADE_STEP, 0.0)
-            if self.held is None:
-                self.held = self._pinch(hand, ahead, shear)
+            self.held = np.where(np.isnan(self.held), self._pinched(hand, ahead, shear), self.held)
         else:
-            self.jaw, self.cut, self.inside = min(self.jaw + BLADE_STEP, s.opening), False, None
+            self.jaw, self.cuts, self.inside = min(self.jaw + BLADE_STEP, s.opening), 0, None
             # Released once the blade has opened back to it, or fully open:
-            # the drive need not reach an angle the collider was held at.
-            if self.held is not None and shear >= min(self.held, s.opening - SLACK):
-                self.held = None
-        turned = 0.0 if self.held is None else max(0.0, self.held - ahead)
-        if turned != self.turned:
-            self.turned = turned
-            self.shears.place(self._shape, _swung(self._rest, turned))
+            # the drive need not reach an angle a slice was held at.
+            self.held[shear >= np.minimum(self.held, s.opening - SLACK)] = np.nan
+        turned = np.where(np.isnan(self.held), 0.0, np.maximum(0.0, self.held - ahead))
+        for i in np.flatnonzero(turned != self.turned):
+            self.shears.place(self._shapes[i], _swung(self._rest[i], turned[i]))
+        self.turned = turned
         if not closing:
             return shear > s.opening - SLACK
         # The blades meeting cut a cane still between them: the last look is
         # along the plate at the stop, a thin cane's axis being closer to it
         # than the blade gets before it counts as shut.
         shut = shear < SLACK
-        if self.cut:
-            return shut
         hits, at, on = self.shears.crossing(
             *_placed(hand, *self.machine.blade(0.0 if shut else shear))
         )
         bodies = self.shears.bodies[hits]
         if self.inside is None:
             self.inside = bodies
-        # The canes the edge has passed, by how far it has turned past each:
-        # the first it passed is cut, or the next, where `Shears.cut` takes
-        # nothing -- at a rod's very end. One the blade was in already counts
-        # only as the blades meet, and only if the edge passed none. Until
-        # then, a cane counts only lying against the fixed blade: one the
-        # moving blade still carries across the mouth can sink into it past
-        # its own axis.
-        behind, out = (1 - on[:, 0]) * s.width, on[:, 1] * s.blade
-        passed = ~np.isin(bodies, self.inside)
-        if not shut:
+        if shut:
+            due = np.ones(len(hits), dtype=bool)
+        else:
+            # Until then, a cane counts only lying against the fixed blade:
+            # one the moving blade still carries across the mouth can sink
+            # into it past its own axis.
+            behind, out = (1 - on[:, 0]) * s.width, on[:, 1] * s.blade
             off = behind * math.cos(shear) + out * math.sin(shear)
-            passed &= off <= self.shears.radius[hits] + GRIP
-        elif not passed.any():
-            passed[:] = True
-        past = np.arctan2(behind, out)
-        for i in np.flatnonzero(passed)[np.argsort(-past[passed])]:
-            if self.shears.cut(int(bodies[i]), float(at[i])):
-                self.cut = True
-                break
+            due = ~np.isin(bodies, self.inside) & (off <= self.shears.radius[hits] + GRIP)
+        # In body order, nearest the wood first along a rod: a rod through the
+        # plate twice is cut where it is nearer the wood, and the other
+        # crossing falls with the piece.
+        for i in np.flatnonzero(due):
+            if not self.shears.loose[hits[i]]:
+                self.cuts += self.shears.cut(int(bodies[i]), float(at[i]))
         return shut
 
-    def _pinch(self, hand: np.ndarray, ahead: float, shear: float) -> float | None:
-        """The angle to stand the collider at: where a cane across the mouth,
-        within the blades' reach, lies against the fixed blade and the moving
-        edge reaches it by `ahead`, the angle at which it does -- or the
-        blade's own `shear`, if that is past it already. None while no cane
-        is held."""
+    def _pinched(self, hand: np.ndarray, ahead: float, shear: float) -> np.ndarray:
+        """The angle to stand each slice at, NaN for one to leave on the
+        blade. Where a cane across the mouth, within the blades' reach, lies
+        against the fixed blade and the moving edge reaches it by `ahead`,
+        every slice along which the edge meets it stands at the angle it does
+        -- or at the blade's own `shear`, if that is past it already; a slice
+        two canes reach stands at the first the edge touches."""
         s = self.machine.shear
+        stand = np.full(s.slices, np.nan)
         hits, _, on = self.shears.crossing(*_placed(hand, *self.machine.wedge()))
-        held = []
         for i, (a, b) in zip(hits, on, strict=True):
             y, z, radius = s.reach * (a - 1), s.blade * b, self.shears.radius[i] + GRIP
-            within = -y <= radius and math.hypot(y, z) <= s.blade
-            if within and (pinch := s.pinch(y, z, radius)) >= ahead:
-                held.append(min(pinch, shear))
-        # ponytail: the collider stands at one cane, the first the edge
-        # touches, since standing at a second would squeeze the first; the
-        # blade closes through the other uncut -- or through this one, if
-        # `tick` cut another the edge passed first. Two in one mouth is rare.
-        return max(held, default=None)
+            out = math.hypot(y, z)
+            if -y > radius or out > s.blade or (pinch := s.pinch(y, z, radius)) < ahead:
+                continue
+            # From first touch until it passes the axis, the edge meets the
+            # cane within a radius of the axis's own distance out.
+            along = (s.spans[:, 0] < out + radius) & (s.spans[:, 1] > out - radius)
+            stand[along] = np.fmax(stand[along], min(pinch, shear))
+        return stand
 
     def fouled(self, hand: np.ndarray) -> bool:
         """Whether a piece cut free lies in the mouth, `hand` being the pose
@@ -632,7 +634,7 @@ class Pruning:
             # Once the blades have met, the cut is scored by the buds either
             # side of where it was planned.
             if self.stroke.tick(hand, shear, closing=True):
-                made = self.stroke.cut
+                made = self.stroke.cuts > 0
                 self.tally.made += made
                 self.tally.correct += made and (
                     attached(cut.kept, self.shears, self.stage)

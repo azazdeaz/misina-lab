@@ -31,6 +31,7 @@ class FakeShears:
     labels = ["/robot/blade_link"]
     bodies = np.array([0])
     radius = np.array([0.005])
+    loose = np.array([False])
 
     def __init__(self):
         self.cuts = 0
@@ -42,8 +43,11 @@ class FakeShears:
         self.cuts += 1
         return True
 
-    def collider(self, body: int):
-        return 0, np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
+    def colliders(self, body: int):
+        slices = MACHINE.shear.slices
+        rest = np.zeros((slices, 7))
+        rest[:, 2], rest[:, 6] = MACHINE.shear.spans.mean(axis=1), 1.0
+        return np.arange(slices), rest
 
     def place(self, shape: int, pose: np.ndarray) -> None:
         pass

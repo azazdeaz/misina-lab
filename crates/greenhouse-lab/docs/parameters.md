@@ -81,15 +81,30 @@ The two crop wires over every gutter, which the stems are trained up to in a V.
 
 The crop's stems: two to a plant, trained alternately to the left and the right wire, and lowered as they grow.
 
-Each stem lies `lowered` meters along the gutter, then rises to its hook, with its head a hook's length below the wire. The stem between `harvest_height` and the head carries `trusses` trusses at every third node, so how much stem a truss takes follows from the wire height rather than being set.
+Each stem lies `lowered` meters along the gutter, then rises to its hook, with its head a hook's length below the wire. The stem between `harvest_height` and the head carries `trusses` trusses with three leaves to each, so how much stem a truss takes follows from the wire height rather than being set. Only the top `leaves_kept` leaves are left on; the stem below them is stripped bare.
 
 | Parameter | Type | Default | Slider range | Description |
 |---|---|---|---|---|
 | `harvest_height` | float | `1.2` | 0.8 to 1.8 | Height above the floor of the lowest truss still on a stem, in meters: where a harvesting arm reaches to. The stem below it has been picked and stripped bare. |
 | `trusses` | int | `9` | 6 to 12 | Trusses on a stem, from the lowest still on it up to the head. |
+| `leaves_kept` | int | `16` | 10 to 21 | Leaves on a stem, counted down from the head. Growers strip the ones below, so the stem under them is bare, and the lowest two trusses always hang on bare stem however many are kept. |
 | `lowered` | float | `2.0` | 0 to 6 | Length of bare stem lying beside the gutter, in meters: how far into the season the crop is, at about 25 cm of lowering a week. 0 is a crop before its first lowering. |
 | `extra_stems` | float | `0.0` | 0 to 0.5 | Share of plants grown on with a third stem, which growers keep to raise the stem density. |
 | `turned_to_path` | float | `0.8` | 0 to 1 | Share of trusses turned to face the path. The rest face anywhere, into the crop as often as not, where a harvester has to skip them. |
+
+## Leaves
+
+`LeafParams` in Python, `LeafCfg` in Isaac Lab.
+
+The leaves: a compound leaf at each of a stem's top nodes, as many as the stem keeps.
+
+A leaf is a petiole and a rachis with a terminal leaflet, three or four pairs of laterals and small leaflets between the pairs. The leaves near the head are still growing, small and upright; a couple of trusses down they are full grown, and the older they are the more they droop. Every leaf draws its own size, angle, droop and leaflet count about these. Leaves are visual only, with no collider.
+
+| Parameter | Type | Default | Slider range | Description |
+|---|---|---|---|---|
+| `length` | float | `0.45` | 0.3 to 0.6 | Length of a full-grown leaf, from the stem to the tip of its terminal leaflet, in meters. Each leaf draws a little more or less. |
+| `droop` | float | `90.0` | 0 to 150 | How far an old leaf's rachis bends down from where it leaves the stem to its tip, in degrees. The young leaves near the head droop less. |
+| `variations` | int | `32` | 1 to 128 | How many distinct leaf meshes the scene may hold. A budget, not a count: the leaves are clustered and this is how many representatives the clustering may keep. |
 
 ## Trusses
 

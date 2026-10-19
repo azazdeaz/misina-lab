@@ -18,12 +18,14 @@ except ImportError as err:  # pragma: no cover - depends on the environment
         " write_usd() directly to generate a scene without it."
     ) from err
 
+from .colliders import ColliderView
 from .cutting import Shears
 from .rods import CABLE, PLANT_GROUPS, SCENE_GROUP, make_physics_cfg_newton, steps_rods, tune_rods
 from .spawn import GeneratedSceneCfg, resolve_usd_path, spawn_generated, to_params
 
 __all__ = [
     "CABLE",
+    "ColliderView",
     "PLANT_GROUPS",
     "SCENE_GROUP",
     "GeneratedSceneCfg",
