@@ -80,7 +80,7 @@ ROBOT_PATH = "/World/Robot"
 # canes around the one it is cutting, and the shear -- its head and fixed
 # blade ride on the last wrist, its moving blade on a link of its own. Each
 # costs a proxy in the solver that bends them, so the chassis stays out.
-ROBOT_CONTACT = [rf"{ROBOT_PATH}/.*(shoulder_lift|elbow|wrist_[123]|blade)_link"]
+ROBOT_CONTACT = [rf"{ROBOT_PATH}/.*(upper_arm|forearm|wrist_[123]|blade)_link"]
 
 # Bumblebee's own figures, to read the tally against.
 PAPER = "Bumblebee: 87% of cuts made at the right place, 213 s per vine, 68% reachable"

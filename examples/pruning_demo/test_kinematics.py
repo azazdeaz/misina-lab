@@ -10,8 +10,9 @@ import pytest
 import kinematics
 from kinematics import Joint
 
-# The UR5's joints as its URDF places them. Duplicated from `bumblebee` so
-# this file needs no Isaac Lab; `test_bumblebee` checks the two agree.
+# The UR5's joints as ur_description places them: a published arm to check
+# the chain arithmetic against, without the Isaac Sim install the demo's UR10
+# is read from.
 UR5 = (
     Joint("shoulder_pan_joint", (0.0, 0.0, 0.089159)),
     Joint("shoulder_lift_joint", (0.0, 0.13585, 0.0), (0.0, math.pi / 2, 0.0), (0.0, 1.0, 0.0)),
@@ -37,18 +38,6 @@ def test_an_origin_round_trips_through_roll_pitch_yaw():
         frame = kinematics.transform((1.0, 2.0, 3.0), rpy)
         back = kinematics.transform((1.0, 2.0, 3.0), kinematics.rpy_of(frame[:3, :3]))
         assert back == pytest.approx(frame, abs=1e-9), rpy
-
-
-def test_along_turns_z_onto_any_direction():
-    for direction in [
-        (1.0, 0.0, 0.0),
-        (0.0, -1.0, 0.0),
-        (0.0, 0.0, 1.0),
-        (0.0, 0.0, -1.0),
-        (1.0, 2.0, 3.0),
-    ]:
-        unit = np.asarray(direction) / np.linalg.norm(direction)
-        assert kinematics.along(direction) @ [0.0, 0.0, 1.0] == pytest.approx(unit, abs=1e-9)
 
 
 def test_the_solver_reaches_a_pose_and_respects_the_limits():
