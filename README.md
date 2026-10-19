@@ -1,6 +1,6 @@
 :warning: Developer preview. Expect breaking changes.
 
-[![CI](https://github.com/azazdeaz/vinery-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/azazdeaz/vinery-lab/actions/workflows/ci.yml)
+[![CI](https://github.com/azazdeaz/misina-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/azazdeaz/misina-lab/actions/workflows/ci.yml)
 
 # Vinery Lab :grapes:
 
@@ -16,7 +16,7 @@ Open-source parametric vineyard generator for developing and testing vineyard ro
 *Standalone parameter editor and visualizer app*
 
 
-> Try the parameter editor in your browser: [azazdeaz.github.io/vinery-lab](https://azazdeaz.github.io/vinery-lab/) — bit slower and needs WebGPU.
+> Try the parameter editor in your browser: [azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/) — bit slower and needs WebGPU.
 
 
 
