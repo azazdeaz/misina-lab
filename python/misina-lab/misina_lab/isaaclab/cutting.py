@@ -14,10 +14,19 @@ finalized, and the CUDA graph a step replays holds pointers into them. A value
 written into one of those arrays in place is seen by the next replay; a new
 body, or anything that reallocates, is not. So a cut only writes values.
 
+Two bodies a joint ties never collide: the pair is left out of the list of
+shape pairs the broad phase tests, which is fixed with the model, and turning
+the joint off does not put it back. So `rods.ContactSlots` reserves a spare
+row of that list per rod joint, parked on a pair that never meets, and a cut
+writes the joint's own pair into it. Each capsule's round end reaches a
+radius past the cut, into the other, so both are pulled back that far at the
+cut face, to touch there rather than be shoved apart.
+
 Under the coupled solver each entry steps its own copy of the model's arrays.
 The body and joint copies are refreshed from the model by a model-change
-notification. The shape copies are written directly: the shape refresh clones
-the contact-pair list anew, and the graph would go on reading the old one.
+notification. The shape copies, and the contact-pair list, are written
+directly: the shape refresh clones the contact-pair list anew, and the graph
+would go on reading the old one.
 
 The rendered organ follows. The tube drawn along a segment is rescaled to its
 capsule's new length, and whatever hangs off the shortened segment past the
@@ -103,6 +112,9 @@ class Shears:
         self._center = placed[:, 2].copy()
         # The tube each body is drawn with was built at this length.
         self._drawn = self._half.copy()
+        # How far each capsule's collider stops short of its span at the end
+        # nearer the wood and at the far end: a radius at a cut face.
+        self._pull = np.zeros((len(self.bodies), 2))
 
         self.labels = list(model.body_label)
         """Every body's label, by model index. A rod body's is the prim path
@@ -122,6 +134,19 @@ class Shears:
             raise ValueError(
                 "a solver entry renumbers the shapes; its copy cannot be written by index"
             )
+        # The copies of the contact-pair list that pair a rod with anything:
+        # the model's, and the entry's that steps the rods. Each ends with
+        # the reserved rows, still parked, or it is not the list reserved on.
+        from . import rods
+
+        self._slots = rods.contact_slots(model)
+        self._pair_copies = []
+        for copy in self._shape_copies:
+            pairs = copy.shape_contact_pairs.numpy().reshape(-1, 2)
+            if self._slots.count and not (pairs[-self._slots.count :] == self._slots.parked).all():
+                raise ValueError("a contact-pair list does not end with the rows reserved on it")
+            if np.isin(pairs, self._shape).any():
+                self._pair_copies.append(copy)
 
         self.loose = np.zeros(len(self.bodies), dtype=bool)
         """Which bodies are cut free of their rod, in `bodies` order."""
@@ -257,25 +282,28 @@ class Shears:
 
         self._manager.add_model_change(ModelFlags.BODY_INERTIAL_PROPERTIES)
 
-    def _reshape(self, i: int, mass: float) -> None:
-        """Write body `i`'s capsule span and `mass` into the model, and redraw
-        its tube to match."""
+    def _reshape(self, i: int, mass: float | None = None) -> None:
+        """Write body `i`'s capsule span into the model, its collider pulled
+        back from the span's ends by `_pull`, and `mass` if given, and redraw
+        its tube to the span."""
         half, center, radius = self._half[i], self._center[i], self.radius[i]
         body, shape = int(self.bodies[i]), int(self._shape[i])
+        root, tip = self._pull[i]
+        reach, middle = max(half - (root + tip) / 2, 0.0), center + (root - tip) / 2
 
         def moved(transform):
-            transform[2] = center
+            transform[2] = middle
             return transform
 
         def resized(scale):
-            scale[1] = half
+            scale[1] = reach
             return scale
 
         copies = self._shape_copies
         _write([copy.shape_transform for copy in copies], shape, moved)
         _write([copy.shape_scale for copy in copies], shape, resized)
-        _write([copy.shape_collision_radius for copy in copies], shape, lambda _: half + radius)
-        if mass > 0:
+        _write([copy.shape_collision_radius for copy in copies], shape, lambda _: reach + radius)
+        if mass is not None and mass > 0:
             # A solid cylinder about its middle: a capsule this slender is one.
             across = mass * (3 * radius**2 + (2 * half) ** 2) / 12
             inertia = np.diag([across, across, mass * radius**2 / 2])
@@ -297,7 +325,16 @@ class Shears:
             xform.SetScale(Gf.Vec3f(1.0, 1.0, float(half / self._drawn[i])))
 
     def _release(self, joint: int) -> None:
-        """Turn `joint` off, and mark everything past it as loose."""
+        """Turn `joint` off, let the two bodies it tied meet at the cut, and
+        mark everything past it as loose."""
+        stub, piece = self._index[int(self._parent[joint])], self._index[int(self._child[joint])]
+        self._pull[stub, 1], self._pull[piece, 0] = self.radius[stub], self.radius[piece]
+        self._reshape(stub)
+        self._reshape(piece)
+        pair = sorted((int(self._shape[stub]), int(self._shape[piece])))
+        for copy in self._pair_copies:
+            row = len(copy.shape_contact_pairs) - self._slots.count + self._slots.row[joint]
+            _write([copy.shape_contact_pairs], row, lambda _: pair)
         body = int(self._child[joint])
         self._disable(joint)
         while True:

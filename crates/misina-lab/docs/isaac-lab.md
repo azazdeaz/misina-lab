@@ -85,13 +85,9 @@ grouping the model holds a candidate pair for every two segments in the
 scene. The tuning numbers were measured on a metre-long, centimetre-thick
 rod; `rods.py` says what each one does and what went wrong at other values.
 
-`Shears` cuts a rod anywhere along it while the simulation runs. Newton
-sizes its arrays when the model is finalized and the CUDA graph holds
-pointers into them, so a cut only writes values: the capsule the cut lands
-on is shortened, the next one is stretched back to start there, the mass
-moves with the length, and the joint between them goes. Everything past the
-cut falls away as a chain of its own. Build one after the first reset and
-keep it; it tracks which rods are cut.
+`Shears` cuts a rod anywhere along it while the simulation runs, and the
+piece lands on the stub it was cut from. How, given that Newton allows no
+new body once the model is built, is [cutting.md](cutting.md).
 
 ## Moving a collider
 
@@ -136,6 +132,6 @@ it is called.
 
 - [`misina_lab/isaaclab/spawn.py`](../../../python/misina-lab/misina_lab/isaaclab/spawn.py): `GeneratedSceneCfg`, `spawn_generated`, `resolve_usd_path`, `to_params`, and the cache key
 - [`misina_lab/isaaclab/rods.py`](../../../python/misina-lab/misina_lab/isaaclab/rods.py): `make_physics_cfg_newton`, `tune_rods`, and the numbers
-- [`misina_lab/isaaclab/cutting.py`](../../../python/misina-lab/misina_lab/isaaclab/cutting.py): `Shears`, and `Shears.colliders` and `Shears.place` for a collider that moves
+- [`misina_lab/isaaclab/cutting.py`](../../../python/misina-lab/misina_lab/isaaclab/cutting.py): `Shears.colliders` and `Shears.place` for a collider that moves; the cut itself is [cutting.md](cutting.md)
 - [`misina_lab/isaaclab/colliders.py`](../../../python/misina-lab/misina_lab/isaaclab/colliders.py): `ColliderView`
 - [`src/scene/mod.rs`](../src/scene/mod.rs): `cable`, what the Rust side authors
