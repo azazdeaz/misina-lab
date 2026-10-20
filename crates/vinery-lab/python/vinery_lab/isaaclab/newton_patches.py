@@ -21,7 +21,7 @@ def fix_heightfield_offsets() -> None:
     it sinks by the same amount. Only the MuJoCo CPU model keeps the offset, so
     copy it back from there.
 
-    Unfiled upstream as of newton 1.6.0.dev0; the nearest report,
+    Unfiled upstream as of newton 1.6.1; the nearest report,
     newton-physics/newton#3897, is a different path (SolverXPBD, fixed).
 
     Call once the solver exists, i.e. after `SimulationContext.reset()`.

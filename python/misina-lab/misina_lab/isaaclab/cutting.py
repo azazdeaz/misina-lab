@@ -81,7 +81,7 @@ class Shears:
 
         self._manager = NewtonManager
         self._stage = stage if stage is not None else sim_utils.get_current_stage()
-        model = self._model = NewtonManager._model
+        model = self._model = NewtonManager.get_model()
         if model is None:
             raise RuntimeError(
                 "no Newton model to cut: build Shears after the first reset, under Newton"
@@ -238,13 +238,13 @@ class Shears:
         """Where body `body` is now, as its world position and (x, y, z, w)
         rotation in one array of 7. A prim authored under the body's segment
         follows it: its world placement is this pose applied to its own."""
-        return self._manager._state_0.body_q.numpy()[body]
+        return self._manager.get_state_0().body_q.numpy()[body]
 
     def capsules(self) -> tuple[np.ndarray, np.ndarray]:
         """Each rod body's capsule axis in world coordinates, as its end nearer
         the wood and its far end -- shapes (N, 3) and (N, 3), in `bodies`
         order. With `loose`, where the pieces cut free lie."""
-        pose = self._manager._state_0.body_q.numpy()[self.bodies]
+        pose = self._manager.get_state_0().body_q.numpy()[self.bodies]
         axis = _rotate_z(pose[:, 3:])
         return (
             pose[:, :3] + axis * (self._center - self._half)[:, None],

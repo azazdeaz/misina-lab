@@ -8,6 +8,8 @@ queued model changes first, then the contacts, then the solver.
 
 from __future__ import annotations
 
+import types
+
 import pytest
 
 try:
@@ -20,7 +22,7 @@ except ImportError:
 import numpy as np  # noqa: E402
 import warp as wp  # noqa: E402
 from isaaclab_newton.physics import NewtonManager  # noqa: E402
-from newton import BodyFlags, CollisionPipeline, ModelBuilder  # noqa: E402
+from newton import BodyFlags, CollisionPipeline, ModelBuilder, Rod  # noqa: E402
 from newton.solvers import SolverVBD  # noqa: E402
 from pxr import Usd, UsdGeom, UsdShade  # noqa: E402
 
@@ -44,8 +46,7 @@ class Rig:
         along = wp.vec3(0.0, 0.0, 1.0) if upright else wp.vec3(1.0, 0.0, 0.0)
         positions = [wp.vec3(0.0, 0.0, 1.0) + along * (SEGMENT * i) for i in range(5)]
         self.bodies, self.joints = builder.add_rod(
-            positions,
-            radius=0.01,
+            rod=Rod(positions, radius=0.01),
             bend_stiffness=100.0,
             label="/rod",
             body_frame_origin="com",
@@ -63,9 +64,10 @@ class Rig:
         self.control = self.model.control()
         self.collision = CollisionPipeline(self.model)
         self.contacts = self.collision.contacts()
-        monkeypatch.setattr(NewtonManager, "_model", self.model)
+        # What `get_model()` and `get_state_0()` read.
+        self.backend = types.SimpleNamespace(model=self.model, state_0=self.state)
+        monkeypatch.setattr(NewtonManager, "backend", self.backend)
         monkeypatch.setattr(NewtonManager, "_solver", self.solver)
-        monkeypatch.setattr(NewtonManager, "_state_0", self.state)
         monkeypatch.setattr(NewtonManager, "_model_changes", set())
         self.shears = cutting.Shears(Usd.Stage.CreateInMemory())
 
@@ -77,7 +79,7 @@ class Rig:
             self.collision.collide(self.state, self.contacts)
             self.solver.step(self.state, self.next, self.control, self.contacts, DT)
             self.state, self.next = self.next, self.state
-            NewtonManager._state_0 = self.state
+            self.backend.state_0 = self.state
 
     def height(self) -> np.ndarray:
         return self.state.body_q.numpy()[self.bodies, 2]
