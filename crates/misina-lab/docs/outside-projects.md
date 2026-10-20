@@ -60,17 +60,11 @@ opt-level = 1
 
 [profile.dev.package."*"]
 opt-level = 3
-
-[patch.crates-io]
-bevy_panorbit_camera = { git = "https://github.com/azazdeaz/bevy_panorbit_camera", rev = "f71b07c323757b842b03a5d1638759362017f45c" }
 ```
 
-- **`[patch.crates-io]` and `[profile]`** are read only from the root
-  manifest of a build, so they are copied from the
-  [root `Cargo.toml`](../../../Cargo.toml) at `<commit>`. Without the patch,
-  crates.io's `bevy_panorbit_camera` brings a second, older Bevy into the
-  build. The profile optimizes the dependencies, so a debug viewer runs at a
-  usable frame rate.
+- **`[profile]`** is read only from the root manifest of a build, so it is
+  copied from the [root `Cargo.toml`](../../../Cargo.toml) at `<commit>`. It
+  optimizes the dependencies, so a debug viewer runs at a usable frame rate.
 - **`bevy`** is misina-lab's version. Its features are not copied: Cargo
   turns on the ones misina-lab asks for on the one Bevy in the build.
 - **`pyo3`** is misina-lab's minor version. `pyo3-ffi` declares
@@ -212,7 +206,7 @@ in `Cargo.toml` and `misina-lab==X.Y.Z` in `pyproject.toml`, with no
 installs only beside misina-lab installed from git.
 
 Moving to a new misina-lab is one commit: both pins; the `bevy` and `pyo3`
-versions and the `[patch.crates-io]` lines as the new commit has them; and
+versions and the `[profile]` lines as the new commit has them; and
 whatever `cargo test` then reports stale, rewritten by `regen_params`.
 
 ## AGENTS.md
@@ -254,5 +248,5 @@ the `manifest_path` that `cargo metadata --format-version 1` gives the
 - [`src/params.rs`](../src/params.rs): `generator!`, and the `module` function it writes
 - [`src/codegen.rs`](../src/codegen.rs): `targets`, the files and their regions; `stale`, what both tests call
 - [`Cargo.toml`](../Cargo.toml): the `pyo3` version a generator matches
-- [the root `Cargo.toml`](../../../Cargo.toml): the `bevy` version, and the `[patch.crates-io]` and `[profile.dev]` lines a generator copies
+- [the root `Cargo.toml`](../../../Cargo.toml): the `bevy` version, and the `[profile.dev]` lines a generator copies
 - [`python/misina-lab/pyproject.toml`](../../../python/misina-lab/pyproject.toml): the version the Python pin names
