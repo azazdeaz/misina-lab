@@ -17,7 +17,7 @@ rebuilds it.
 
 How the binding surface is shaped — why fragments are `Py<T>`, what
 `write_usd` releases the GIL around — is in the framework's
-[generators.md](../crates/misina-lab/docs/generators.md#the-python-module).
+[generators.md](crates/misina-lab/docs/generators.md#the-python-module).
 
 ### Iterating on the wrapper itself
 
@@ -58,10 +58,11 @@ Each generator's `python` feature is what puts the PyO3 side — `crates/misina-
 and what the `generator!` macro emits — in front of clippy. It is out of the
 default feature set, so a plain `cargo clippy` never sees it.
 
-`cargo test` also fails while the Python stub, the Isaac Lab cfg classes or
-`docs/parameters.md` are stale against the Rust params structs they are
-generated from. `cargo test regen_params -- --ignored` rewrites them — see
-[editing-parameters.md](../crates/misina-lab/docs/editing-parameters.md).
+`cargo test` also fails while a generator's Python stub, its Isaac Lab cfg
+classes or its `docs/parameters.md` are stale against the Rust params
+structs they are generated from. `cargo test regen_params -- --ignored`
+rewrites them — see
+[editing-parameters.md](crates/misina-lab/docs/editing-parameters.md).
 
 Isaac Lab is not installed on the runner, so `tests/test_isaaclab_cfg.py` skips
 itself there. It runs locally, from the demo venv:
@@ -110,7 +111,7 @@ Renaming the repository means updating all three publishers.
 The panel is built from the params structs: one section per fragment of
 `VineyardParams`, one control per field, with the caption, range and tooltip
 read off the field's declaration — see `crates/misina-lab/src/ui.rs` and
-[editing-parameters.md](../crates/misina-lab/docs/editing-parameters.md). Sliders write a
+[editing-parameters.md](crates/misina-lab/docs/editing-parameters.md). Sliders write a
 staged copy of the params; a value reaches the live resources once it has held
 still for 150 ms, and re-runs the layers below it. Dragging one is a single
 rebuild rather than one per frame.
@@ -147,30 +148,34 @@ of camera moves and panel edits, then quits. With `VINERY_LAB_RECORD` set too
 its clock advances one video frame per rendered frame, so the recording is
 smooth however long the rebuilds take; `docs/video/record.sh` records the
 README video that way. See `crates/misina-lab/src/tour.rs`, and
-[the skill](../.claude/skills/readme-video/SKILL.md) for changing the video.
+[the skill](.claude/skills/readme-video/SKILL.md) for changing the video.
 
 The pruning demo's video is filmed in Isaac Sim instead, headless:
 `examples/pruning_demo/record.sh` runs the demo's `video.py`, which samples
 an RTX camera on the simulation's clock. Both scripts encode what they record
 with `docs/video/encode.sh`. See
-[its skill](../.claude/skills/pruning-video/SKILL.md) for changing it.
+[its skill](.claude/skills/pruning-video/SKILL.md) for changing it.
 `docs/video/publish.sh` uploads either video to the branch's pull request
 and puts the link GitHub gives it in its README.
 
 ### Web build
 
-The same viewer, compiled to wasm and published by the manually triggered
-`.github/workflows/playground.yml`. To reproduce what it does locally:
+The same viewer, compiled to wasm, is the playground at
+[azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/).
+The manually triggered `.github/workflows/playground.yml` builds it and
+attaches the bundle to the `playground` release, which the site is deployed
+from; see [Docs site](#docs-site). To reproduce the build locally:
 
     rustup target add wasm32-unknown-unknown
     cargo install wasm-bindgen-cli --version 0.2.127   # must match Cargo.lock
     cargo build --profile wasm-release --target wasm32-unknown-unknown --bin vinery-lab
-    mkdir -p site && cp web/index.html site/
-    wasm-bindgen --target web --no-typescript --out-dir site \
+    mkdir -p site/playground/vinery && cp web/index.html site/playground/vinery/
+    wasm-bindgen --target web --no-typescript --out-dir site/playground/vinery \
       target/wasm32-unknown-unknown/wasm-release/vinery-lab.wasm
-    python3 -m http.server -d site 8000
+    python3 -m http.server -d site 8000      # localhost:8000/playground/vinery/
 
-Serve it rather than opening the file: the module is fetched, and `localhost`
+A docs build empties `site/` first, so build the playground after it. Serve
+it rather than opening the file: the module is fetched, and `localhost`
 is a secure context, which both WebGPU and the clipboard require.
 
 Two things differ from the native build. The renderer is WebGPU — the `webgpu`
@@ -178,3 +183,26 @@ feature in `crates/vinery-lab/Cargo.toml` is target-gated, and WebGL2 would lose
 which this many meshes need. And the `S` key is compiled out, since there is no
 filesystem to write `scene.json` to; **Copy Isaac Lab cfg** is the whole export
 path on the web.
+
+## Docs site
+
+[azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/) is
+built with [Zensical](https://zensical.org) from the pages where they live in
+the repository. The nav in `zensical.toml` lists every page on the site by
+its path, and `web/stage_docs.py` copies those pages to `target/docs` under
+the same paths: a link between two pages works as written, and every other
+link, to source or to a page left off the site, is pointed at GitHub at the
+commit being built. `tests/test_docs.py` fails while a page of a docs folder
+is missing from the nav.
+
+    python3 web/stage_docs.py
+    uv run --only-group docs zensical serve    # localhost:8000
+
+The server rebuilds when the staged copy changes, so re-run the script after
+editing a page. `zensical build` writes the site to `site/` instead.
+
+`.github/workflows/pages.yml` builds the site on every push to main and after
+every successful playground build, unpacks each bundle of the `playground`
+release under `/playground/`, and deploys the lot. A Pages deploy replaces the
+whole site, so it is the only workflow that deploys. It fails while that
+release does not exist, so the Playground workflow has to have run once.

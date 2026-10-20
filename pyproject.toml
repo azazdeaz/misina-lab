@@ -6,6 +6,8 @@ members = ["crates/vinery-lab", "crates/greenhouse-lab", "python/misina-lab"]
 
 [dependency-groups]
 dev = ["pytest", "ruff~=0.14.0", "mypy~=1.18"]
+# Pinned exactly: zensical is pre-1.0 and releases every few days.
+docs = ["zensical==0.0.71"]
 
 [tool.ruff]
 # rustfmt's width, so one number covers both halves of the repo.

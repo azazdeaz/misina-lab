@@ -1,0 +1,85 @@
+# The docs site, built from the pages where they live in the repository:
+# web/stage_docs.py copies them to `docs_dir` first. DEVELOPMENT.md says how to
+# build and preview it.
+[project]
+site_name = "Misina Lab"
+site_url = "https://azazdeaz.github.io/misina-lab/"
+repo_url = "https://github.com/azazdeaz/misina-lab"
+repo_name = "azazdeaz/misina-lab"
+# Emptied on every staging run, so it has to stay under target/.
+docs_dir = "target/docs"
+# A staged page keeps its path in the repository, so this is its edit link.
+edit_uri = "edit/main/"
+
+# Every page on the site, by its path in the repository: web/stage_docs.py
+# stages these and points a link to anything else at GitHub.
+nav = [
+  { "Vineyard" = [
+    { "Overview" = "README.md" },
+    "crates/vinery-lab/docs/parameters.md",
+  ] },
+  { "Greenhouse" = [
+    { "Overview" = "crates/greenhouse-lab/README.md" },
+    "crates/greenhouse-lab/docs/parameters.md",
+  ] },
+  { "Examples" = [
+    "examples/isaaclab_demo/README.md",
+    "examples/straddler_demo/README.md",
+    "examples/pruning_demo/README.md",
+  ] },
+  { "Framework" = [
+    { "Overview" = "crates/misina-lab/README.md" },
+    "crates/misina-lab/docs/generators.md",
+    "crates/misina-lab/docs/elements.md",
+    "crates/misina-lab/docs/quantization.md",
+    "crates/misina-lab/docs/randomness.md",
+    "crates/misina-lab/docs/export.md",
+    "crates/misina-lab/docs/isaac-lab.md",
+    "crates/misina-lab/docs/cutting.md",
+    "crates/misina-lab/docs/editing-parameters.md",
+    "crates/misina-lab/docs/outside-projects.md",
+  ] },
+  { "Development" = [
+    "DEVELOPMENT.md",
+    "CHANGELOG.md",
+  ] },
+]
+
+[project.theme]
+features = [
+  "content.action.edit",
+  "content.code.copy",
+  "navigation.footer",
+  "navigation.instant",
+  "navigation.sections",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to light mode"
+
+# What GitHub renders and nothing more, since every page is read there too.
+# `toc` and `tables` are always on.
+[project.markdown_extensions]
+footnotes = {}
+toc.permalink = true
+# GitHub's anchor for a heading, the one tests/test_docs.py checks links by.
+toc.slugify = { object = "pymdownx.slugs.slugify", kwds = { case = "lower" } }
+pymdownx.betterem = {}
+pymdownx.emoji.emoji_index = "zensical.extensions.emoji.twemoji"
+pymdownx.emoji.emoji_generator = "zensical.extensions.emoji.to_svg"
+pymdownx.highlight = {}
+pymdownx.magiclink = {}
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+pymdownx.tasklist = {}

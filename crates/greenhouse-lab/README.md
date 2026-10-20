@@ -7,9 +7,8 @@ crop on them: stems, leaves, trusses and fruit. The building, its roof,
 glass and columns, is left to an HDR or a Gaussian splat. It is built on
 [misina-lab](../misina-lab/README.md), like the vineyard beside it.
 
-The dimensions and the variations follow
-[the research notes](../../docs/tomato-greenhouse-research.md), drawn from
-Dutch research compartments, supplier sheets and one measured truss study.
+The dimensions and the variations are drawn from Dutch research
+compartments, supplier sheets and one measured truss study.
 A stem keeps its leaves from the head down and is stripped below them, as
 growers leave it, so the trusses in the harvest band hang off bare stem.
 

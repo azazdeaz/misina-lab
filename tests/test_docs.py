@@ -2,7 +2,8 @@
 
 Every relative link resolves, down to the heading it names, and no link
 points at a line number: lines move with every edit and nothing notices.
-Each docs folder's pages are all listed in its index, and nothing in the
+Each docs folder's pages are all listed in its index and on the docs site,
+where a page links only other pages of the site or GitHub. Nothing in the
 framework, docs or code, names a generator or speaks its vocabulary, since it
 leaves the repo with the crate. What a regex cannot read is prose, which
 `crates/misina-lab/docs/AGENTS.md` covers.
@@ -11,6 +12,7 @@ leaves the repo with the crate. What a regex cannot read is prose, which
 from __future__ import annotations
 
 import re
+import runpy
 import subprocess
 from pathlib import Path
 
@@ -36,13 +38,15 @@ GENERATOR = re.compile(
 of a vine it is built from, and the greenhouse's names and the parts of its
 rows. A generator that joins the repo adds its own."""
 INDEXES = {
-    "docs": "AGENTS.md",
     "crates/misina-lab/docs": "crates/misina-lab/README.md",
+    "crates/vinery-lab/docs": "README.md",
     "crates/greenhouse-lab/docs": "crates/greenhouse-lab/README.md",
 }
 """Each docs folder, and the file that lists every page in it."""
 GUIDES = {"AGENTS.md", "CLAUDE.md"}
 """What a docs folder holds for whoever edits it, rather than as a page."""
+SITE = runpy.run_path(str(ROOT / "web" / "stage_docs.py"))
+"""`web/stage_docs.py`, which stages the docs site's pages."""
 
 
 def listed(*pathspecs: str) -> list[Path]:
@@ -125,3 +129,25 @@ def test_the_framework_names_no_generator(path: Path) -> None:
     lines = path.read_text(encoding="utf-8").splitlines()
     hits = [f"{n}: {line.strip()}" for n, line in enumerate(lines, 1) if GENERATOR.search(line)]
     assert not hits, f"{name(path)}: {hits}"
+
+
+def test_every_page_is_on_the_site() -> None:
+    """The nav in `zensical.toml` lists each docs folder's pages and index."""
+    pages = {
+        name(page) for page in MARKDOWN if name(page.parent) in INDEXES and page.name not in GUIDES
+    }
+    missing = sorted(pages.union(INDEXES.values()).difference(SITE["pages"]()))
+    assert not missing, f"zensical.toml's nav does not list {missing}"
+
+
+def test_the_site_links_only_its_own_pages(tmp_path: Path) -> None:
+    """Staged, a relative link lands on another staged page: the stager points
+    every other one at GitHub."""
+    staged = {page.resolve() for page in SITE["stage"](tmp_path)}
+    stray = [
+        f"{page.relative_to(tmp_path.resolve())}: {target}"
+        for page in staged
+        for target, _ in links(page)
+        if target and not URL.match(target) and (page.parent / target).resolve() not in staged
+    ]
+    assert not stray, stray

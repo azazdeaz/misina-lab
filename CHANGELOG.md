@@ -43,6 +43,10 @@ Two kinds of change break a project that worked on the release before:
   lowered along the gutter as they grow. Which trusses hang, how ripe they
   are and how far their fruit have grown follow from each truss's age, and
   an extra stem is taken on six weeks after planting.
+- The docs are a site,
+  [azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/):
+  the framework's pages, both generators' parameters and the examples,
+  searchable.
 
 ### Changed
 
@@ -59,7 +63,7 @@ Two kinds of change break a project that worked on the release before:
 - The repository is now
   [azazdeaz/misina-lab](https://github.com/azazdeaz/misina-lab), and the web
   playground moved with it to
-  [azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/).
+  [azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/).
   The old repository URL redirects; the old playground URL does not.
 
 ### Fixed

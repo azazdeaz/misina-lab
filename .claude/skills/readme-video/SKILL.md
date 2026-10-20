@@ -70,7 +70,7 @@ last step's `wait` is the closing hold: the video ends when it runs out.
 
 - **Parameters** are named `fragment.field`, as Python names them:
   `params.shoot.stray` is `"shoot.stray"`.
-  [docs/parameters.md](../../../docs/parameters.md) lists every one with its
+  [parameters.md](../../../crates/vinery-lab/docs/parameters.md) lists every one with its
   slider's range. The storyboard is checked against the params when it loads,
   and by `cargo test` (`the_readme_tour_is_valid`).
 - **An edit** is two steps, one right after the other: `show` the field — its
