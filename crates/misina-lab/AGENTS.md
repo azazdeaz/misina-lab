@@ -48,7 +48,7 @@ Pure Python over `usd-core`, in [`../../python/misina-lab`](../../python/misina-
 | [misina_lab/usd/build.py](../../python/misina-lab/misina_lab/usd/build.py) | scene document to stage; where every USD rule is written down |
 | [misina_lab/usd/ground.py](../../python/misina-lab/misina_lab/usd/ground.py) | `Ground`: the terrain height under any (x, y), read back off a stage |
 | [misina_lab/isaaclab/spawn.py](../../python/misina-lab/misina_lab/isaaclab/spawn.py) | `GeneratedSceneCfg`, the base of every generator's cfg; generates, caches and spawns the `.usd` |
-| [misina_lab/isaaclab/rods.py](../../python/misina-lab/misina_lab/isaaclab/rods.py) | the coupled Newton config that lets a rod bend, and the tuning and collision groups it needs |
+| [misina_lab/isaaclab/rods.py](../../python/misina-lab/misina_lab/isaaclab/rods.py) | the coupled Newton config that lets a rod bend, the tuning and collision groups it needs, and `ContactSlots`, the contact-pair rows a cut opens |
 | [misina_lab/isaaclab/cutting.py](../../python/misina-lab/misina_lab/isaaclab/cutting.py) | `Shears`: cuts a rod anywhere along it while the simulation runs, and moves a collider in its body's frame |
 | [misina_lab/isaaclab/colliders.py](../../python/misina-lab/misina_lab/isaaclab/colliders.py) | `ColliderView`: every collider of the running Newton model, drawn in Kit's viewport |
 

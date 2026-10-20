@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 try:
-    from misina_lab.isaaclab import colliders, cutting
+    from misina_lab.isaaclab import colliders, cutting, rods
 except ImportError:
     pytest.skip("Isaac Lab is not installed", allow_module_level=True)
 
@@ -34,7 +34,8 @@ class Rig:
     from a meter, `upright` -- its first body held still the way the importer
     bolts a shoot to the wood. A ground, if `ground` is given, that many
     meters up. Its segments share the default group, so they collide, but for
-    each pair a joint ties."""
+    each pair a joint ties. Two static boxes far apart, for a parked contact
+    row to name."""
 
     def __init__(self, monkeypatch, ground: float | None = None, upright: bool = False):
         builder = ModelBuilder(gravity=(0.0, 0.0, -GRAVITY))
@@ -52,8 +53,11 @@ class Rig:
         builder.body_mass[self.bodies[0]] = 0.0
         builder.body_inertia[self.bodies[0]] = wp.mat33(0.0)
         builder.body_flags[self.bodies[0]] = int(BodyFlags.KINEMATIC)
+        for x in (-50.0, 50.0):
+            builder.add_shape_box(-1, xform=wp.transform((x, 0.0, 0.0), wp.quat_identity()))
         builder.color()
         self.model = builder.finalize()
+        rods.reserve_contact_slots(self.model)
         self.solver = SolverVBD(self.model, iterations=10)
         self.state, self.next = self.model.state(), self.model.state()
         self.control = self.model.control()
@@ -150,12 +154,12 @@ def test_the_piece_falls_and_the_stub_stays(rig):
     ],
 )
 def test_a_cut_next_to_a_joint_is_made_at_it(rig, body, at, loose):
-    """Nothing is resized: a body that small would have no mass to divide by."""
-    scale = rig.model.shape_scale.numpy()
+    """No span changes: a body that small would have no mass to divide by."""
+    spans = rig.spans()
     assert rig.shears.cut(rig.bodies[body], at) == any(loose)
 
     assert rig.shears.loose.tolist() == loose
-    assert (rig.model.shape_scale.numpy() == scale).all()
+    assert (rig.spans() == spans).all()
 
 
 def test_a_cut_piece_lands_on_the_ground_and_lies_there(monkeypatch):
@@ -169,17 +173,27 @@ def test_a_cut_piece_lands_on_the_ground_and_lies_there(monkeypatch):
     assert np.abs(rig.state.body_qd.numpy()[rig.bodies[2:]]).max() < 0.01
 
 
-def test_a_cut_piece_catches_on_the_rod_it_was_cut_from(monkeypatch):
-    """A piece dropping straight down its own rod passes the shortened stub
-    segment, whose pair the joint filters, and stops on the segment below it,
-    cap on cap -- the way a piece catches on its vine instead of falling
-    through it. Newton's rod-on-rod contact is what this pins."""
+@pytest.mark.parametrize("at", [0.5, 0.95], ids=["between the joints", "at the joint"])
+def test_a_cut_piece_rests_on_the_stub_it_was_cut_from(monkeypatch, at):
+    """A piece dropping straight down its own rod stops on the stub's cut
+    face, the two meeting where the cut was made: the row reserved for the
+    joint pairs them, and the pulled-back colliders touch there instead of
+    firing the piece off. The pair of segments two apart the joint never
+    filtered, so its slot stays parked."""
     rig = Rig(monkeypatch, upright=True)
-    rig.shears.cut(rig.bodies[2], 0.5)
+    rig.shears.cut(rig.bodies[2], at)
+    rig.step(0.05)
+    assert np.abs(rig.state.body_qd.numpy()[rig.bodies[3]]).max() < 0.1, "not shoved off"
     rig.step(1.0)
 
     start, end = rig.shears.capsules()
-    assert start[3, 2] == pytest.approx(end[1, 2] + 2 * 0.01, abs=3e-3)
+    assert start[3, 2] == pytest.approx(end[2, 2], abs=3e-3)
+    pairs = rig.model.shape_contact_pairs.numpy().reshape(-1, 2)
+    assert pairs[-3:].tolist() == [
+        rig.shears._slots.parked.tolist(),
+        rig.shears._slots.parked.tolist(),
+        sorted(rig.shears._shape[2:].tolist()),
+    ]
 
 
 def test_every_collider_is_drawn_where_newton_has_it(monkeypatch):
@@ -210,7 +224,9 @@ def test_every_collider_is_drawn_where_newton_has_it(monkeypatch):
         ]
 
     def newton() -> list[tuple[float, float]]:
-        return list(zip(rig.shears._center, 2 * rig.shears._half, strict=True))
+        shapes = rig.shears._shape
+        transform, scale = rig.model.shape_transform.numpy(), rig.model.shape_scale.numpy()
+        return list(zip(transform[shapes, 2], 2 * scale[shapes, 1], strict=True))
 
     assert view.missing == 0
     assert drawn() == pytest.approx(newton())

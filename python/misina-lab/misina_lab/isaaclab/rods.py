@@ -28,6 +28,7 @@ import re
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
+import numpy as np
 from isaaclab.physics import PhysicsCfg, PhysicsEvent
 from isaaclab_contrib.coupling import (
     CouplerEntryCfg,
@@ -146,6 +147,101 @@ time for them."""
 _tuning: CallbackHandle | None = None
 """The registration `tune_rods` made, while it stands."""
 
+PARKING_CLEARANCE = 1.0
+"""How far apart, in meters, the two static shapes a parked row names have to
+be beyond their bounding spheres: wider than any contact gap, so the broad
+phase drops the row on their boxes every step."""
+
+_slots: ContactSlots | None = None
+"""The rows `reserve_contact_slots` added to the model built last."""
+
+
+class ContactSlots:
+    """A spare row of `Model.shape_contact_pairs` for every rod joint.
+
+    Newton lists every pair of shapes that may ever touch when the model is
+    finalized, leaves out the two either side of each joint, and its broad
+    phase reads that list, and only that list, for the life of the model.
+    When a cut turns a rod joint off, the two segments either side of it are
+    the two faces of the cut, with no row between them, and the piece would
+    fall through the stub. So the list gets one more row per rod joint while
+    it can still grow -- the model finalized, nothing yet holding a pointer
+    into it -- parked on a pair of static shapes too far apart to ever meet,
+    and `Shears` writes the joint's own pair into the row when the joint goes.
+
+    A coupled solver's entry clones the list and compacts it to the shapes it
+    sees, keeping the order, so the rows are the last `count` of every copy.
+    """
+
+    def __init__(self, model):
+        import warp as wp
+        from newton import JointType
+
+        self.model = model
+        joints = np.flatnonzero(model.joint_type.numpy() == int(JointType.ROD))
+        self.row = {int(joint): k for k, joint in enumerate(joints)}
+        """Each rod joint's row, counted from the first of the rows."""
+        self.count = len(joints)
+        self.parked = _parking(model)
+        """The pair every row holds until its joint goes."""
+        pairs = model.shape_contact_pairs.numpy().reshape(-1, 2)
+        extended = np.concatenate([pairs, np.tile(self.parked, (self.count, 1))])
+        model.shape_contact_pairs = wp.array(
+            extended.astype(np.int32), dtype=wp.vec2i, device=model.device
+        )
+        model.shape_contact_pair_count = len(extended)
+
+
+def _parking(model) -> np.ndarray:
+    """A pair of static shapes `PARKING_CLEARANCE` clear of each other's
+    bounding spheres, in the list's (low, high) order: the two furthest apart
+    along the axis the static scene is widest on, the ground left out."""
+    from newton import GeoType, ShapeFlags
+
+    kind = model.shape_type.numpy()
+    radius = model.shape_collision_radius.numpy()
+    static = (
+        (model.shape_body.numpy() < 0)
+        & (model.shape_flags.numpy() & int(ShapeFlags.COLLIDE_SHAPES) != 0)
+        & ~np.isin(kind, [int(GeoType.PLANE), int(GeoType.HFIELD)])
+    )
+    shapes = np.flatnonzero(static)
+    position = model.shape_transform.numpy()[shapes, :3]
+    if len(shapes) >= 2:
+        axis = int(np.argmax(position.max(axis=0) - position.min(axis=0)))
+        low, high = np.argmin(position[:, axis]), np.argmax(position[:, axis])
+        apart = position[high, axis] - position[low, axis]
+        a, b = int(shapes[low]), int(shapes[high])
+        if apart > radius[a] + radius[b] + PARKING_CLEARANCE:
+            return np.array(sorted((a, b)), dtype=np.int32)
+    raise ValueError(
+        "no two static shapes far enough apart to park a contact row on: a scene with rods"
+        f" needs two, {PARKING_CLEARANCE} m clear of each other"
+    )
+
+
+def reserve_contact_slots(model) -> ContactSlots:
+    """Add the rows to `model`, just finalized, and keep them for `Shears`.
+
+    Before anything takes the model's contact-pair list -- a collision
+    pipeline, a coupled solver's entries -- since the list is replaced by a
+    longer one. `tune_rods` does this on `PHYSICS_READY`, which Isaac Lab
+    fires in that window; a model built by hand calls it itself.
+    """
+    global _slots
+    _slots = ContactSlots(model)
+    return _slots
+
+
+def contact_slots(model) -> ContactSlots:
+    """The rows reserved on `model`."""
+    if _slots is None or _slots.model is not model:
+        raise RuntimeError(
+            "no contact rows reserved on this model: `tune_rods` reserves them as the model"
+            " is built, or `reserve_contact_slots` does once it is finalized"
+        )
+    return _slots
+
 
 def tune_rods(
     plant: str,
@@ -168,6 +264,9 @@ def tune_rods(
     again. The only window to write them is the builder's -- after the
     importer has filled it, before it is finalized -- and Isaac Lab dispatches
     `MODEL_INIT` in exactly that window.
+
+    Also registers `reserve_contact_slots` on `PHYSICS_READY`, so a cut can
+    make the two faces of a cut meet; see `ContactSlots`.
 
     Registers once. While the registration stands -- the manager drops it when
     the simulation stops -- a further call returns it unchanged, rather than
@@ -237,6 +336,9 @@ def tune_rods(
             regroup((shape,), plant_group(builder.shape_label[shape]))
 
     _tuning = NewtonManager.register_callback(tune, PhysicsEvent.MODEL_INIT)
+    NewtonManager.register_callback(
+        lambda _payload: reserve_contact_slots(NewtonManager._model), PhysicsEvent.PHYSICS_READY
+    )
     return _tuning
 
 

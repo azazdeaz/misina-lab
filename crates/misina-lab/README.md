@@ -142,7 +142,8 @@ modules fit.
 | [quantization.md](docs/quantization.md) | how a population of configs becomes a budget of meshes, and how to write a metric |
 | [randomness.md](docs/randomness.md) | one seed, many streams: how a scene stays reproducible while every part varies |
 | [export.md](docs/export.md) | coordinates, the scene document, and what the USD builder makes of it |
-| [isaac-lab.md](docs/isaac-lab.md) | spawning a generated scene: the cfg base, the cache, rods, and cutting them |
+| [isaac-lab.md](docs/isaac-lab.md) | spawning a generated scene: the cfg base, the cache, rods, and moving and seeing colliders |
+| [cutting.md](docs/cutting.md) | cutting a rod while it runs: moving a joint onto the cut, and how the two faces of a cut come to touch |
 | [editing-parameters.md](docs/editing-parameters.md) | how to add or change a parameter |
 | [outside-projects.md](docs/outside-projects.md) | a generator in its own repository: the dependencies, the layout, and pinning both halves to one release |
 

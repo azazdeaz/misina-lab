@@ -61,6 +61,14 @@ Two kinds of change break a project that worked on the release before:
 
 ### Fixed
 
+- **misina-lab**: A cut piece rests on the stub it was cut from. The two
+  segments either side of a cut were the two a joint had tied, and Newton
+  never pairs those, so the piece fell through the stub's top segment and
+  tipped off the one below. `tune_rods` now reserves a contact-pair row per
+  rod joint as the model is built, and a cut writes the joint's pair into
+  it, with each capsule pulled back a radius at the cut face so the two
+  touch there instead of starting a thickness deep in each other. A scene
+  with rods needs two static colliders a metre apart to park the rows on.
 - **misina-lab**: `configs_changed` also fires when a layer's configs are
   removed, so an edit that leaves a layer nothing to build clears its parts
   from the library. Such an edit used to leave the layer's old parts in the
