@@ -6,14 +6,14 @@ vineyard and the robot are set up here; the robot itself is in `straddler`,
 the route in `route` and the driving in `driver`.
 
 The row the drive starts on, the physics backend and the viewer are
-command-line choices, e.g. `--row 3 --physics newton_mjwarp --viz newton`;
+command-line choices, e.g. `--row 3 --physics newton_mjwarp --viz newton_gl`;
 `--help` lists the full launcher set.
 The default backend is Newton coupled with VBD, which bends the vineyard's
 flexible shoots -- see `vinery_lab.isaaclab.physics`. Under any other the stray
 shoots are spawned static.
 
 `--trim` hangs a hedger under the frame, which cuts every stray shoot reaching
-across it -- see `straddler.Trimmer` and `vinery_lab.isaaclab.cutting`.
+across it -- see `straddler.Trimmer` and `misina_lab.isaaclab.cutting`.
 """
 
 import argparse
@@ -24,7 +24,9 @@ import numpy as np
 
 import isaaclab.sim as sim_utils
 from isaaclab.app import add_launcher_args, launch_simulation
-from isaaclab.assets import Articulation
+from isaaclab.assets import Articulation, AssetBaseCfg
+from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.utils import instantiate
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
 from vinery_lab.isaaclab import (
@@ -67,7 +69,8 @@ TRIM_VINEYARD_CFG = dataclasses.replace(VINEYARD_CFG, shoot=ShootCfg(stray=0.2))
 # )
 
 VINEYARD_PATH = "/World/Vineyard"
-ROBOT_PATH = "/World/Robot"
+# Where `design_scene` puts the robot: its scene's one environment.
+ROBOT_PATH = "/World/envs/env_0/Robot"
 
 # The parts of the robot a shoot may bend. The whole machine straddles the
 # canopy, so all of it is in reach -- and there are only nine bodies, each of
@@ -120,19 +123,26 @@ def parse_args() -> argparse.Namespace:
 
 
 def design_scene(vineyard: VineyardCfg, machine: Straddler) -> Articulation:
-    """The vineyard, a sky, and one straddler to drive it."""
-    # HDR dome light (IBL + visible sky). Outdoor locomotion envs use this map.
-    cfg = sim_utils.DomeLightCfg(
-        intensity=750.0,
-        texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
-    )
-    cfg.func("/World/Light", cfg)
+    """The vineyard, a sky, and one straddler to drive it.
 
+    Declared as a scene, since Newton steps only what a scene declares.
+    """
+    scene = InteractiveSceneCfg(num_envs=1, env_spacing=0.0)
+    # HDR dome light (IBL + visible sky). Outdoor locomotion envs use this map.
+    scene.light = AssetBaseCfg(
+        prim_path="/World/Light",
+        spawn=sim_utils.DomeLightCfg(
+            intensity=750.0,
+            texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
+        ),
+    )
     # The generated scene brings its own colliders: the ground as its own mesh,
     # the posts and trunks as capsules.
-    vineyard.func(VINEYARD_PATH, vineyard)
-
-    robot = Articulation(straddler_cfg(machine, ROBOT_PATH))
+    scene.vineyard = AssetBaseCfg(prim_path=VINEYARD_PATH, spawn=vineyard)
+    scene.robot = straddler_cfg(machine, "{ENV_REGEX_NS}/Robot")
+    # `instantiate` builds the `InteractiveScene` the cfg names. Importing that class
+    # loads pip's `pxr`, and Kit's own has to be the first one loaded.
+    robot = instantiate(scene)["robot"]
     # The URDF gave its materials their colours; the rest of the surface has
     # nowhere in a URDF to come from, so it is set on the spawned prims.
     set_finish(ROBOT_PATH)
@@ -154,7 +164,7 @@ def trimming(
     import torch
     from isaaclab.utils.math import quat_apply
 
-    from vinery_lab.isaaclab.cutting import Shears
+    from vinery_lab.isaaclab import Shears
 
     shears = Shears()
     # (bar, corner/along/up, xyz) in the base frame.
@@ -180,7 +190,7 @@ def run_simulator(
     driver.place()
 
     step = 0
-    while sim.is_headless_or_exist_active_visualizer():
+    while sim.is_running():
         if step % DECIMATION == 0:
             driver.control()
             if trim is not None:

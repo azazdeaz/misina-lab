@@ -6,7 +6,7 @@ is used in this demo.
 
 ## Requirements
  - [uv](https://docs.astral.sh/uv/getting-started/installation/) installed
- - [Isaac Sim 6.1](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/installation/requirements.html) compatible hardware
+ - [Isaac Sim 6.2](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/requirements.html) compatible hardware
  - [Rust](https://www.rust-lang.org/tools/install) installed (this demo builds the scene generator from source)
 
 ## Running the demo
@@ -34,4 +34,4 @@ static, at the same lean.
 | `route.py` | waypoints down every alley, read off the trellis posts |
 | `driver.py` | waypoint following, the locomotion policy, getting back up |
 
-`DEVELOPMENT.md` covers the pinned Isaac Lab revision.
+`DEVELOPMENT.md` covers the pinned Isaac Lab release.

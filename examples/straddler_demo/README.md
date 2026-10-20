@@ -6,7 +6,7 @@ path is derived from the USD. No sensor input is used in this demo.
 
 ## Requirements
  - [uv](https://docs.astral.sh/uv/getting-started/installation/) installed
- - [Isaac Sim 6.1](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/installation/requirements.html) compatible hardware
+ - [Isaac Sim 6.2](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/requirements.html) compatible hardware
  - [Rust](https://www.rust-lang.org/tools/install) installed (this demo builds the scene generator from source)
 
 ## Running the demo
@@ -118,5 +118,5 @@ the wheels — so there is no manufacturer's description in here to be bound by.
 | `route.py` | waypoints down every row, read off the trellis posts |
 | `driver.py` | waypoint following and swerve kinematics |
 
-`DEVELOPMENT.md` in `../isaaclab_demo` covers the pinned Isaac Lab revision,
+`DEVELOPMENT.md` in `../isaaclab_demo` covers the pinned Isaac Lab release,
 which this example shares.
