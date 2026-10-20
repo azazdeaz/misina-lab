@@ -16,7 +16,9 @@ Open-source parametric vineyard generator for developing and testing vineyard ro
 *Standalone parameter editor and visualizer app*
 
 
-> Try the parameter editor in your browser: [azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/) — bit slower and needs WebGPU.
+> Try the parameter editor in your browser: [azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/) — bit slower and needs WebGPU.
+>
+> The docs are at [azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/).
 
 
 
@@ -115,7 +117,7 @@ uv run main.py
  under it, which holds everything that is not about vines.
  - The vineyard can be composed with a [`VineyardCfg`](crates/vinery-lab/python/vinery_lab/isaaclab/vineyard_cfg.py) object,
  which is a standard Isaac Lab `FileCfg` config class. See `VINEYARD_CFG` in the [quadruped demo](examples/isaaclab_demo/main.py).
- - Every parameter, with its default and range, is listed in [docs/parameters.md](docs/parameters.md).
+ - Every parameter, with its default and range, is listed in [crates/vinery-lab/docs/parameters.md](crates/vinery-lab/docs/parameters.md).
  - The options are many, so prefer to use the parameter editor GUI and copy the configuration snippet to your script.
  - When the simulation starts, the meshes and layouts are generated a USD file and cached for the next run.
  - The cached USD file is then spawned as a regular Isaac Lab USD file asset.
@@ -152,6 +154,6 @@ Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or
 ## Development
 
 See [AGENTS.md](AGENTS.md) for the repo map,
-[docs/development.md](docs/development.md) for building and running the checks,
+[DEVELOPMENT.md](DEVELOPMENT.md) for building and running the checks,
 and the framework's own [README](crates/misina-lab/README.md) and
 [docs](crates/misina-lab/docs/) for how a generator is built.

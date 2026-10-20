@@ -1,0 +1,58 @@
+name: Pages
+
+# The site: the docs, rebuilt on every push to main, with each playground under
+# /playground/. A Pages deploy replaces the whole site, so this is the one
+# workflow that deploys, and it takes the playgrounds from the `playground`
+# release that playground.yml publishes to.
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: [Playground]
+    types: [completed]
+  workflow_dispatch:
+
+# What `deploy-pages` needs, on top of Pages' source being set to
+# "GitHub Actions" in the repository settings.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  pages:
+    # A failed playground build has nothing new to deploy.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+
+      - run: python3 web/stage_docs.py
+      - run: uv run --only-group docs zensical build --strict
+
+      # Fails while the release does not exist yet, rather than deploying a
+      # site without the playground: run the Playground workflow once first.
+      - name: Add the playgrounds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download playground --pattern '*.tar.gz' --dir bundles
+          for bundle in bundles/*.tar.gz; do
+            dir=site/playground/$(basename "$bundle" .tar.gz)
+            mkdir -p "$dir"
+            tar -xzf "$bundle" -C "$dir"
+          done
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

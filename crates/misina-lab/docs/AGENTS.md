@@ -70,7 +70,7 @@ about 200 lines.
 
 ## Markdown that renders everywhere
 
-A page is read on GitHub, in an editor and, later, on a rendered site; the
+A page is read on GitHub, in an editor and on a rendered site; the
 README is read through rustdoc as well. Write what all of them agree on: one
 H1, fenced code with a language tag, tables, Mermaid for diagrams. No raw
 HTML, and no renderer-specific callouts such as `!!! note` or `> [!NOTE]`.

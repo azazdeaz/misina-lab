@@ -27,7 +27,7 @@ uv run pytest tests -q
 Everything below the first two lines is what `.github/workflows/ci.yml` runs on
 every push and pull request. Isaac Lab is not installed there, so the tests
 that need it skip themselves; run those from a demo venv — see
-[docs/development.md](docs/development.md).
+[DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Where things are
 
@@ -84,14 +84,14 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinery_lab`,
 | [examples/pruning_demo/](examples/pruning_demo/) | a Bumblebee-like arm pruning a dormant row to two-bud spurs, and `record.sh`, which films it; its own uv project |
 | [assets/leaves/](crates/vinery-lab/assets/leaves/) | traced leaf outlines, compiled in with `include_str!` |
 | [web/index.html](web/index.html) | host page for the wasm playground |
+| [web/stage_docs.py](web/stage_docs.py) | copies the docs site's pages to where Zensical builds them from, pointing links to anything else at GitHub |
+| [zensical.toml](zensical.toml) | the docs site; its nav lists every page on it |
 | [docs/video/](docs/video/) | the README video: `record.sh` and the storyboard it plays, `encode.sh`, which both videos are encoded with, and `publish.sh`, which uploads either and points its README at it |
 
 ## Docs
 
-- [docs/development.md](docs/development.md) — building, the checks, releasing, running the viewer, the web build
-- [docs/parameters.md](docs/parameters.md) — every parameter, with its default and range (generated)
-- [docs/pruning-research.md](docs/pruning-research.md) — prior art for cutting shoots: pruning robots, hedgers, how simulators model a cut
-- [docs/tomato-greenhouse-research.md](docs/tomato-greenhouse-research.md) — a Dutch high-wire tomato row in numbers, and the variations a tomato greenhouse generator starts with
+- [DEVELOPMENT.md](DEVELOPMENT.md) — building, the checks, releasing, running the viewer, the web build, the docs site
+- [crates/vinery-lab/docs/parameters.md](crates/vinery-lab/docs/parameters.md) — every parameter, with its default and range (generated)
 - [crates/greenhouse-lab/README.md](crates/greenhouse-lab/README.md) — the greenhouse generator: what it builds, and its parameters page
 - [.claude/skills/readme-video/SKILL.md](.claude/skills/readme-video/SKILL.md) — re-recording the README video and changing what it shows; plain Markdown, for any agent
 - [.claude/skills/pruning-video/SKILL.md](.claude/skills/pruning-video/SKILL.md) — the same for the pruning demo's video, filmed in Isaac Sim
@@ -107,7 +107,7 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinery_lab`,
   is the how-to.
 - **Generated files are not hand-edited.** `cargo test` fails while
   `_core.pyi`, `isaaclab/vineyard_cfg.py` (both under `crates/vinery-lab/python/vinery_lab/`) or
-  `docs/parameters.md` are stale; `cargo test regen_params -- --ignored`
+  `crates/vinery-lab/docs/parameters.md` are stale; `cargo test regen_params -- --ignored`
   rewrites them. The greenhouse's are the same files under
   `crates/greenhouse-lab/`, rewritten with `-p greenhouse-lab`.
 - **A user-facing change adds its line under Unreleased in
@@ -121,7 +121,8 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinery_lab`,
   for maturin builds only and breaks `cargo run` and `cargo test`.
 - **Rust tests are inline `#[cfg(test)]` modules** beside the code they cover.
   The top-level `tests/` is Python only, and `test_docs.py` there fails on a
-  Markdown link that resolves to nothing or points at a line number.
+  Markdown link that resolves to nothing or points at a line number, and on
+  a docs page missing from the site's nav in `zensical.toml`.
 - **The scene is authored Z-up, in meters** (REP-103). Bevy renders Y-up; the
   correction is a single parent entity, above where the export walk starts.
 - **Comments and docs are for someone who has only the code in front of

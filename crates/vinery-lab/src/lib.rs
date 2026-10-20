@@ -49,7 +49,7 @@ mod tests {
 
     /// The parameters page, relative to this crate; the Python targets are
     /// under `python/vinery_lab/` and need no naming.
-    const DOCS: &str = "../../docs/parameters.md";
+    const DOCS: &str = "docs/parameters.md";
 
     fn root() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))

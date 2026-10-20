@@ -2,7 +2,7 @@ name: Release
 
 # Builds the three Python packages and, on a `v*` tag, publishes them to PyPI.
 # A manual run from a branch builds them without publishing. They release
-# together under the workspace version; docs/development.md says how to cut one.
+# together under the workspace version; DEVELOPMENT.md says how to cut one.
 on:
   push:
     tags: ["v*"]
