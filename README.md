@@ -139,12 +139,14 @@ VINEYARD_CFG = VineyardCfg(
     vine=VineCfg(arms=1),
 )
 
-# a plain script, or a direct env's `_setup_scene()`
-VINEYARD_CFG.func("/World/Vineyard", VINEYARD_CFG)
-
-# or a manager-based scene config
+# in the env's scene config
 vineyard = AssetBaseCfg(prim_path="/World/Vineyard", spawn=VINEYARD_CFG)
 ```
+
+Declare it in a scene: under Newton, the physics holds only the assets a scene
+declares, so a vineyard spawned straight onto the stage is one nothing collides
+with. A plain script builds an `InteractiveScene` around it, as `design_scene`
+in the [quadruped demo](examples/isaaclab_demo/main.py) does.
 
 ## License
 

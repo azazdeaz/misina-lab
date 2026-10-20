@@ -7,7 +7,10 @@ the spawner converts the fragments to params, generates the scene, caches the
 USD under a key built from the fragments and the generator, and spawns the
 file through Isaac Lab's own USD-file path. Everything `FileCfg` offers
 applies, and the prim path may be an env regex: the scene generates once
-however many envs there are.
+however many envs there are. Declare it in a scene config,
+`AssetBaseCfg(prim_path=..., spawn=cfg)`: under Newton, Isaac Lab puts into
+the physics only the assets a scene declares, so a scene spawned straight
+onto the stage is drawn but collides with nothing.
 
 ```python
 from typing import ClassVar

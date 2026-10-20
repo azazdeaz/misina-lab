@@ -452,10 +452,7 @@ class VineyardCfg(GeneratedSceneCfg):
             vine=VineCfg(arms=1),
         )
 
-        # plain script or a direct env's _setup_scene()
-        VINEYARD_CFG.func("/World/Vineyard", VINEYARD_CFG)
-
-        # manager-based scene cfg
+        # in a scene cfg: Newton steps only the assets a scene declares
         vineyard = AssetBaseCfg(prim_path="/World/Vineyard", spawn=VINEYARD_CFG)
 
     A stray shoot (`ShootCfg.stray`) is authored as a deformable curve, and
