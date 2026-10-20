@@ -53,6 +53,9 @@ Two kinds of change break a project that worked on the release before:
 - **misina-lab**: `Shears.colliders(body)` replaces `Shears.collider(body)`
   and lists all of a body's collision shapes, so a part built of several, a
   blade in slices, can have each moved on its own with `Shears.place`.
+- **misina-lab**: The viewer's camera is `bevy_panorbit_camera` 0.36 from
+  crates.io, so a generator in its own repository no longer copies a
+  `[patch.crates-io]` section; delete it.
 - The repository is now
   [azazdeaz/misina-lab](https://github.com/azazdeaz/misina-lab), and the web
   playground moved with it to
