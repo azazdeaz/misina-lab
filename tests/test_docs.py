@@ -151,3 +151,11 @@ def test_the_site_links_only_its_own_pages(tmp_path: Path) -> None:
         if target and not URL.match(target) and (page.parent / target).resolve() not in staged
     ]
     assert not stray, stray
+
+
+def test_the_site_plays_the_videos(tmp_path: Path) -> None:
+    """GitHub plays a bare attachment URL; staged, it is a `<video>` tag."""
+    SITE["stage"](tmp_path)
+    readme = (tmp_path / "README.md").read_text(encoding="utf-8")
+    assert re.search(r'<video src="https://github\.com/user-attachments/assets/[0-9a-f-]+"', readme)
+    assert not re.search(r"^https://github\.com/user-attachments", readme, re.MULTILINE)
