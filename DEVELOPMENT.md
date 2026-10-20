@@ -192,7 +192,9 @@ the repository. The nav in `zensical.toml` lists every page on the site by
 its path, and `web/stage_docs.py` copies those pages to `target/docs` under
 the same paths: a link between two pages works as written, and every other
 link, to source or to a page left off the site, is pointed at GitHub at the
-commit being built. `tests/test_docs.py` fails while a page of a docs folder
+commit being built. A line holding only a `github.com/user-attachments`
+URL, which GitHub plays as a video, becomes a `<video>` tag in the staged copy.
+`tests/test_docs.py` fails while a page of a docs folder
 is missing from the nav.
 
     python3 web/stage_docs.py
