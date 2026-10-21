@@ -20,7 +20,7 @@ pytest.importorskip("isaaclab", reason="Isaac Lab is not installed")
 def test_importing_main_does_not_load_pxr():
     # A subprocess, so the check is not fooled by another test's imports.
     subprocess.run(
-        [sys.executable, "-c", "import main, sys; assert 'pxr' not in sys.modules"],
+        [sys.executable, "-c", "import main, shot, sys; assert 'pxr' not in sys.modules"],
         cwd=pathlib.Path(__file__).parent,
         check=True,
     )

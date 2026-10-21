@@ -131,6 +131,9 @@ Press `S` to write the scene out as `scene.json`, and build it with:
 
     python -m misina_lab.usd scene.json scene.usd
 
+Press `P` to log the camera as a storyboard's `camera`, and copy it: how a
+view found by hand goes into a storyboard or a [docs picture](#docs-pictures).
+
 `VINERY_LAB_PERF=1 cargo run` logs a per-layer breakdown on any frame that
 rebuilt something — the marks are `crates/vinery-lab/src/perf.rs`, the report
 `crates/misina-lab/src/perf.rs`.
@@ -144,10 +147,12 @@ sets the rate, 30 by default, and is also how fast the window is sampled. See
 `crates/misina-lab/src/record.rs`.
 
 `VINERY_LAB_TOUR=docs/video/tour.json cargo run --release` plays a storyboard
-of camera moves and panel edits, then quits. With `VINERY_LAB_RECORD` set too
-its clock advances one video frame per rendered frame, so the recording is
-smooth however long the rebuilds take; `docs/video/record.sh` records the
-README video that way. See `crates/misina-lab/src/tour.rs`, and
+of camera moves and panel edits, then hands the window back to the pointer.
+With `VINERY_LAB_RECORD` set too its clock advances one video frame per
+rendered frame, so the recording is smooth however long the rebuilds take, and
+the app quits at the end; `docs/video/record.sh` records the README video that
+way. `VINERY_LAB_SHOT=still.png` instead saves the window as the storyboard
+ends, and quits. See `crates/misina-lab/src/tour.rs`, and
 [the skill](.claude/skills/readme-video/SKILL.md) for changing the video.
 
 The pruning demo's video is filmed in Isaac Sim instead, headless:
@@ -156,7 +161,9 @@ an RTX camera on the simulation's clock. Both scripts encode what they record
 with `docs/video/encode.sh`. See
 [its skill](.claude/skills/pruning-video/SKILL.md) for changing it.
 `docs/video/publish.sh` uploads either video to the branch's pull request
-and puts the link GitHub gives it in its README.
+and puts the link GitHub gives it in its README. github.com plays only video
+GitHub hosts, so the videos stay uploads; the pictures are published apart,
+see [Docs pictures](#docs-pictures).
 
 ### Web build
 
@@ -183,6 +190,24 @@ feature in `crates/vinery-lab/Cargo.toml` is target-gated, and WebGL2 would lose
 which this many meshes need. And the `S` key is compiled out, since there is no
 filesystem to write `scene.json` to; **Copy Isaac Lab cfg** is the whole export
 path on the web.
+
+## Docs pictures
+
+The pictures in the docs are rendered from shots, JSON files under
+`docs/shots/` that hold the scene's parameters, the camera, the size, and for
+Isaac Lab how long the robot walks first:
+
+    docs/shots/render.sh     # every shot, into target/docs-assets
+    docs/shots/publish.sh    # force-pushes that folder to the assets repository
+
+`docs/shots/A/B.json` becomes `A/B.webp` in
+[azazdeaz/misina-lab-docs-assets](https://github.com/azazdeaz/misina-lab-docs-assets),
+which holds only the current set, and a page links it as
+`https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/A/B.webp`.
+A viewer shot is a storyboard with no steps; an Isaac Lab shot is read by the
+example's `shot.py`. Both take the camera in a storyboard's terms, and both
+apps print their camera on `P`, so a view placed by hand goes straight into a
+shot. [The skill](.claude/skills/docs-shots/SKILL.md) is the how-to.
 
 ## Docs site
 

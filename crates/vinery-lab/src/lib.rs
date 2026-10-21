@@ -76,6 +76,16 @@ mod tests {
         misina_lab::tour::load::<elements::VineyardParams>(&tour).unwrap();
     }
 
+    /// The docs' pictures of the viewer are storyboards too.
+    #[test]
+    fn the_shots_are_valid() {
+        for shot in std::fs::read_dir(root().join("../../docs/shots/vinery-lab")).unwrap() {
+            let shot = shot.unwrap().path();
+            misina_lab::tour::load::<elements::VineyardParams>(&shot)
+                .unwrap_or_else(|err| panic!("{}: {err:#}", shot.display()));
+        }
+    }
+
     /// Rewrites the generated files from the structs.
     ///
     /// A dev tool rather than a test, and `#[ignore]`d for the same reason

@@ -89,7 +89,8 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinery_lab`,
 | [web/index.html](web/index.html) | host page for the wasm playground |
 | [web/stage_docs.py](web/stage_docs.py) | copies the docs site's pages to where Zensical builds them from, pointing links to anything else at GitHub |
 | [zensical.toml](zensical.toml) | the docs site; its nav lists every page on it |
-| [docs/video/](docs/video/) | the README video: `record.sh` and the storyboard it plays, `encode.sh`, which both videos are encoded with, and `publish.sh`, which uploads either and points its README at it |
+| [docs/video/](docs/video/) | the README video: `record.sh` and the storyboard it plays, `encode.sh`, which both videos are encoded with, and `publish.sh`, which uploads either to GitHub, the only host github.com plays video from, and points its README at it |
+| [docs/shots/](docs/shots/) | the docs' pictures: a shot file per picture, in a folder named after what renders it; `render.sh`, which renders them into `target/docs-assets`, and `publish.sh`, which force-pushes that folder to the assets repository the docs link |
 
 ## Docs
 
@@ -99,6 +100,7 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinery_lab`,
 - [crates/greenhouse-lab/README.md](crates/greenhouse-lab/README.md) — the greenhouse generator: what it builds, and its parameters page
 - [.claude/skills/readme-video/SKILL.md](.claude/skills/readme-video/SKILL.md) — re-recording the README video and changing what it shows; plain Markdown, for any agent
 - [.claude/skills/pruning-video/SKILL.md](.claude/skills/pruning-video/SKILL.md) — the same for the pruning demo's video, filmed in Isaac Sim
+- [.claude/skills/docs-shots/SKILL.md](.claude/skills/docs-shots/SKILL.md) — rendering the docs' pictures from their shots, placing a shot's camera by hand, and publishing them
 - [examples/isaaclab_demo/DEVELOPMENT.md](examples/isaaclab_demo/DEVELOPMENT.md) — the pinned Isaac Lab release and how to bump it
 - [crates/misina-lab/docs/](crates/misina-lab/docs/) — the framework's: how a scene is built and exported, quantization, randomness, Isaac Lab, and how to add or change a parameter
 - [crates/misina-lab/docs/AGENTS.md](crates/misina-lab/docs/AGENTS.md) — how a page is written and kept current
