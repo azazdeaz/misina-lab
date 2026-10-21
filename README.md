@@ -18,9 +18,8 @@ and a tomato greenhouse, to try it on and to start from. If you need help, or
 would like to work together on a generator of your own,
 [get in touch](#support).
 
-> 🌐 Try the vineyard in your browser:
-> [azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/),
-> a bit slower, and it needs WebGPU.
+> 🌐 Try them in your browser, [the vineyard](https://azazdeaz.github.io/misina-lab/playground/vinery/) or
+> [the greenhouse](https://azazdeaz.github.io/misina-lab/playground/greenhouse/): a bit slower, and they need WebGPU.
 >
 > 📚 The docs are at [azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/).
 
@@ -153,12 +152,15 @@ The rows of a high-wire tomato greenhouse, grown to any week of the season.
 
 [README](crates/greenhouse-lab/README.md) ·
 [Parameters](crates/greenhouse-lab/docs/parameters.md) ·
+[Playground](https://azazdeaz.github.io/misina-lab/playground/greenhouse/) ·
 `pip install greenhouse-lab`
 
 ## Try it
 
-**In the browser.** The vineyard's viewer runs at
-[azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/).
+**In the browser.** Each generator's viewer runs at
+[azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/)
+and
+[azazdeaz.github.io/misina-lab/playground/greenhouse](https://azazdeaz.github.io/misina-lab/playground/greenhouse/).
 
 **From Python.**
 

@@ -37,25 +37,30 @@ jobs:
         with:
           tool: wasm-bindgen-cli@${{ env.WASM_BINDGEN }}
 
-      # No apt packages: alsa, udev and wayland are all native-only paths.
-      - run: cargo build --profile wasm-release --target wasm32-unknown-unknown --bin vinery-lab
+      # No apt packages: alsa, udev and wayland are all native-only paths. One
+      # build for every viewer, so the dependencies compile once.
+      - run: cargo build --profile wasm-release --target wasm32-unknown-unknown -p vinery-lab -p greenhouse-lab --bins
 
-      - name: Bundle the playground
-        run: |
-          mkdir -p bundle
-          cp web/index.html bundle/
-          wasm-bindgen --target web --no-typescript --out-dir bundle \
-            target/wasm32-unknown-unknown/wasm-release/vinery-lab.wasm
-          ls -lh bundle
-          tar -czf vinery.tar.gz -C bundle .
-
-      # One asset per playground, named for where pages.yml serves it:
+      # One bundle per playground, named for where pages.yml serves it:
       # vinery.tar.gz is /playground/vinery/.
-      - name: Publish the bundle
+      - name: Bundle the playgrounds
+        run: |
+          bundle() { # name, binary, title
+            mkdir -p "bundle/$1"
+            sed "s/{title}/$3/" web/index.html > "bundle/$1/index.html"
+            wasm-bindgen --target web --no-typescript --out-name viewer --out-dir "bundle/$1" \
+              "target/wasm32-unknown-unknown/wasm-release/$2.wasm"
+            tar -czf "$1.tar.gz" -C "bundle/$1" .
+          }
+          bundle vinery vinery-lab "Vinery Lab"
+          bundle greenhouse greenhouse-lab "Greenhouse Lab"
+          ls -lh bundle/* *.tar.gz
+
+      - name: Publish the bundles
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view playground > /dev/null 2>&1 ||
             gh release create playground --prerelease --target "$GITHUB_SHA" \
               --title Playground --notes "The playgrounds' latest builds, which the Pages workflow deploys."
-          gh release upload playground vinery.tar.gz --clobber
+          gh release upload playground *.tar.gz --clobber
