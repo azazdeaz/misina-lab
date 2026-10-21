@@ -338,7 +338,8 @@ def main():
                 height=SIZE[1],
                 data_types=["rgb"],
                 spawn=sim_utils.PinholeCameraCfg(clipping_range=(0.02, 200.0)),
-                renderer_cfg=IsaacRtxRendererCfg(),
+                # The robot is in env_0's render partition, which cameras outside env_0 cannot see.
+                renderer_cfg=IsaacRtxRendererCfg(enable_scene_partitioning=False),
             )
         )
         driver, vines, to_row, shears = demo.start(sim, robot, machine, ROW)
