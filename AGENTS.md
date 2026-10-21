@@ -1,15 +1,16 @@
 # Misina Lab
 
 A framework for procedural scene generators for robotics simulation, mainly
-Isaac Lab, and two generators built on it: `vinery-lab`, a vineyard, and
-`greenhouse-lab`, the rows of a tomato greenhouse. A Bevy app builds the
-scene as ordinary meshes and transforms, exports it as a plain JSON scene
-document, and Python turns that into a USD stage. Each generator's crate
-ships as an interactive viewer and as a Python extension module.
+Isaac Lab, and two reference generators built on it: `vinery-lab`, a
+vineyard, and `greenhouse-lab`, the rows of a tomato greenhouse. A Bevy app
+builds the scene as ordinary meshes and transforms, exports it as a plain
+JSON scene document, and Python turns that into a USD stage. Each
+generator's crate ships as an interactive viewer and as a Python extension
+module.
 
-[README.md](README.md) is the user-facing front page: the generators and
-their examples, and what the framework gives a generator. Each generator's
-own README, [vinery-lab](crates/vinery-lab/README.md) and
+[README.md](README.md) is the user-facing front page: what the framework
+gives a generator, then the reference generators and their examples. Each
+one's own README, [vinery-lab](crates/vinery-lab/README.md) and
 [greenhouse-lab](crates/greenhouse-lab/README.md), covers what it builds and
 spawning its cfg. This file is the map for working on the repo itself.
 

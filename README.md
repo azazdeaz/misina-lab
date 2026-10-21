@@ -2,19 +2,21 @@
 
 [![CI](https://github.com/azazdeaz/misina-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/azazdeaz/misina-lab/actions/workflows/ci.yml)
 
-**Procedural scenes for robotics simulation.** Tune a scene's parameters in a
-live viewer, then spawn it in [Isaac Lab](https://isaac-sim.github.io/IsaacLab/)
-as USD, with every plant, leaf and fruit a prim of its own.
+**A framework for building procedural scene generators for agricultural robotics
+simulation.** You write a generator's parameters and build code in Rust, and
+Misina Lab makes the rest from them: a live parameter editor, a Python
+package, and an Isaac Lab spawner that brings the scene in as USD.
 
 > [!WARNING]
 > **Developer preview.** Expect breaking changes.
 
-![A generated vineyard in Isaac Lab](https://github.com/user-attachments/assets/3eafecd5-9707-407f-a500-ec52634abfd1)
-*A generated vineyard in Isaac Lab*
+![A vineyard built on Misina Lab, in Isaac Lab](https://github.com/user-attachments/assets/3eafecd5-9707-407f-a500-ec52634abfd1)
+*A vineyard built on Misina Lab, in Isaac Lab*
 
-Two reference generators ship with it, a [vineyard](#vinery-lab) and a
-[tomato greenhouse](#greenhouse-lab). Generators for your own operation are
-[built on it under contract](#custom-generators).
+It ships with two [reference generators](#reference-generators), a vineyard
+and a tomato greenhouse, to try it on and to start from. If you need help, or
+would like to work together on a generator of your own,
+[get in touch](#support).
 
 > 🌐 Try the vineyard in your browser:
 > [azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/),
@@ -22,30 +24,92 @@ Two reference generators ship with it, a [vineyard](#vinery-lab) and a
 >
 > 📚 The docs are at [azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/).
 
-**Contents:** [Generators](#generators) · [Try it](#try-it) ·
-[What every generator gets](#what-every-generator-gets) ·
-[How it works](#how-it-works) · [Build a generator](#build-a-generator) ·
-[Custom generators](#custom-generators) · [Roadmap](#roadmap) ·
+**Contents:** [Features](#features) · [How it works](#how-it-works) ·
+[Build a generator](#build-a-generator) ·
+[Reference generators](#reference-generators) · [Try it](#try-it) ·
+[Roadmap](#roadmap) · [Support](#support) ·
 [Development](#development) · [License](#license)
 
-## Generators
+## Features
+
+Every generator built on Misina Lab gets:
+
+- 🎛️ **A live parameter editor.** Every parameter is a slider with a tooltip,
+  and the scene rebuilds as you drag.
+- 🤖 **Isaac Lab in one paste.** **Copy Isaac Lab cfg** puts the editor's
+  settings on the clipboard. Pasted into an env, the scene generates on first
+  use, is cached as USD and spawns like any USD file.
+- 🐍 **A Python package.** Typed params classes, a headless `write_usd()`, and
+  a parameters page with every default and range.
+- 🎲 **Reproducible.** The same seed gives the same scene, and nudging one
+  part never re-rolls another.
+- 🏷️ **Every part addressable.** Every part is a named prim, down to a single
+  leaf or fruit, and carries its ground truth, such as ripeness.
+- ⚡ **Built to scale.** Level of detail and the number of mesh variants trade
+  fidelity for frame rate.
+- ✂️ **Bendable, cuttable parts.** Flexible parts bend under Newton's VBD
+  solver and can be cut anywhere while the simulation runs.
+
+## How it works
 
 ```mermaid
-flowchart TD
-    misina["Misina Lab<br/>the framework"] --> vinery["Vinery Lab<br/>vineyards"]
-    misina --> greenhouse["Greenhouse Lab<br/>tomato greenhouses"]
-    misina -.-> yours["Your generator"]
-    vinery --> examples
-    subgraph examples ["Examples"]
-        direction TB
-        quadruped["Quadruped"]
-        straddler["Straddler"]
-        pruning["Pruning"]
-    end
+flowchart LR
+    params["Parameters"] --> build["Scene build<br/>Rust and Bevy"]
+    build --> viewer["Viewer<br/>live preview"]
+    build --> doc["Scene document<br/>JSON"]
+    doc --> usd["USD stage"]
+    usd --> isaac["Isaac Lab"]
 ```
 
-Each generator is a Python package of its own, and a full-size generator to
-start a new one from.
+1. A generator declares its parameters as plain Rust structs and builds its
+   scene in [Bevy](https://bevy.org) as ordinary meshes and transforms.
+2. The viewer draws that scene as it is built, so a slider answers at once.
+3. For simulation, the scene leaves Rust as a plain JSON document, and Python
+   turns it into a USD stage.
+4. In Isaac Lab, the generator's cfg class does this on first use, caches the
+   USD, and spawns it as an ordinary USD asset.
+
+## Build a generator
+
+A generator is one Rust crate: its parameters as plain structs, and one build
+system per kind of thing in the scene. Everything else is made from those
+declarations.
+
+```mermaid
+flowchart LR
+    subgraph you ["You write"]
+        direction LR
+        params["Params structs"]
+        systems["Build systems"]
+    end
+    subgraph misina ["Misina Lab makes"]
+        direction LR
+        panel["Viewer and panel"]
+        python["Python classes and stubs"]
+        cfg["Isaac Lab cfg and spawner"]
+        page["Parameters page"]
+        usd["USD export"]
+    end
+    you --> misina
+```
+
+- [The framework's README](crates/misina-lab/README.md) builds the smallest
+  generator, a row of boxes, end to end, and indexes the framework's docs.
+- [A generator in its own repository](crates/misina-lab/docs/outside-projects.md)
+  sets one up outside this one.
+- The [reference generators](#reference-generators) are the full-size ones to
+  start from.
+
+## Reference generators
+
+Both are built on Misina Lab. Each is a Python package of its own, and a
+starting point for a new generator.
+
+- [Vinery Lab](#vinery-lab): vineyards
+    - [Quadruped example](examples/isaaclab_demo/README.md)
+    - [Straddler example](examples/straddler_demo/README.md)
+    - [Pruning example](examples/pruning_demo/README.md)
+- [Greenhouse Lab](#greenhouse-lab): tomato greenhouses
 
 ### Vinery Lab
 
@@ -105,8 +169,8 @@ Wheels are built for Linux x86_64 and Python 3.12 and later; anywhere else
 pip builds from source, which needs
 [Rust](https://www.rust-lang.org/tools/install).
 
-**From a checkout**, with Rust installed, either generator opens in the
-viewer:
+**From a checkout**, with Rust installed, either reference generator opens in
+the viewer:
 
 ```bash
 cargo run --release                     # the vineyard
@@ -117,80 +181,6 @@ Move a slider and the scene rebuilds what it touches. **Copy Isaac Lab cfg**
 puts the settings on the clipboard, ready to paste into an Isaac Lab env.
 
 https://github.com/user-attachments/assets/529d2e5b-2bfa-458f-81d0-02c65c27ba53
-
-## What every generator gets
-
-- 🎛️ **A live parameter editor.** Every parameter is a slider with a tooltip,
-  and the scene rebuilds as you drag.
-- 🤖 **Isaac Lab in one paste.** The scene generates on first use, is cached
-  as USD and spawns like any USD file, once however many envs there are.
-- 🐍 **A Python package.** Typed params classes, a headless `write_usd()`, and
-  a parameters page with every default and range.
-- 🎲 **Reproducible.** The same seed gives the same scene, and nudging one
-  part never re-rolls another.
-- 🏷️ **Every part addressable.** Each plant, shoot, leaf and fruit is a named
-  prim, carrying ground truth such as ripeness.
-- ⚡ **Built to scale.** Level of detail and the number of mesh variants trade
-  fidelity for frame rate.
-- ✂️ **Bendable, cuttable parts.** Flexible parts bend under Newton's VBD
-  solver and can be cut anywhere while the simulation runs.
-
-## How it works
-
-```mermaid
-flowchart LR
-    params["Parameters"] --> build["Scene build<br/>Rust and Bevy"]
-    build --> viewer["Viewer<br/>live preview"]
-    build --> doc["Scene document<br/>JSON"]
-    doc --> usd["USD stage"]
-    usd --> isaac["Isaac Lab"]
-```
-
-1. A generator declares its parameters as plain Rust structs and builds its
-   scene in [Bevy](https://bevy.org) as ordinary meshes and transforms.
-2. The viewer draws that scene as it is built, so a slider answers at once.
-3. For simulation, the scene leaves Rust as a plain JSON document, and Python
-   turns it into a USD stage.
-4. In Isaac Lab, the generator's cfg class does this on first use, caches the
-   USD, and spawns it as an ordinary USD asset.
-
-## Build a generator
-
-A generator is one Rust crate: its parameters as plain structs, and one build
-system per kind of thing in the scene. Everything else is made from those
-declarations.
-
-```mermaid
-flowchart LR
-    subgraph you ["You write"]
-        direction LR
-        params["Params structs"]
-        systems["Build systems"]
-    end
-    subgraph misina ["Misina Lab makes"]
-        direction LR
-        panel["Viewer and panel"]
-        python["Python classes and stubs"]
-        cfg["Isaac Lab cfg and spawner"]
-        page["Parameters page"]
-        usd["USD export"]
-    end
-    you --> misina
-```
-
-- [The framework's README](crates/misina-lab/README.md) builds the smallest
-  generator, a row of boxes, end to end, and indexes the framework's docs.
-- [A generator in its own repository](crates/misina-lab/docs/outside-projects.md)
-  sets one up outside this one.
-- The vineyard and the greenhouse are the full-size generators to start from.
-
-## Custom generators
-
-A scene of your own operation, with your crop, your layout and your
-equipment, can be built on Misina Lab under contract. It comes as a repository
-of your own: the generator crate, its Python package and its Isaac Lab cfg,
-pinned to a Misina Lab release. To discuss one, contact
-[@azazdeaz](https://github.com/azazdeaz).
 
 ## Roadmap
 
@@ -206,7 +196,14 @@ pinned to a Misina Lab release. To discuss one, contact
 - Complete example projects demonstrating task executions
 - **Share what you need for your project 🚀**
 
-Each generator's README has its own roadmap.
+Each reference generator's README has its own roadmap.
+
+## Support
+
+If you need help with Misina Lab, or would like to work together on a
+generator for your own crop, layout or equipment, feel free to reach out to
+[@azazdeaz](https://github.com/azazdeaz). General questions and suggestions 
+are just as welcome.
 
 ## Development
 

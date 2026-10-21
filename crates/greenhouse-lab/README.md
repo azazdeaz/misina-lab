@@ -4,8 +4,8 @@ The rows of a Western European high-wire tomato greenhouse, generated for
 robotics simulation and authored to USD for Isaac Lab: the floor, the pipe
 rails, the gutters with their slabs and blocks, the crop wires, and the
 crop on them: stems, leaves, trusses and fruit. The building, its roof,
-glass and columns, is left to an HDR or a Gaussian splat. It is built on
-[Misina Lab](../../README.md), like the vineyard beside it.
+glass and columns, is left to an HDR or a Gaussian splat. It is one of
+[Misina Lab's reference generators](../../README.md#reference-generators).
 
 > [!WARNING]
 > **Developer preview.** Expect breaking changes.

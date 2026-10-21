@@ -1,8 +1,8 @@
 # Vinery Lab 🍇
 
 Open-source parametric vineyard generator for developing and testing vineyard
-robots. It is built on [Misina Lab](../../README.md), like the greenhouse
-beside it.
+robots, and one of
+[Misina Lab's reference generators](../../README.md#reference-generators).
 
 > [!WARNING]
 > **Developer preview.** Expect breaking changes.
