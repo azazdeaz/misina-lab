@@ -53,6 +53,9 @@ Two kinds of change break a project that worked on the release before:
 - **misina-lab**: A storyboard's camera takes `fov`, the vertical field of
   view. `{PACKAGE}_SHOT` saves the window to an image once a storyboard is
   over, so a storyboard with no steps is a still of its opening shot.
+- **misina-lab**: `misina_lab.isaaclab.shots` renders a still of a generated
+  scene in Isaac Sim from a shot file, its camera a storyboard's, or opens
+  Kit's viewport on the scene, where `P` prints the camera in the same terms.
 
 ### Changed
 

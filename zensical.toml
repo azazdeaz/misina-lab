@@ -39,6 +39,9 @@ nav = [
   { "Greenhouse" = [
     { "Overview" = "crates/greenhouse-lab/README.md" },
     "crates/greenhouse-lab/docs/parameters.md",
+    { "Examples" = [
+      "examples/greenhouse_demo/README.md",
+    ] },
   ] },
   { "Development" = [
     "DEVELOPMENT.md",

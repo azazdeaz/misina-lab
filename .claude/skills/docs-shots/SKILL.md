@@ -21,6 +21,8 @@ repository. `tests/test_docs.py` fails on a link to a picture no shot renders.
 | --- | --- | --- |
 | `docs/shots/vinery-lab/editor.json` | the vineyard's viewer | the top of `crates/vinery-lab/README.md` |
 | `docs/shots/isaaclab_demo/alley.json` | `examples/isaaclab_demo/shot.py` | the top of `README.md` and of `crates/vinery-lab/README.md` |
+| `docs/shots/greenhouse-lab/editor.json` | the greenhouse's viewer | the top of `crates/greenhouse-lab/README.md` |
+| `docs/shots/greenhouse_demo/rows.json` | `examples/greenhouse_demo/shot.py` | the top of `crates/greenhouse-lab/README.md`, and its section of `README.md` |
 
 ## Render them
 
@@ -60,10 +62,12 @@ saves as a still: `{PACKAGE}_TOUR` and `{PACKAGE}_SHOT` in
 and `start`, with the `camera`, the parameters to `set` and a `note`.
 `cargo test` checks it against the params.
 
-**An Isaac Lab shot** is read by the example's `shot.py`, whose docstring is
-its reference: `size`; `set`, parameters changed from the demo's own;
-`waypoint`, where on the demo's route the robot starts; `warmup`, the
-simulated seconds it walks before the picture; and `camera`.
+**An Isaac Lab shot** is read by the example's `shot.py` through
+`misina_lab.isaaclab.shots`, whose docstring is its reference: `size`;
+`set`, parameters changed from the example's own; and `camera`. An example
+may add fields of its own, which its `shot.py` names: the quadruped demo's
+`waypoint`, where on its route the robot starts, and `warmup`, the simulated
+seconds it walks before the picture.
 
 **The camera** is the same in both, in the scene's coordinates, Z up and in
 meters: `focus`, x and y and then a height above the ground there; `yaw`, 0
@@ -98,7 +102,8 @@ will be, the viewport at the shot's size and camera. Navigate the viewport and
 press `P`: the terminal prints the camera. The log's
 `after the warmup the robot is at (x, y)` says where to aim. To move the robot
 instead, change `waypoint`, a meter apart down one alley and back up the next,
-or `warmup`.
+or `warmup`. The greenhouse's opens the same way from `examples/greenhouse_demo`,
+with no robot in it.
 
 Then render the shot and look at it.
 
@@ -111,7 +116,8 @@ Then render the shot and look at it.
 4. Publish, once asked.
 
 A shot of another example needs a `shot.py` there that takes `SHOT.json
-OUT.png`, as `examples/isaaclab_demo/shot.py` does.
+OUT.png` and is built on `misina_lab.isaaclab.shots`;
+`examples/greenhouse_demo/shot.py` is the shortest to start from.
 
 ## Videos stay GitHub uploads
 

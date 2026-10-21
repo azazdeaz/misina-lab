@@ -131,10 +131,36 @@ a shape changed in its body's frame -- a cut rod's two segments, a tool's
 slice standing at a rod -- and `update()` redraws exactly those, each time
 it is called.
 
+## A still of the scene
+
+`misina_lab.isaaclab.shots` renders a picture of a generated scene in Isaac
+Sim's RTX renderer from a shot file, or opens Kit's viewport on the scene to
+frame one by hand. A shot's camera is a storyboard's `Pose` in
+[tour.rs](../src/tour.rs), and `P` prints Kit's viewport camera in the same
+terms as the viewer's `P` key, so a view framed in either app frames the
+same view in the other, of a scene with the same parameters. A script builds
+its scene between the module's calls, and the module's docstring lists what
+a shot holds:
+
+```python
+from misina_lab.isaaclab import shots
+
+args = shots.arguments("Renders a still of the boxes.")
+shot = shots.load(args.shot)
+shots.configure(BOXES_CFG, shot.get("set", {}))
+with launch_simulation(sim_cfg, shots.launcher(args.out)):
+    sim = sim_utils.SimulationContext(sim_cfg)
+    BOXES_CFG.func("/World/Boxes", BOXES_CFG)
+    camera = shots.sensor(shot) if args.out else None
+    sim.reset()
+    shots.finish(sim, shot, None, camera, args.out)
+```
+
 ## Where it lives
 
 - [`misina_lab/isaaclab/spawn.py`](../../../python/misina-lab/misina_lab/isaaclab/spawn.py): `GeneratedSceneCfg`, `spawn_generated`, `resolve_usd_path`, `to_params`, and the cache key
 - [`misina_lab/isaaclab/rods.py`](../../../python/misina-lab/misina_lab/isaaclab/rods.py): `make_physics_cfg_newton`, `tune_rods`, and the numbers
 - [`misina_lab/isaaclab/cutting.py`](../../../python/misina-lab/misina_lab/isaaclab/cutting.py): `Shears.colliders` and `Shears.place` for a collider that moves; the cut itself is [cutting.md](cutting.md)
 - [`misina_lab/isaaclab/colliders.py`](../../../python/misina-lab/misina_lab/isaaclab/colliders.py): `ColliderView`
+- [`misina_lab/isaaclab/shots.py`](../../../python/misina-lab/misina_lab/isaaclab/shots.py): the shot file, `sensor` and `finish`
 - [`src/scene/mod.rs`](../src/scene/mod.rs): `cable`, what the Rust side authors

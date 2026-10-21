@@ -10,6 +10,12 @@ glass and columns, is left to an HDR or a Gaussian splat. It is one of
 > [!WARNING]
 > **Developer preview.** Expect breaking changes.
 
+![The greenhouse in Isaac Lab](https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/greenhouse_demo/rows.webp)
+*The default greenhouse in Isaac Lab, from [its example](../../examples/greenhouse_demo/README.md)*
+
+![The parameter editor](https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/greenhouse-lab/editor.webp)
+*The viewer and its parameter panel, down a path between two rows*
+
 **Contents:** [What a row holds](#what-a-row-holds) ·
 [The crop's age](#the-crops-age) · [Running it](#running-it) ·
 [Prims](#prims)
@@ -70,8 +76,9 @@ params.write_usd("greenhouse.usda")
 ```
 
 In Isaac Lab, `greenhouse_lab.isaaclab.GreenhouseCfg` spawns the scene as
-an asset. [docs/parameters.md](docs/parameters.md) lists every parameter,
-with its default and range.
+an asset; [examples/greenhouse_demo](../../examples/greenhouse_demo/README.md)
+is the smallest script that does. [docs/parameters.md](docs/parameters.md)
+lists every parameter, with its default and range.
 
 ## Prims
 

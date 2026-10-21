@@ -1,0 +1,8 @@
+{
+  "size": [2240, 1040],
+  "warmup": 5,
+  "start": {
+    "note": "The default greenhouse, down the middle path from the main path, the panel beside it.",
+    "camera": {"focus": [5, 0, 1.3], "yaw": -90, "pitch": 10, "radius": 8, "fov": 45}
+  }
+}
