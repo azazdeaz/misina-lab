@@ -103,6 +103,12 @@ Two kinds of change break a project that worked on the release before:
   removed, so an edit that leaves a layer nothing to build clears its parts
   from the library. Such an edit used to leave the layer's old parts in the
   scene document, unreferenced.
+- **misina-lab**: The viewer draws everything a rebuild spawns. When an edit
+  rebuilt two layers in one frame, Bevy 0.20 could skip propagating the
+  transforms of parts the second layer spawned into entity indices the first
+  had just freed, and those parts drew at the origin: setting the
+  greenhouse's week to 0 lost a whole row. A parent whose children changed
+  is now marked moved, which Bevy always propagates.
 - **misina-lab**: The ground's collider under Newton is the ground mesh again
   on a field whose two axes step differently. The height field Newton builds
   from it was sampled at the finer axis's spacing, which put its rows between
