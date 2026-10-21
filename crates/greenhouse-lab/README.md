@@ -1,23 +1,23 @@
-# greenhouse-lab
+# Greenhouse Lab 🍅
 
 The rows of a Western European high-wire tomato greenhouse, generated for
 robotics simulation and authored to USD for Isaac Lab: the floor, the pipe
 rails, the gutters with their slabs and blocks, the crop wires, and the
 crop on them: stems, leaves, trusses and fruit. The building, its roof,
 glass and columns, is left to an HDR or a Gaussian splat. It is built on
-[misina-lab](../misina-lab/README.md), like the vineyard beside it.
+[Misina Lab](../../README.md), like the vineyard beside it.
+
+> [!WARNING]
+> **Developer preview.** Expect breaking changes.
+
+**Contents:** [What a row holds](#what-a-row-holds) ·
+[The crop's age](#the-crops-age) · [Running it](#running-it) ·
+[Prims](#prims)
 
 The dimensions and the variations are drawn from Dutch research
 compartments, supplier sheets and one measured truss study.
 A stem keeps its leaves from the head down and is stripped below them, as
 growers leave it, so the trusses in the harvest band hang off bare stem.
-
-The crop is grown to an age, `scene.week`, the weeks since planting. A
-young crop stands on its twines below the wires with green fruit only. Its
-heads reach the wires and its first trusses ripen about week 9, and from
-then on the stems are lowered along the gutter as they grow, a truss's
-worth of stem a week, so a crop deep into the season has meters of bare
-stem lying beside it.
 
 ## What a row holds
 
@@ -35,6 +35,20 @@ stem lying beside it.
 Rows run along +X from the row head at x = 0, the main path lies at
 negative x, and z = 0 is the top of the floor. Every gutter has a path on
 both sides, so every crop wall faces one a robot can drive.
+
+## The crop's age
+
+The crop is grown to an age, `scene.week`, the weeks since planting:
+
+```mermaid
+flowchart LR
+    planted["Week 0<br/>a 0.4 m transplant"] --> young["Young crop<br/>on its twines below the wires,<br/>green fruit only"]
+    young --> wires["About week 9<br/>heads reach the wires,<br/>first trusses ripen"]
+    wires --> lowered["From then on<br/>stems lowered along the gutter,<br/>a truss's worth a week"]
+```
+
+A stem grows about a truss a week, so a crop deep into the season has meters
+of bare stem lying along the gutter beside it.
 
 ## Running it
 

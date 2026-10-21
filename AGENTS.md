@@ -1,15 +1,17 @@
-# Vinery Lab
+# Misina Lab
 
-Parametric vineyard generator for robotics simulation, mainly Isaac Lab. A
-Bevy app builds the scene as ordinary meshes and transforms, exports it as a
-plain JSON scene document, and Python turns that into a USD stage. The same
-crate ships as an interactive viewer and as a Python extension module,
-`vinery_lab`. A second generator on the same framework, `greenhouse-lab`,
-builds the rows of a tomato greenhouse.
+A framework for procedural scene generators for robotics simulation, mainly
+Isaac Lab, and two generators built on it: `vinery-lab`, a vineyard, and
+`greenhouse-lab`, the rows of a tomato greenhouse. A Bevy app builds the
+scene as ordinary meshes and transforms, exports it as a plain JSON scene
+document, and Python turns that into a USD stage. Each generator's crate
+ships as an interactive viewer and as a Python extension module.
 
-[README.md](README.md) is the user-facing side: features, the Isaac Lab
-workflow, spawning a `VineyardCfg`. This file is the map for working on the
-repo itself.
+[README.md](README.md) is the user-facing front page: the generators and
+their examples, and what the framework gives a generator. Each generator's
+own README, [vinery-lab](crates/vinery-lab/README.md) and
+[greenhouse-lab](crates/greenhouse-lab/README.md), covers what it builds and
+spawning its cfg. This file is the map for working on the repo itself.
 
 ## Commands
 
@@ -91,6 +93,7 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinery_lab`,
 ## Docs
 
 - [DEVELOPMENT.md](DEVELOPMENT.md) — building, the checks, releasing, running the viewer, the web build, the docs site
+- [crates/vinery-lab/README.md](crates/vinery-lab/README.md) — the vineyard generator: its features, the Isaac Lab workflow and the examples
 - [crates/vinery-lab/docs/parameters.md](crates/vinery-lab/docs/parameters.md) — every parameter, with its default and range (generated)
 - [crates/greenhouse-lab/README.md](crates/greenhouse-lab/README.md) — the greenhouse generator: what it builds, and its parameters page
 - [.claude/skills/readme-video/SKILL.md](.claude/skills/readme-video/SKILL.md) — re-recording the README video and changing what it shows; plain Markdown, for any agent

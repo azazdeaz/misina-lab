@@ -14,21 +14,9 @@ edit_uri = "edit/main/"
 # Every page on the site, by its path in the repository: web/stage_docs.py
 # stages these and points a link to anything else at GitHub.
 nav = [
-  { "Vineyard" = [
+  { "Misina Lab" = [
     { "Overview" = "README.md" },
-    "crates/vinery-lab/docs/parameters.md",
-  ] },
-  { "Greenhouse" = [
-    { "Overview" = "crates/greenhouse-lab/README.md" },
-    "crates/greenhouse-lab/docs/parameters.md",
-  ] },
-  { "Examples" = [
-    "examples/isaaclab_demo/README.md",
-    "examples/straddler_demo/README.md",
-    "examples/pruning_demo/README.md",
-  ] },
-  { "Framework" = [
-    { "Overview" = "crates/misina-lab/README.md" },
+    { "Building a generator" = "crates/misina-lab/README.md" },
     "crates/misina-lab/docs/generators.md",
     "crates/misina-lab/docs/elements.md",
     "crates/misina-lab/docs/quantization.md",
@@ -38,6 +26,19 @@ nav = [
     "crates/misina-lab/docs/cutting.md",
     "crates/misina-lab/docs/editing-parameters.md",
     "crates/misina-lab/docs/outside-projects.md",
+  ] },
+  { "Vineyard" = [
+    { "Overview" = "crates/vinery-lab/README.md" },
+    "crates/vinery-lab/docs/parameters.md",
+    { "Examples" = [
+      "examples/isaaclab_demo/README.md",
+      "examples/straddler_demo/README.md",
+      "examples/pruning_demo/README.md",
+    ] },
+  ] },
+  { "Greenhouse" = [
+    { "Overview" = "crates/greenhouse-lab/README.md" },
+    "crates/greenhouse-lab/docs/parameters.md",
   ] },
   { "Development" = [
     "DEVELOPMENT.md",
@@ -79,6 +80,8 @@ pymdownx.emoji.emoji_index = "zensical.extensions.emoji.twemoji"
 pymdownx.emoji.emoji_generator = "zensical.extensions.emoji.to_svg"
 pymdownx.highlight = {}
 pymdownx.magiclink = {}
+# GitHub's alerts, `> [!WARNING]`, drawn as the theme's admonitions.
+pymdownx.quotes.callouts = true
 pymdownx.superfences.custom_fences = [
   { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
 ]
