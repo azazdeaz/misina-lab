@@ -37,5 +37,6 @@ static, at the same lean.
 | `main.py` | the vineyard, the sky, the robot, the simulation loop |
 | `route.py` | waypoints down every alley, read off the trellis posts |
 | `driver.py` | waypoint following, the locomotion policy, getting back up |
+| `shot.py` | a still of the demo for the docs, from a shot file in `docs/shots/isaaclab_demo/`; see [docs-shots](../../.claude/skills/docs-shots/SKILL.md) |
 
 `DEVELOPMENT.md` covers the pinned Isaac Lab release.

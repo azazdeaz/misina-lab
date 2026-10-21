@@ -47,6 +47,12 @@ Two kinds of change break a project that worked on the release before:
   [azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/):
   the framework's pages, both generators' parameters and the examples,
   searchable.
+- **misina-lab**: The viewer's `P` key logs the camera as a storyboard's
+  `camera`, and copies it: a view found by hand, ready to paste into a
+  storyboard.
+- **misina-lab**: A storyboard's camera takes `fov`, the vertical field of
+  view. `{PACKAGE}_SHOT` saves the window to an image once a storyboard is
+  over, so a storyboard with no steps is a still of its opening shot.
 
 ### Changed
 
@@ -69,6 +75,8 @@ Two kinds of change break a project that worked on the release before:
 - **misina-lab**: The viewer's camera is `bevy_panorbit_camera` 0.36 from
   crates.io, so a generator in its own repository no longer copies a
   `[patch.crates-io]` section; delete it.
+- **misina-lab**: A storyboard played without `{PACKAGE}_RECORD` hands the
+  window back to the pointer once it is over, instead of quitting.
 - The repository is now
   [azazdeaz/misina-lab](https://github.com/azazdeaz/misina-lab), and the web
   playground moved with it to

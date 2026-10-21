@@ -11,8 +11,7 @@ shoots are spawned static.
 """
 
 import argparse
-
-import numpy as np
+import math
 
 import isaaclab.sim as sim_utils
 from isaaclab.app import add_launcher_args, launch_simulation
@@ -111,28 +110,38 @@ def design_scene() -> Articulation:
     return instantiate(scene)["robot"]
 
 
-def run_simulator(sim: sim_utils.SimulationContext, robot: Articulation, route: np.ndarray):
-    """Runs the simulation loop."""
-    driver = Driver(route, robot)
-    driver.place()
+def simulation_cfg(device: str) -> sim_utils.SimulationCfg:
+    """The simulation on `device`: Newton coupled with VBD, the robot's legs
+    among what a shoot collides with."""
+    return sim_utils.SimulationCfg(
+        dt=SIM_DT,
+        device=device,
+        physics=make_physics_cfg_newton(VINEYARD_CFG, ROBOT_PATH, ROBOT_CONTACT),
+    )
 
+
+def run_simulator(
+    sim: sim_utils.SimulationContext,
+    robot: Articulation,
+    driver: Driver,
+    seconds: float = math.inf,
+    render: bool = True,
+):
+    """Runs the simulation loop, for `seconds` of simulated time or for as long
+    as the app runs."""
     step = 0
-    while sim.is_running():
+    while sim.is_running() and step * SIM_DT < seconds:
         if step % DECIMATION == 0:
             driver.control()
         robot.write_data_to_sim()
-        sim.step()
+        sim.step(render=render)
         robot.update(SIM_DT)
         step += 1
 
 
 def main():
     args_cli = parse_args()
-    sim_cfg = sim_utils.SimulationCfg(
-        dt=SIM_DT,
-        device=args_cli.device,
-        physics=make_physics_cfg_newton(VINEYARD_CFG, ROBOT_PATH, ROBOT_CONTACT),
-    )
+    sim_cfg = simulation_cfg(args_cli.device)
     # Starts Isaac Sim when the chosen backend or viewer needs it, and closes it
     # on exit. An explicit --physics replaces the config built above.
     with launch_simulation(sim_cfg, args_cli):
@@ -146,8 +155,9 @@ def main():
         fix_heightfield_offsets()
         # Now we are ready!
         print(f"[INFO]: Setup complete, {len(route)} waypoints to walk...")
-        # Run the simulator
-        run_simulator(sim, robot, route)
+        driver = Driver(route, robot)
+        driver.place()
+        run_simulator(sim, robot, driver)
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ package, and an Isaac Lab spawner that brings the scene in as USD.
 > [!WARNING]
 > **Developer preview.** Expect breaking changes.
 
-![A vineyard built on Misina Lab, in Isaac Lab](https://github.com/user-attachments/assets/3eafecd5-9707-407f-a500-ec52634abfd1)
+![A vineyard built on Misina Lab, in Isaac Lab](https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/isaaclab_demo/alley.webp)
 *A vineyard built on Misina Lab, in Isaac Lab*
 
 It ships with two [reference generators](#reference-generators), a vineyard

@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Puts a README's video on GitHub and points the README at it. GitHub plays
-# only video it hosts, and a comment is what `gh` can attach one to: the mp4
-# goes up in a comment on the pull request, and the URL GitHub gave it
-# replaces the README's video line. Check the video first: its skill says how.
+# only video it hosts: its Markdown drops a <video> tag, and its pages load
+# media from no other host, so a video cannot sit in the assets repository
+# with the docs' pictures (docs/shots). A comment is what `gh` can attach one
+# to: the mp4 goes up in a comment on the pull request, and the URL GitHub
+# gave it replaces the README's video line. Check the video first: its skill
+# says how.
 #
 #   docs/video/publish.sh [video.mp4] [README.md] [pull request]
 #

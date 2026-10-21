@@ -1,8 +1,10 @@
 //! Plays a storyboard in the viewer — camera moves, panel scrolls, parameter
-//! edits — for recording a demo video with [`record`](crate::record):
+//! edits — for recording a demo video with [`record`](crate::record), or for
+//! taking a still:
 //!
 //! ```text
 //! BOXLAB_TOUR=tour.json BOXLAB_RECORD=demo.mp4 cargo run --release
+//! BOXLAB_TOUR=shot.json BOXLAB_SHOT=shot.png cargo run --release
 //! ```
 //!
 //! The variable is `{PACKAGE}_TOUR`, naming a JSON file in [`Tour`]'s shape.
@@ -10,25 +12,31 @@
 //! the video does not depend on how fast the machine draws: a rebuild that
 //! stalls the window for a second costs one frame, and a camera move is as
 //! smooth on a software renderer as on a GPU. Without `{PACKAGE}_RECORD` the
-//! tour plays on the wall clock instead, as a preview.
+//! tour plays on the wall clock instead. `{PACKAGE}_SHOT` saves the window
+//! once the last step is over, to an image whose extension names its format;
+//! a storyboard with no steps is a still of its opening shot.
 //!
 //! The tour changes what a person would — the panel's [`Staged`] params, the
 //! orbit camera, the panel's scroll — so the viewer answers as it does to a
 //! person, the settle before an edit reaches the scene included. It sizes the
 //! window to the video, takes the pointer away from it, and quits the app
-//! after the last step, which finishes the file.
+//! after the last step, which finishes the file. Played with neither variable
+//! set, as a preview, it hands the window back to the pointer instead, still at
+//! the storyboard's size: that is how a shot is framed by hand, with
+//! [`print_camera`] on the viewer's `P` key.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 // Named over the prelude's `ContextExt`, Bevy's own `context`, which would
 // make every call ambiguous.
 use anyhow::{Context as ContextExt, bail, ensure};
+use bevy::clipboard::Clipboard;
 use bevy::picking::PickingSettings;
 use bevy::prelude::*;
 use bevy::reflect::NamedField;
-use bevy::render::view::screenshot::Screenshot;
+use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::time::TimeUpdateStrategy;
 use bevy::ui::{Checked, ComputedNode, ScrollPosition, UiGlobalTransform};
 use bevy::ui_widgets::{Checkbox, ScrollArea, SliderPrecision, SliderValue, ValueChange};
@@ -69,16 +77,34 @@ pub fn plugin<G: Generator>(app: &mut App) {
         ..default()
     });
 
-    if G::env("RECORD").is_some() {
+    let recording = G::env("RECORD").is_some();
+    if recording {
         // A nanosecond over the period: the recorder captures once a whole
         // period has passed by its f64 sums, which a step of exactly one
         // would sometimes fall short of, skipping a frame.
         let frame = Duration::from_nanos((1e9 / record::fps::<G>()) as u64 + 1);
         app.insert_resource(TimeUpdateStrategy::ManualDuration(frame));
     }
+    let finish = match G::env("SHOT") {
+        Some(path) => Finish::Shoot(path.into()),
+        None if recording => Finish::Quit,
+        None => Finish::Stay,
+    };
     app.insert_resource(record::Hold)
         .insert_resource(tour)
+        .insert_resource(finish)
         .add_systems(Update, play::<G::Params>);
+}
+
+/// What the tour does after its last step.
+#[derive(Resource)]
+enum Finish {
+    /// Quits, which finishes the recording.
+    Quit,
+    /// Saves the window to this image, then quits.
+    Shoot(PathBuf),
+    /// Hands the window back to the pointer and carries on: a preview.
+    Stay,
 }
 
 /// A storyboard: the window it is shot in, the opening shot, and the steps
@@ -92,7 +118,8 @@ pub struct Tour {
     /// keeps its text legible in a video played smaller than it was recorded.
     pub scale: f32,
     /// Wall-clock seconds the opening shot gets to build and compile its
-    /// shaders before recording starts. A slow machine may need more.
+    /// shaders before the first step, which is when recording starts. A slow
+    /// machine may need more.
     pub warmup: f32,
     /// Played during the warmup, so recording opens on it. Its `wait` is
     /// ignored.
@@ -154,6 +181,8 @@ pub struct Pose {
     pub pitch: Option<f32>,
     /// Meters from the focus.
     pub radius: Option<f32>,
+    /// The vertical field of view, in degrees. The viewer opens at 45.
+    pub fov: Option<f32>,
 }
 
 /// Reads a storyboard, and checks every parameter it names against `P`.
@@ -239,6 +268,8 @@ enum Phase {
     Playing { next: usize, due: f64 },
     /// Past the last step, waiting for the frames still being read back.
     Ending,
+    /// Past the last step, the window handed back to the pointer.
+    Over,
 }
 
 /// A move under way. The camera's and the scroll's stay once done, holding
@@ -273,15 +304,20 @@ struct Orbit {
     yaw: f32,
     pitch: f32,
     radius: f32,
+    fov: f32,
 }
 
 impl Orbit {
-    fn of(camera: &PanOrbitCamera) -> Self {
+    fn of(camera: &PanOrbitCamera, projection: &Projection) -> Self {
         Self {
             focus: camera.focus,
             yaw: camera.yaw.unwrap_or_default(),
             pitch: camera.pitch.unwrap_or_default(),
             radius: camera.radius.unwrap_or(1.0),
+            fov: match projection {
+                Projection::Perspective(perspective) => perspective.fov,
+                _ => PerspectiveProjection::default().fov,
+            },
         }
     }
 
@@ -296,6 +332,7 @@ impl Orbit {
             yaw: pose.yaw.map_or(self.yaw, f32::to_radians),
             pitch: pose.pitch.map_or(self.pitch, f32::to_radians),
             radius: pose.radius.unwrap_or(self.radius),
+            fov: pose.fov.map_or(self.fov, f32::to_radians),
         }
     }
 
@@ -307,12 +344,30 @@ impl Orbit {
             // Geometric, so a dolly from 100 m to 5 m covers the same share
             // of the way every frame instead of crawling in at the end.
             radius: self.radius * (to.radius / self.radius).powf(t),
+            fov: self.fov.lerp(to.fov, t),
         }
+    }
+
+    /// The inverse of [`with`](Self::with): this pose in a storyboard's
+    /// terms, as the JSON of a `camera`.
+    fn pose(self, ground: Option<&Ground>) -> String {
+        let [x, y, z] = (z_up_to_y_up().inverse() * self.focus).to_array();
+        let up = z - ground.map_or(0.0, |ground| ground.height(x, y));
+        format!(
+            r#""camera": {{"focus": [{x:.2}, {y:.2}, {up:.2}], "yaw": {:.1}, "pitch": {:.1}, "radius": {:.2}, "fov": {:.1}}}"#,
+            self.yaw.to_degrees(),
+            self.pitch.to_degrees(),
+            self.radius,
+            self.fov.to_degrees(),
+        )
     }
 
     /// Puts the camera here this frame, past its smoothing: target and
     /// current pose both, and a forced update since they already agree.
-    fn place(self, camera: &mut PanOrbitCamera) {
+    fn place(self, camera: &mut PanOrbitCamera, projection: &mut Projection) {
+        if let Projection::Perspective(perspective) = projection {
+            perspective.fov = self.fov;
+        }
         camera.focus = self.focus;
         camera.target_focus = self.focus;
         camera.yaw = Some(self.yaw);
@@ -332,7 +387,7 @@ fn play<P: Params>(world: &mut World, mut at: Local<Playhead>) {
         match at.phase {
             // The orbit camera reads its pose off its transform on its first
             // frame, over whatever was set before.
-            Phase::Opening if camera(world).initialized => {
+            Phase::Opening if camera(world).0.initialized => {
                 begin::<P>(world, at, &tour.start, now);
                 at.phase = Phase::Settling(Instant::now());
             }
@@ -357,8 +412,21 @@ fn play<P: Params>(world: &mut World, mut at: Local<Playhead>) {
                     };
                 }
                 None => {
-                    world.insert_resource(record::Hold);
-                    at.phase = Phase::Ending;
+                    at.phase = match world.remove_resource::<Finish>() {
+                        Some(Finish::Stay) => {
+                            hand_back(world, at);
+                            Phase::Over
+                        }
+                        finish => {
+                            if let Some(Finish::Shoot(path)) = finish {
+                                world
+                                    .spawn(Screenshot::primary_window())
+                                    .observe(save_to_disk(path));
+                            }
+                            world.insert_resource(record::Hold);
+                            Phase::Ending
+                        }
+                    };
                 }
             }
         }
@@ -371,11 +439,42 @@ fn play<P: Params>(world: &mut World, mut at: Local<Playhead>) {
     });
 }
 
+/// Gives the window back to the pointer, the camera and the panel with it.
+fn hand_back(world: &mut World, at: &mut Playhead) {
+    at.camera = None;
+    at.scroll = None;
+    if let Some((_, card)) = at.tip.take() {
+        world.despawn(card);
+    }
+    let mut cursor = world
+        .query_filtered::<&mut CursorOptions, With<PrimaryWindow>>()
+        .single_mut(world)
+        .expect("the viewer opens one window");
+    cursor.hit_test = true;
+    world.resource_mut::<PickingSettings>().is_input_enabled = true;
+}
+
+/// Logs where the orbit camera is as a storyboard's `camera`, and copies it
+/// to the clipboard: in a step, or a shot's `start`, it brings this view back.
+pub fn print_camera(
+    camera: Single<(&PanOrbitCamera, &Projection)>,
+    ground: Option<Res<Ground>>,
+    mut clipboard: ResMut<Clipboard>,
+) {
+    let (camera, projection) = *camera;
+    let pose = Orbit::of(camera, projection).pose(ground.as_deref());
+    info!("{pose}");
+    if let Err(err) = clipboard.set_text(pose) {
+        warn!("could not reach the clipboard: {err}");
+    }
+}
+
 /// Starts a step: sets its moves going and makes its cuts.
 fn begin<P: Params>(world: &mut World, at: &mut Playhead, step: &Step, now: f64) {
     let (began, secs) = (now, step.secs);
     if let Some(pose) = step.camera {
-        let from = Orbit::of(&camera(world));
+        let (camera, projection) = camera(world);
+        let from = Orbit::of(&camera, &projection);
         at.camera = Some(Tween {
             began,
             secs,
@@ -466,7 +565,9 @@ fn begin<P: Params>(world: &mut World, at: &mut Playhead, step: &Step, now: f64)
 fn animate<P: Params>(world: &mut World, at: &mut Playhead, now: f64) {
     if let Some(tween) = &at.camera {
         let (from, to) = tween.what;
-        from.lerp(to, tween.progress(now)).place(&mut camera(world));
+        let (mut camera, mut projection) = camera(world);
+        from.lerp(to, tween.progress(now))
+            .place(&mut camera, &mut projection);
     }
     // Not on the frame the scroll began: a section it unfolded is laid out
     // at the end of that frame, so its controls have no place yet.
@@ -520,9 +621,9 @@ fn scrolled(world: &World, area: Entity) -> f32 {
     })
 }
 
-fn camera(world: &mut World) -> Mut<'_, PanOrbitCamera> {
+fn camera(world: &mut World) -> (Mut<'_, PanOrbitCamera>, Mut<'_, Projection>) {
     world
-        .query::<&mut PanOrbitCamera>()
+        .query::<(&mut PanOrbitCamera, &mut Projection)>()
         .single_mut(world)
         .expect("the viewer has one orbit camera")
 }
@@ -571,5 +672,36 @@ mod tests {
             let err = format!("{:#}", tour(set).unwrap_err());
             assert!(err.contains("step 2") && err.contains(error), "{err}");
         }
+    }
+
+    /// What the `P` key prints is a step's `camera`, and sets the pose it was
+    /// printed from.
+    #[test]
+    fn a_printed_camera_sets_the_pose_it_was_printed_from() {
+        let start = Orbit {
+            focus: Vec3::ZERO,
+            yaw: 0.0,
+            pitch: 0.0,
+            radius: 1.0,
+            fov: 1.0,
+        };
+        let printed = start
+            .with(
+                Pose {
+                    focus: Some([3.0, -4.5, 1.2]),
+                    yaw: Some(-35.0),
+                    pitch: Some(12.5),
+                    radius: Some(8.25),
+                    fov: Some(30.0),
+                },
+                None,
+            )
+            .pose(None);
+        assert_eq!(
+            printed,
+            r#""camera": {"focus": [3.00, -4.50, 1.20], "yaw": -35.0, "pitch": 12.5, "radius": 8.25, "fov": 30.0}"#
+        );
+        let step: Step = serde_json::from_str(&format!("{{{printed}}}")).unwrap();
+        assert_eq!(start.with(step.camera.unwrap(), None).pose(None), printed);
     }
 }

@@ -7,10 +7,10 @@ robots, and one of
 > [!WARNING]
 > **Developer preview.** Expect breaking changes.
 
-![Configured scene in Isaac Lab](https://github.com/user-attachments/assets/3eafecd5-9707-407f-a500-ec52634abfd1)
+![Configured scene in Isaac Lab](https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/isaaclab_demo/alley.webp)
 *Configured scene in Isaac Lab*
 
-![The parameter editor](https://github.com/user-attachments/assets/37b38b86-edd5-49aa-8c8d-58143415bb86)
+![The parameter editor](https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/vinery-lab/editor.webp)
 *Standalone parameter editor and visualizer app*
 
 > 🌐 Try the parameter editor in your browser:
