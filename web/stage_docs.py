@@ -3,7 +3,9 @@
 
 Keeping the paths keeps every link between two pages working as written. A
 link to anything else, source, a directory or a page left off the site, is
-rewritten to point at it on GitHub, at the commit being built.
+rewritten to point at it on GitHub, at the commit being built. A line that is
+only a GitHub attachment URL, which GitHub plays as a video, becomes a
+`<video>` tag.
 """
 
 from __future__ import annotations
@@ -23,11 +25,13 @@ if not OUT.is_relative_to(ROOT / "target"):
     raise SystemExit(f"docs_dir is emptied on every run, so it has to be under target/: {OUT}")
 
 TOKEN = re.compile(
-    r"(?P<code>^ *```.*?^ *```|`[^`\n]*`)|\]\((?P<target>[^)\s#]*)(?P<anchor>#[^)\s]*)?\)",
+    r"(?P<code>^ *```.*?^ *```|`[^`\n]*`)|\]\((?P<target>[^)\s#]*)(?P<anchor>#[^)\s]*)?\)"
+    r"|^(?P<video>https://github\.com/user-attachments/assets/[0-9a-f-]+)$",
     re.DOTALL | re.MULTILINE,
 )
-"""Code, which is copied as it is, or an inline link, as tests/test_docs.py
-reads them."""
+"""Code, which is copied as it is, an inline link, as tests/test_docs.py reads
+them, or a bare attachment URL on a line of its own: docs/video/publish.sh
+writes a video that way, and GitHub plays it."""
 URL = re.compile(r"[a-z][a-z0-9+.-]*:")
 
 
@@ -51,6 +55,8 @@ def stage(out: Path = OUT) -> list[Path]:
     ).stdout.strip()
 
     def link(match: re.Match[str], page: Path) -> str:
+        if match["video"]:
+            return f'<video src="{match["video"]}" controls muted playsinline></video>'
         target = match["target"]
         if match["code"] or not target or URL.match(target):
             return match[0]

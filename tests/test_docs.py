@@ -39,7 +39,7 @@ of a vine it is built from, and the greenhouse's names and the parts of its
 rows. A generator that joins the repo adds its own."""
 INDEXES = {
     "crates/misina-lab/docs": "crates/misina-lab/README.md",
-    "crates/vinery-lab/docs": "README.md",
+    "crates/vinery-lab/docs": "crates/vinery-lab/README.md",
     "crates/greenhouse-lab/docs": "crates/greenhouse-lab/README.md",
 }
 """Each docs folder, and the file that lists every page in it."""
@@ -151,3 +151,29 @@ def test_the_site_links_only_its_own_pages(tmp_path: Path) -> None:
         if target and not URL.match(target) and (page.parent / target).resolve() not in staged
     ]
     assert not stray, stray
+
+
+def test_the_site_plays_the_videos(tmp_path: Path) -> None:
+    """GitHub plays a bare attachment URL; staged, it is a `<video>` tag."""
+    SITE["stage"](tmp_path)
+    readme = (tmp_path / "README.md").read_text(encoding="utf-8")
+    assert re.search(r'<video src="https://github\.com/user-attachments/assets/[0-9a-f-]+"', readme)
+    assert not re.search(r"^https://github\.com/user-attachments", readme, re.MULTILINE)
+
+
+ASSETS = "https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/"
+"""Where `docs/shots/publish.sh` publishes the pictures `docs/shots/render.sh`
+renders: `docs/shots/A/B.json` as `A/B.webp`."""
+
+
+@pytest.mark.parametrize("page", MARKDOWN, ids=name)
+def test_every_picture_has_a_shot(page: Path) -> None:
+    """A published picture is rendered from a shot in the repo, never made by
+    hand."""
+    missing = [
+        target
+        for target, _ in links(page)
+        if target.startswith(ASSETS)
+        and not (ROOT / "docs/shots" / target.removeprefix(ASSETS)).with_suffix(".json").exists()
+    ]
+    assert not missing, f"{name(page)}: {missing}"

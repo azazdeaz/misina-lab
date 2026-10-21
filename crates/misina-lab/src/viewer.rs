@@ -83,6 +83,13 @@ pub fn app<G: Generator>() -> App {
         Update,
         save_scene_on_key.run_if(input_just_pressed(KeyCode::KeyS)),
     );
+    // Prints the camera in a storyboard's terms, for framing a shot by hand.
+    // See [`crate::tour`].
+    #[cfg(not(target_arch = "wasm32"))]
+    app.add_systems(
+        Update,
+        crate::tour::print_camera.run_if(input_just_pressed(KeyCode::KeyP)),
+    );
 
     // Off by default: it logs a line per re-authored frame, which during a
     // slider drag is every frame. See [`crate::perf`].

@@ -9,6 +9,9 @@ that turns the document into a stage, and the Isaac Lab spawner that
 generates and caches it. One crate ships a generator both as an interactive
 viewer and as a Python extension module.
 
+**Contents:** [The smallest generator](#the-smallest-generator) ·
+[Reading on](#reading-on) · [Development](#development)
+
 ```text
 params ──▶ build systems ──▶ Bevy entities ──▶ scene document (JSON) ──▶ USD stage ──▶ Isaac Lab
                                   │

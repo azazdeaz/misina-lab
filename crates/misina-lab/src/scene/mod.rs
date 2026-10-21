@@ -53,13 +53,39 @@ use std::f32::consts::FRAC_PI_2;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use bevy::transform::TransformSystems;
 
 use crate::Generator;
 
-/// The mesh library, and the scene root named after `G`, in `G`'s namespace.
+/// The mesh library, the scene root named after `G` in `G`'s namespace, and
+/// [`mark_rebuilt_parents`].
 pub fn plugin<G: Generator>(app: &mut App) {
     app.init_resource::<Prototypes>()
-        .add_systems(Startup, spawn_root::<G>);
+        .add_systems(Startup, spawn_root::<G>)
+        .add_systems(
+            PostUpdate,
+            mark_rebuilt_parents.before(TransformSystems::Propagate),
+        );
+}
+
+/// Marks every entity whose children changed as moved, so that transform
+/// propagation reaches the children a rebuild spawned.
+///
+/// Bevy 0.20.0's multi-threaded `mark_dirty_trees` records the entities it has
+/// visited by index alone, and visits despawned ones too. A child spawned into
+/// an index that a despawn freed in the same frame therefore looks visited, the
+/// climb to its parent stops there, and `propagate_parent_transforms` skips the
+/// unmarked parent's subtree: the child keeps an identity `GlobalTransform` and
+/// draws at the origin. Layers rebuilt in one frame do exactly that, the later
+/// one spawning into the indices the earlier one freed. A parent marked here is
+/// marked by its own change, whatever indices its children have.
+///
+/// Bevy 0.20.1 no longer visits despawned entities there; this system, and the
+/// test that covers it, go once the workspace is on it.
+fn mark_rebuilt_parents(mut parents: Query<&mut Transform, Changed<Children>>) {
+    for mut transform in &mut parents {
+        transform.set_changed();
+    }
 }
 
 /// The entity every element spawns its prims under — the scene root, and the
@@ -562,6 +588,51 @@ mod tests {
             "scene +Z lands on world +Y, got {}",
             placed.translation()
         );
+    }
+
+    /// A child spawned into an index a despawn freed in the same frame is still
+    /// propagated — see [`mark_rebuilt_parents`].
+    #[test]
+    fn children_spawned_into_freed_indices_are_propagated() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, TransformPlugin, super::plugin::<Boxes>));
+        let world = app.world_mut();
+        // `new`'s children take the indices `old`'s free. `other`'s children are
+        // detached rather than despawned: they only lengthen the list of orphans
+        // Bevy walks before the new children, which makes the miss certain
+        // rather than a race between its threads.
+        let [old, new, other] = [Vec3::ZERO, Vec3::X, Vec3::ZERO]
+            .map(|at| world.spawn(Transform::from_translation(at)).id());
+        for (parent, count) in [(old, 2048), (other, 16384)] {
+            for _ in 0..count {
+                world.spawn((Transform::IDENTITY, ChildOf(parent)));
+            }
+        }
+        app.update();
+
+        let world = app.world_mut();
+        for child in world.entity(old).get::<Children>().unwrap().to_vec() {
+            world.despawn(child);
+        }
+        for child in world.entity(other).get::<Children>().unwrap().to_vec() {
+            world.entity_mut(child).remove::<ChildOf>();
+        }
+        let spawned: Vec<Entity> = (0..1024)
+            .map(|_| world.spawn((Transform::IDENTITY, ChildOf(new))).id())
+            .collect();
+        app.update();
+
+        let stale = spawned
+            .iter()
+            .filter(|&&child| {
+                app.world()
+                    .get::<GlobalTransform>(child)
+                    .unwrap()
+                    .translation()
+                    != Vec3::X
+            })
+            .count();
+        assert_eq!(stale, 0, "{stale} new children were never propagated");
     }
 
     /// The rotation belongs to the viewer, so it must sit above the prim the

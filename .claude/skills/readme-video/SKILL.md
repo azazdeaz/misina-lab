@@ -1,11 +1,11 @@
 ---
 name: readme-video
-description: Re-records the README's demo video of the viewer with docs/video/record.sh, publishes it with docs/video/publish.sh, and changes what it shows — the camera moves, the panel edits, their timing — by editing the storyboard docs/video/tour.json. Use after a change to how the viewer, the panel or the scene looks, or when asked to update, re-record or re-cut the README video. Not for still screenshots.
+description: Re-records the README's demo video of the viewer with docs/video/record.sh, publishes it with docs/video/publish.sh, and changes what it shows — the camera moves, the panel edits, their timing — by editing the storyboard docs/video/tour.json. Use after a change to how the viewer, the panel or the scene looks, or when asked to update, re-record or re-cut the README video. Not for the docs' still pictures, which are docs-shots.
 ---
 
 # README video
 
-The README's **Parameter editor app** section shows a 40-second video of the
+The README's **Try it** section shows a 40-second video of the
 viewer: the parcel from above while the terrain and the row layout are edited,
 a descent into an alley, the vines trained lower, a glimpse of the wireframe,
 stray shoots, a cover crop drying to straw, the vines going dormant, and a
@@ -34,10 +34,12 @@ itself when the video is done.
    storyboard, never the video.
 3. Run `docs/video/publish.sh` on the branch whose pull request changes the
    video, and commit README.md with the change. GitHub plays only video it
-   hosts, so the script uploads the mp4 in a comment on that pull request,
-   where reviewers see it too, and puts the URL GitHub gave it on the
+   hosts — its Markdown drops a `<video>` tag, and its pages load media from
+   no other host — so a video is not published with the docs' pictures (the
+   docs-shots skill): the script uploads the mp4 in a comment on that pull
+   request, where reviewers see it too, and puts the URL GitHub gave it on the
    README's video line: the one `https://github.com/user-attachments/assets/…`
-   line alone, under **Parameter editor app**. It needs gh 2.102 or later and
+   line alone, under **Try it**. It needs gh 2.102 or later and
    push access, and it posts, so run it once the video is right.
 
 A video is right when:

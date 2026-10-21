@@ -42,8 +42,10 @@ hides the trellis wires, which have no collider yet.
 3. Run
    `docs/video/publish.sh target/video/pruning.mp4 examples/pruning_demo/README.md`
    on the branch whose pull request changes the video, and commit the README
-   with the change. It uploads the mp4 in a comment on that pull request and
-   puts the URL GitHub gave it on the README's video line, the one
+   with the change. GitHub plays only video it hosts, so unlike the docs'
+   pictures (the docs-shots skill) a video is a GitHub upload: the script
+   uploads the mp4 in a comment on that pull request and puts the URL GitHub
+   gave it on the README's video line, the one
    `https://github.com/user-attachments/assets/…` line alone. Its header says
    what it needs; it posts, so run it once the video is right.
 

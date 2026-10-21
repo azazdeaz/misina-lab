@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "vinery-lab"
 description = "Procedural vineyard scene generation, authored to USD."
-readme = "../../README.md"
+readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT OR Apache-2.0"
 authors = [{ name = "Andras Polgar", email = "azazdeaz@gmail.com" }]

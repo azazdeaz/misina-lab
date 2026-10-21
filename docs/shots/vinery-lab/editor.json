@@ -1,0 +1,8 @@
+{
+  "size": [2240, 1040],
+  "warmup": 5,
+  "start": {
+    "note": "The default vineyard, down an alley from over the canopy, the panel beside it.",
+    "camera": {"focus": [-26, 1.2, 1], "yaw": -90, "pitch": 16, "radius": 6.5, "fov": 45}
+  }
+}

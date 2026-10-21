@@ -47,6 +47,12 @@ Two kinds of change break a project that worked on the release before:
   [azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/):
   the framework's pages, both generators' parameters and the examples,
   searchable.
+- **misina-lab**: The viewer's `P` key logs the camera as a storyboard's
+  `camera`, and copies it: a view found by hand, ready to paste into a
+  storyboard.
+- **misina-lab**: A storyboard's camera takes `fov`, the vertical field of
+  view. `{PACKAGE}_SHOT` saves the window to an image once a storyboard is
+  over, so a storyboard with no steps is a still of its opening shot.
 
 ### Changed
 
@@ -69,11 +75,19 @@ Two kinds of change break a project that worked on the release before:
 - **misina-lab**: The viewer's camera is `bevy_panorbit_camera` 0.36 from
   crates.io, so a generator in its own repository no longer copies a
   `[patch.crates-io]` section; delete it.
+- **misina-lab**: A storyboard played without `{PACKAGE}_RECORD` hands the
+  window back to the pointer once it is over, instead of quitting.
 - The repository is now
   [azazdeaz/misina-lab](https://github.com/azazdeaz/misina-lab), and the web
   playground moved with it to
   [azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/).
   The old repository URL redirects; the old playground URL does not.
+- The README is misina-lab's front page: the framework's features first,
+  then a section for each reference generator and its examples. The docs
+  site lists the framework first too. The
+  vineyard's page is now
+  [crates/vinery-lab/README.md](crates/vinery-lab/README.md), which is also
+  vinery-lab's description on PyPI.
 
 ### Fixed
 
@@ -89,6 +103,12 @@ Two kinds of change break a project that worked on the release before:
   removed, so an edit that leaves a layer nothing to build clears its parts
   from the library. Such an edit used to leave the layer's old parts in the
   scene document, unreferenced.
+- **misina-lab**: The viewer draws everything a rebuild spawns. When an edit
+  rebuilt two layers in one frame, Bevy 0.20 could skip propagating the
+  transforms of parts the second layer spawned into entity indices the first
+  had just freed, and those parts drew at the origin: setting the
+  greenhouse's week to 0 lost a whole row. A parent whose children changed
+  is now marked moved, which Bevy always propagates.
 - **misina-lab**: The ground's collider under Newton is the ground mesh again
   on a field whose two axes step differently. The height field Newton builds
   from it was sampled at the finer axis's spacing, which put its rows between

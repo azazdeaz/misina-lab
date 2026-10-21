@@ -1,8 +1,12 @@
 # Quadruped demo
 
-A stock ANYmal-C walking every alley of a generated vineyard, down one and
+A stock ANYmal-C walking every alley of a
+[generated vineyard](../../crates/vinery-lab/README.md), down one and
 back up the next. The navigation path is derived from the USD, no sensor input
 is used in this demo. 
+
+**Contents:** [Requirements](#requirements) ·
+[Running the demo](#running-the-demo) · [Layout](#layout)
 
 ## Requirements
  - [uv](https://docs.astral.sh/uv/getting-started/installation/) installed
@@ -33,5 +37,6 @@ static, at the same lean.
 | `main.py` | the vineyard, the sky, the robot, the simulation loop |
 | `route.py` | waypoints down every alley, read off the trellis posts |
 | `driver.py` | waypoint following, the locomotion policy, getting back up |
+| `shot.py` | a still of the demo for the docs, from a shot file in `docs/shots/isaaclab_demo/`; see [docs-shots](../../.claude/skills/docs-shots/SKILL.md) |
 
 `DEVELOPMENT.md` covers the pinned Isaac Lab release.

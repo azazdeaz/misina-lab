@@ -1,161 +1,219 @@
-:warning: Developer preview. Expect breaking changes.
+# Misina Lab
 
 [![CI](https://github.com/azazdeaz/misina-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/azazdeaz/misina-lab/actions/workflows/ci.yml)
 
-# Vinery Lab :grapes:
+**A framework for building procedural scene generators for agricultural robotics
+simulation.** You write a generator's parameters and build code in Rust, and
+Misina Lab makes the rest from them: a live parameter editor, a Python
+package, and an Isaac Lab spawner that brings the scene in as USD.
 
-Open-source parametric vineyard generator for developing and testing vineyard robots.
+> [!WARNING]
+> **Developer preview.** Expect breaking changes.
 
-![Configured scene in Isaac Lab](https://github.com/user-attachments/assets/3eafecd5-9707-407f-a500-ec52634abfd1)
-*Configured scene in Isaac Lab*
+![A vineyard built on Misina Lab, in Isaac Lab](https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/isaaclab_demo/alley.webp)
+*A vineyard built on Misina Lab, in Isaac Lab*
 
-<br>
+It ships with two [reference generators](#reference-generators), a vineyard
+and a tomato greenhouse, to try it on and to start from. If you need help, or
+would like to work together on a generator of your own,
+[get in touch](#support).
 
-
-![Configured scene in Isaac Lab](https://github.com/user-attachments/assets/37b38b86-edd5-49aa-8c8d-58143415bb86)
-*Standalone parameter editor and visualizer app*
-
-
-> Try the parameter editor in your browser: [azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/) — bit slower and needs WebGPU.
+> 🌐 Try the vineyard in your browser:
+> [azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/),
+> a bit slower, and it needs WebGPU.
 >
-> The docs are at [azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/).
+> 📚 The docs are at [azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/).
 
-
+**Contents:** [Features](#features) · [How it works](#how-it-works) ·
+[Build a generator](#build-a-generator) ·
+[Reference generators](#reference-generators) · [Try it](#try-it) ·
+[Roadmap](#roadmap) · [Support](#support) ·
+[Development](#development) · [License](#license)
 
 ## Features
- - Parameter configurator with live preview
- - Fully reproducible scene generation
- - Leaves are modelled as detailed meshes to enable depth perception based workflows
- - Performance tuning. LoD and mesh variance are configurable to support low-end hardware and large vineyards
- - Every plant, shoot and leaf is an addressable prim
- - Flexible stray shoots that the robot can push aside, and cut anywhere along their length
- - A dormant mode: bare brown canes with a bud at every node, every one of them cuttable
- - Cover crops and weeds
 
-## Upcoming features
- - Optionally use PointInstancer to spawn organs without a unique prim path
- - Simulate human workers and other safety critical scenarios
- - More detailed cover crop and weed definitions
+Every generator built on Misina Lab gets:
 
-## Planned features
- - Reconstruct real vineyard parcels from EU vineyard-register data, public orthophotos, and regional DTMs
- - Support multiple vine-training systems
- - RTK-GNSS data generation
- - GeoJSON and TASKDATA.xml export
- - Complete example projects demonstrating task executions
- - **Share what you need for your project :rocket:**
+- 🎛️ **A live parameter editor.** Every parameter is a slider with a tooltip,
+  and the scene rebuilds as you drag.
+- 🤖 **Isaac Lab in one paste.** **Copy Isaac Lab cfg** puts the editor's
+  settings on the clipboard. Pasted into a scene config, the scene generates
+  on first use, is cached as USD and spawns like any USD file.
+- 🐍 **A Python package.** Typed params classes, a headless `write_usd()`, and
+  a parameters page with every default and range.
+- 🎲 **Reproducible.** The same seed gives the same scene, and nudging one
+  part never re-rolls another.
+- 🏷️ **Every part addressable.** Every part is a named prim, down to a single
+  leaf or fruit, and carries its ground truth, such as ripeness.
+- ⚡ **Built to scale.** Level of detail and the number of mesh variants trade
+  fidelity for frame rate.
+- ✂️ **Bendable, cuttable parts.** Flexible parts bend under Newton's VBD
+  solver and can be cut anywhere while the simulation runs.
 
+## How it works
 
-## Install
+```mermaid
+flowchart LR
+    params["Parameters"] --> build["Scene build<br/>Rust and Bevy"]
+    build --> viewer["Viewer<br/>live preview"]
+    build --> doc["Scene document<br/>JSON"]
+    doc --> usd["USD stage"]
+    usd --> isaac["Isaac Lab"]
+```
+
+1. A generator declares its parameters as plain Rust structs and builds its
+   scene in [Bevy](https://bevy.org) as ordinary meshes and transforms.
+2. The viewer draws that scene as it is built, so a slider answers at once.
+3. For simulation, the scene leaves Rust as a plain JSON document, and Python
+   turns it into a USD stage.
+4. In Isaac Lab, the generator's cfg class does this on first use, caches the
+   USD, and spawns it as an ordinary USD asset.
+
+## Build a generator
+
+A generator is one Rust crate: its parameters as plain structs, and one build
+system per kind of thing in the scene. Everything else is made from those
+declarations.
+
+```mermaid
+flowchart LR
+    subgraph you ["You write"]
+        direction LR
+        params["Params structs"]
+        systems["Build systems"]
+    end
+    subgraph misina ["Misina Lab makes"]
+        direction LR
+        panel["Viewer and panel"]
+        python["Python classes and stubs"]
+        cfg["Isaac Lab cfg and spawner"]
+        page["Parameters page"]
+        usd["USD export"]
+    end
+    you --> misina
+```
+
+- [The framework's README](crates/misina-lab/README.md) builds the smallest
+  generator, a row of boxes, end to end, and indexes the framework's docs.
+- [A generator in its own repository](crates/misina-lab/docs/outside-projects.md)
+  sets one up outside this one.
+- The [reference generators](#reference-generators) are the full-size ones to
+  start from.
+
+## Reference generators
+
+Both are built on Misina Lab. Each is a Python package of its own, and a
+starting point for a new generator.
+
+- [Vinery Lab](#vinery-lab): vineyards
+    - [Quadruped example](examples/isaaclab_demo/README.md)
+    - [Straddler example](examples/straddler_demo/README.md)
+    - [Pruning example](examples/pruning_demo/README.md)
+- [Greenhouse Lab](#greenhouse-lab): tomato greenhouses
+
+### Vinery Lab
+
+Vineyards for developing and testing vineyard robots: trellised rows on
+rolling terrain, down to every leaf.
+
+- 🍃 Leaves as detailed meshes, for depth-based perception
+- 🌿 Stray shoots that bend as a robot pushes through, and cut anywhere
+- ❄️ A dormant mode: bare canes with a bud at every node, every one cuttable
+- 🌾 Cover crops in the alleys and weeds under the vines
+
+[README](crates/vinery-lab/README.md) ·
+[Parameters](crates/vinery-lab/docs/parameters.md) ·
+[Playground](https://azazdeaz.github.io/misina-lab/playground/vinery/) ·
+`pip install vinery-lab`
+
+#### Examples
+
+| Example | What it shows |
+| --- | --- |
+| [Quadruped](examples/isaaclab_demo/README.md) | An ANYmal-C walks every alley, down one and back up the next. |
+| [Straddler](examples/straddler_demo/README.md) | A portal robot drives every row with the trellis passing under its frame. `--trim` hedges the stray shoots. |
+| [Pruning](examples/pruning_demo/README.md) | A Bumblebee-like arm on a UGV cuts every cane of a dormant row back to two buds. |
+
+Each is a uv project of its own: `cd` into it and `uv run main.py`. They build
+the generator from this checkout, so they need
+[Rust](https://www.rust-lang.org/tools/install) and hardware that runs
+Isaac Sim 6.2.
+
+### Greenhouse Lab
+
+The rows of a high-wire tomato greenhouse, grown to any week of the season.
+
+- 🍅 Every fruit its own prim, with its ripening stage
+- 🦾 A `Cut` and a `Bend` frame on every truss, where a gripper takes it
+- 📅 The crop's age in weeks, from young plants on their twines to meters of
+  lowered stem
+- 🛤️ Heating-pipe rails in every path, uneven up to and past the 2° spec
+
+[README](crates/greenhouse-lab/README.md) ·
+[Parameters](crates/greenhouse-lab/docs/parameters.md) ·
+`pip install greenhouse-lab`
+
+## Try it
+
+**In the browser.** The vineyard's viewer runs at
+[azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/).
+
+**From Python.**
 
 ```bash
-pip install vinery-lab
+pip install vinery-lab        # the vineyard
+pip install greenhouse-lab    # the greenhouse
 ```
 
 Wheels are built for Linux x86_64 and Python 3.12 and later; anywhere else
-pip builds it from source, which needs [Rust](https://www.rust-lang.org/tools/install).
-The Isaac Lab examples below install it from this checkout instead.
+pip builds from source, which needs
+[Rust](https://www.rust-lang.org/tools/install).
 
-
-## Parameter editor app
-
-Run the parameter editor
-
-> Requires [Rust](https://www.rust-lang.org/tools/install) installed
+**From a checkout**, with Rust installed, either reference generator opens in
+the viewer:
 
 ```bash
-cargo run --release
+cargo run --release                     # the vineyard
+cargo run --release -p greenhouse-lab   # the greenhouse
 ```
 
-This should bring up the preview app to configure the vineyard
+Move a slider and the scene rebuilds what it touches. **Copy Isaac Lab cfg**
+puts the settings on the clipboard, ready to paste into an Isaac Lab scene
+config.
 
 https://github.com/user-attachments/assets/529d2e5b-2bfa-458f-81d0-02c65c27ba53
 
+## Roadmap
 
+**Upcoming**
 
-## Isaac Lab examples
+- Optionally use PointInstancer to spawn organs without a unique prim path
+- Simulate human workers and other safety critical scenarios
 
-Navigate the rows with a quadruped. See its [README](examples/isaaclab_demo/README.md) for more detail.
-```bash
-cd examples/isaaclab_demo/
-uv run main.py
-```
+**Planned**
 
-The same demo on the PhysX backend (the stray shoots spawn static there)
-```bash
-uv run main.py --physics physx
-```
+- RTK-GNSS data generation
+- GeoJSON and TASKDATA.xml export
+- Complete example projects demonstrating task executions
+- **Share what you need for your project 🚀**
 
-The same demo on MJWarp alone, the fastest of the backends (the stray shoots spawn static there too)
-```bash
-uv run main.py --physics newton_mjwarp
-```
+Each reference generator's README has its own roadmap.
 
-Drive a straddling robot down every row. See its [README](examples/straddler_demo/README.md) for more detail.
-```bash
-cd examples/straddler_demo/
-uv run main.py
-```
+## Support
 
-The same robot with a hedger hung under it, trimming the stray shoots back to the canopy
-```bash
-uv run main.py --trim
-```
+If you need help with Misina Lab, or would like to work together on a
+generator for your own crop, layout or equipment, feel free to reach out to
+[@azazdeaz](https://github.com/azazdeaz). General questions and suggestions 
+are just as welcome.
 
-Prune a dormant vineyard with a UGV-mounted arm, Bumblebee style: every cane
-cut back to two buds, planned from the scene's own bud positions. See its
-[README](examples/pruning_demo/README.md) for more detail.
-```bash
-cd examples/pruning_demo/
-uv run main.py
-```
+## Development
 
-
-## How it works (main points)
-
- - The generator is built on [misina-lab](crates/misina-lab/README.md), the framework
- under it, which holds everything that is not about vines.
- - The vineyard can be composed with a [`VineyardCfg`](crates/vinery-lab/python/vinery_lab/isaaclab/vineyard_cfg.py) object,
- which is a standard Isaac Lab `FileCfg` config class. See `VINEYARD_CFG` in the [quadruped demo](examples/isaaclab_demo/main.py).
- - Every parameter, with its default and range, is listed in [crates/vinery-lab/docs/parameters.md](crates/vinery-lab/docs/parameters.md).
- - The options are many, so prefer to use the parameter editor GUI and copy the configuration snippet to your script.
- - When the simulation starts, the meshes and layouts are generated a USD file and cached for the next run.
- - The cached USD file is then spawned as a regular Isaac Lab USD file asset.
-
-
-## Workflow
- - Start the parameter editor with `cargo run --release`.
- - Edit the scene parameters in the UI.
- - Press **Copy Isaac Lab cfg** to put the current settings on the clipboard as
-   a `VineyardCfg(...)` construction — only the fields you moved.
- - Paste it into your Isaac Lab environment config and spawn it:
-
-```python
-from vinery_lab.isaaclab import VineyardCfg, ParcelCfg, SceneCfg, VineCfg
-
-VINEYARD_CFG = VineyardCfg(
-    scene=SceneCfg(seed=42),
-    parcel=ParcelCfg(row_spacing=2.8, vine_spacing=1.05),
-    vine=VineCfg(arms=1),
-)
-
-# in the env's scene config
-vineyard = AssetBaseCfg(prim_path="/World/Vineyard", spawn=VINEYARD_CFG)
-```
-
-Declare it in a scene: under Newton, the physics holds only the assets a scene
-declares, so a vineyard spawned straight onto the stage is one nothing collides
-with. A plain script builds an `InteractiveScene` around it, as `design_scene`
-in the [quadruped demo](examples/isaaclab_demo/main.py) does.
+- [AGENTS.md](AGENTS.md): the repo map
+- [DEVELOPMENT.md](DEVELOPMENT.md): building, the checks, releasing, the docs
+  site
+- [CHANGELOG.md](CHANGELOG.md): what each release changed
 
 ## License
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or
 [MIT License](LICENSE-MIT), at your option.
-
-## Development
-
-See [AGENTS.md](AGENTS.md) for the repo map,
-[DEVELOPMENT.md](DEVELOPMENT.md) for building and running the checks,
-and the framework's own [README](crates/misina-lab/README.md) and
-[docs](crates/misina-lab/docs/) for how a generator is built.
