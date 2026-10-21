@@ -35,7 +35,15 @@ from route import alley_route
 ##
 # Pre-defined configs
 ##
-from isaaclab_assets.robots.anymal import ANYMAL_C_CFG  # isort:skip
+from isaaclab_assets.robots.anymal import ANYDRIVE_3_LSTM_ACTUATOR_CFG, ANYMAL_C_CFG  # isort:skip
+
+# The policy in `driver` was trained with the actuator net's torque clipped flat
+# at its effort limit. Isaac Lab clips it along the DC motor's torque-speed line
+# instead, which starves a fast-swinging leg, and the robot falls in the
+# headland turns. An unbounded velocity limit makes that line flat.
+ANYMAL_CFG = ANYMAL_C_CFG.replace(
+    actuators={"legs": ANYDRIVE_3_LSTM_ACTUATOR_CFG.replace(actuator_velocity_limit=math.inf)}
+)
 
 
 # The scene is generated on first use and cached on these parameters, so a
@@ -104,7 +112,7 @@ def design_scene() -> Articulation:
     # The generated scene brings its own colliders: the ground as its own mesh,
     # the posts and trunks as capsules.
     scene.vineyard = AssetBaseCfg(prim_path=VINEYARD_PATH, spawn=VINEYARD_CFG)
-    scene.robot = ANYMAL_C_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    scene.robot = ANYMAL_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
     # `instantiate` builds the `InteractiveScene` the cfg names. Importing that class
     # loads pip's `pxr`, and Kit's own has to be the first one loaded.
     return instantiate(scene)["robot"]
