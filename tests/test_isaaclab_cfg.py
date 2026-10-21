@@ -155,9 +155,9 @@ def test_cache_is_keyed_on_geometry_only(cfg, tmp_path):
     moved.cache_dir = str(tmp_path)
     assert spawn.resolve_usd_path(moved) != first
 
-    from isaaclab.sim.schemas import RigidBodyBaseCfg
+    from isaaclab.sim.schemas import UsdPhysicsRigidBodyCfg
 
-    decorated = cfg.replace(rigid_props=RigidBodyBaseCfg(kinematic_enabled=True))
+    decorated = cfg.replace(rigid_props=UsdPhysicsRigidBodyCfg(kinematic_enabled=True))
     decorated.cache_dir = str(tmp_path)
     assert spawn.resolve_usd_path(decorated) == first
 
@@ -198,7 +198,7 @@ def test_cached_scene_composes_when_referenced(cfg, tmp_path):
     """Referencing the cached file gives a complete asset under `/World`.
 
     This is what a file path buys over the anonymous layer it replaces, and
-    it is what `_spawn_from_usd_file` does under the hood. Worth asserting
+    it is what `spawn_from_usd_file` does under the hood. Worth asserting
     directly because the failure mode is silent: a prototype that does not
     compose through the reference leaves prims present but empty, and the
     scene renders as nothing at all.

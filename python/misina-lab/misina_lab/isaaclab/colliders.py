@@ -57,7 +57,7 @@ class ColliderView:
         from pxr import Sdf, UsdGeom, UsdShade
 
         self._stage = stage if stage is not None else sim_utils.get_current_stage()
-        model = self._model = NewtonManager._model
+        model = self._model = NewtonManager.get_model()
         if model is None:
             raise RuntimeError(
                 "no Newton model to draw: build ColliderView after the first reset, under Newton"

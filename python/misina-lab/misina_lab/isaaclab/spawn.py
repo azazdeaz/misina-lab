@@ -13,7 +13,7 @@ is owned by the stage, survives cloning and serialization, and lets Isaac Lab's
 own USD-file spawn path do the rest.
 
 The shape here follows `spawn_from_urdf`: produce a USD file, then delegate to
-the undecorated `_spawn_from_usd_file`.
+the undecorated `spawn_from_usd_file`.
 
 The cache holds `.usd` (binary crate) -- about a third the bytes of the text
 form and roughly 4x faster for USD to parse.
@@ -145,10 +145,10 @@ def spawn_generated(
     """
     # Imported here, not at module level: it pulls in `pxr`, and Kit's own copy
     # of `pxr` only wins the import if nothing loaded the pip one before Kit started.
-    from isaaclab.sim.spawners.from_files.from_files import _spawn_from_usd_file
+    from isaaclab.sim.spawners.from_files.from_files import spawn_from_usd_file
 
     cfg = for_backend(cfg)
-    return _spawn_from_usd_file(
+    return spawn_from_usd_file(
         prim_path, resolve_usd_path(cfg), cfg, translation, orientation, **kwargs
     )
 

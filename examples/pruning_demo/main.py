@@ -26,7 +26,9 @@ import torch
 
 import isaaclab.sim as sim_utils
 from isaaclab.app import add_launcher_args, launch_simulation
-from isaaclab.assets import Articulation
+from isaaclab.assets import Articulation, AssetBaseCfg
+from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.utils import instantiate
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
 from vinery_lab.isaaclab import (
@@ -76,7 +78,8 @@ VINEYARD_CFG = VineyardCfg(
 )
 
 VINEYARD_PATH = "/World/Vineyard"
-ROBOT_PATH = "/World/Robot"
+# Where `design_scene` puts the robot: its scene's one environment.
+ROBOT_PATH = "/World/envs/env_0/Robot"
 
 # The parts of the robot a cane may bend: the arm, which pushes through the
 # canes around the one it is cutting, and the shear -- its head and fixed
@@ -139,13 +142,23 @@ def parse_args() -> argparse.Namespace:
 
 
 def design_scene(machine: Bumblebee) -> Articulation:
-    """The vineyard without its wires, a sky, and the robot."""
-    cfg = sim_utils.DomeLightCfg(
-        intensity=750.0,
-        texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
+    """The vineyard without its wires, a sky, and the robot.
+
+    Declared as a scene, since Newton steps only what a scene declares.
+    """
+    scene = InteractiveSceneCfg(num_envs=1, env_spacing=0.0)
+    scene.light = AssetBaseCfg(
+        prim_path="/World/Light",
+        spawn=sim_utils.DomeLightCfg(
+            intensity=750.0,
+            texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
+        ),
     )
-    cfg.func("/World/Light", cfg)
-    VINEYARD_CFG.func(VINEYARD_PATH, VINEYARD_CFG)
+    scene.vineyard = AssetBaseCfg(prim_path=VINEYARD_PATH, spawn=VINEYARD_CFG)
+    scene.robot = bumblebee_cfg(machine, "{ENV_REGEX_NS}/Robot")
+    # `instantiate` builds the `InteractiveScene` the cfg names. Importing that class
+    # loads pip's `pxr`, and Kit's own has to be the first one loaded.
+    robot = instantiate(scene)["robot"]
     # The trellis wires are hidden: they have no collider, so the canes and
     # the shear would pass straight through them.
     from pxr import UsdGeom
@@ -155,7 +168,7 @@ def design_scene(machine: Bumblebee) -> Articulation:
         for prim in row.GetChildren():
             if prim.GetName().startswith("Wire_"):
                 UsdGeom.Imageable(prim).MakeInvisible()
-    return Articulation(bumblebee_cfg(machine, ROBOT_PATH))
+    return robot
 
 
 def row_geometry(stage, row: int) -> tuple[float, np.ndarray]:
@@ -264,7 +277,7 @@ def run_simulator(
     pruning: Pruning | Teleop | None = teleop
     started = 0.0
     step = 0
-    while sim.is_headless_or_exist_active_visualizer():
+    while sim.is_running():
         if step % DECIMATION == 0:
             q = robot.data.joint_pos.torch[0, arm].cpu().numpy()
             if pruning is None:
