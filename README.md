@@ -37,8 +37,8 @@ Every generator built on Misina Lab gets:
 - 🎛️ **A live parameter editor.** Every parameter is a slider with a tooltip,
   and the scene rebuilds as you drag.
 - 🤖 **Isaac Lab in one paste.** **Copy Isaac Lab cfg** puts the editor's
-  settings on the clipboard. Pasted into an env, the scene generates on first
-  use, is cached as USD and spawns like any USD file.
+  settings on the clipboard. Pasted into a scene config, the scene generates
+  on first use, is cached as USD and spawns like any USD file.
 - 🐍 **A Python package.** Typed params classes, a headless `write_usd()`, and
   a parameters page with every default and range.
 - 🎲 **Reproducible.** The same seed gives the same scene, and nudging one
@@ -137,7 +137,7 @@ rolling terrain, down to every leaf.
 Each is a uv project of its own: `cd` into it and `uv run main.py`. They build
 the generator from this checkout, so they need
 [Rust](https://www.rust-lang.org/tools/install) and hardware that runs
-Isaac Sim 6.1.
+Isaac Sim 6.2.
 
 ### Greenhouse Lab
 
@@ -178,7 +178,8 @@ cargo run --release -p greenhouse-lab   # the greenhouse
 ```
 
 Move a slider and the scene rebuilds what it touches. **Copy Isaac Lab cfg**
-puts the settings on the clipboard, ready to paste into an Isaac Lab env.
+puts the settings on the clipboard, ready to paste into an Isaac Lab scene
+config.
 
 https://github.com/user-attachments/assets/529d2e5b-2bfa-458f-81d0-02c65c27ba53
 

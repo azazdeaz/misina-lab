@@ -285,14 +285,16 @@ def tune_rods(
     plant_path = re.compile(rf"(.*/{re.escape(plant)}_[^/]*)/")
     # Imported here and not at module scope: `newton` brings `pxr` with it, and
     # Kit's own `pxr` wins the import only if nothing loaded the pip one first.
-    from isaaclab_newton.physics import NewtonManager
+    from isaaclab.sim import SimulationContext
+    from isaaclab_newton.physics import NewtonBuilderCfg, NewtonManager
     from newton import JointType
 
     if _tuning is not None and _tuning.id in NewtonManager._callbacks:
         return _tuning
 
     def tune(_payload) -> None:
-        builder = NewtonManager._builder
+        sim = SimulationContext.instance()
+        builder = sim.get_or_create_backend(NewtonBuilderCfg(physics_cfg=sim.cfg.physics))
         rods: set[int] = set()
         for joint, kind in enumerate(builder.joint_type):
             if kind != JointType.ROD:
@@ -337,7 +339,8 @@ def tune_rods(
 
     _tuning = NewtonManager.register_callback(tune, PhysicsEvent.MODEL_INIT)
     NewtonManager.register_callback(
-        lambda _payload: reserve_contact_slots(NewtonManager._model), PhysicsEvent.PHYSICS_READY
+        lambda _payload: reserve_contact_slots(NewtonManager.get_model()),
+        PhysicsEvent.PHYSICS_READY,
     )
     return _tuning
 

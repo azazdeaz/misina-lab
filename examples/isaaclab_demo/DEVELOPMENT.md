@@ -1,21 +1,23 @@
-## Isaac Lab revision
+## Isaac Lab release
 
-`isaaclab` comes from a pinned Git commit rather than a release wheel — the
-releases lag the features this demo uses. `tools/wheel_builder` in that repo is
-a PEP 517 backend that builds the same aggregate package from any revision, so
-the dependency stays a plain `isaaclab[isaacsim,all]` and needs no checkout.
+`isaaclab[isaacsim,all]` is pinned to one release from NVIDIA's package index.
+The straddler and pruning demos pin the same one; bump the three together.
 
-To move to a newer revision:
+To move to a newer release:
 
-1. Set `rev` in `[tool.uv.sources]` to the commit hash. A branch name also
-   works, but then any re-lock silently picks up a new Isaac Lab.
-2. Copy `tools/wheel_builder/uv-overrides.txt` from that revision into
-   `override-dependencies`. These are Isaac Lab's own resolver pins, which the
-   wheel it builds does not carry; without them the `isaacsim` extra pulls the
-   stack back to versions Isaac Lab needs newer.
+1. Set the version in `dependencies`.
+2. Copy `tools/wheel_builder/uv-overrides.txt`, at that release's tag, into
+   `override-dependencies`. These are Isaac Lab's own resolver pins, which its
+   wheel does not carry; without them the `isaacsim` extra pulls the stack back
+   to versions Isaac Lab needs newer.
 3. Re-lock and sync:
 
-       uv lock --upgrade-package isaaclab
+       uv lock
        uv sync
 
-Extras can also move between revisions.
+Extras can also move between releases.
+
+A commit between releases builds the same package from Git: drop the version
+from `dependencies`, add
+`isaaclab = { git = "https://github.com/isaac-sim/IsaacLab.git", rev = "<commit>", subdirectory = "tools/wheel_builder" }`
+to `[tool.uv.sources]`, and take the overrides from that commit.

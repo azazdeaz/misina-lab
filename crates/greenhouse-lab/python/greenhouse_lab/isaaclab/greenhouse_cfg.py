@@ -295,7 +295,7 @@ class GreenhouseCfg(GeneratedSceneCfg):
             rail=RailCfg(gauge=0.55, unevenness=1.0),
         )
 
-        # manager-based scene cfg
+        # in a scene cfg: Newton steps only the assets a scene declares
         greenhouse = AssetBaseCfg(prim_path="/World/Greenhouse", spawn=GREENHOUSE_CFG)
     """
 

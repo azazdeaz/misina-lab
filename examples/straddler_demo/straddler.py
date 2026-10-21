@@ -91,7 +91,7 @@ class Trimmer:
     Summer hedging is done this way, with sickle bars at 3-4 km/h or rotary
     knives at 5-6, which is the pace this robot cruises at. The bars are
     visuals only; what they cut is decided by `Straddler.bars` and
-    `vinery_lab.isaaclab.cutting.Shears`.
+    `misina_lab.isaaclab.cutting.Shears`.
     """
 
     reach: float = 0.4

@@ -201,7 +201,12 @@ def builder(monkeypatch) -> object:
         ],
         shape_collision_group=[1] * 8,
     )
-    monkeypatch.setattr(NewtonManager, "_builder", builder, raising=False)
+    # The simulation the builder is fetched from, by its physics config.
+    sim = types.SimpleNamespace(
+        cfg=types.SimpleNamespace(physics=NewtonCfg()),
+        get_or_create_backend=lambda _cfg: builder,
+    )
+    monkeypatch.setattr(SimulationContext, "instance", lambda: sim)
     # `tune_shoots` registers a callback per call, and nothing here deregisters.
     NewtonManager.clear_callbacks()
     return builder

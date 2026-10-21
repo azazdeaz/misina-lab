@@ -4,7 +4,7 @@ The vineyard and the quadruped are set up here; the route comes from `route`
 and the walking from `driver`.
 
 The physics backend and the viewer are command-line choices, e.g.
-`--physics newton_mjwarp --viz newton`; `--help` lists the full launcher set.
+`--physics newton_mjwarp --viz newton_gl`; `--help` lists the full launcher set.
 The default backend is Newton coupled with VBD, which bends the vineyard's
 flexible shoots -- see `vinery_lab.isaaclab.physics`. Under any other the stray
 shoots are spawned static.
@@ -16,7 +16,9 @@ import numpy as np
 
 import isaaclab.sim as sim_utils
 from isaaclab.app import add_launcher_args, launch_simulation
-from isaaclab.assets import Articulation
+from isaaclab.assets import Articulation, AssetBaseCfg
+from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.utils import instantiate
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
 from vinery_lab.isaaclab import (
@@ -52,7 +54,8 @@ VINEYARD_CFG = VineyardCfg(
 )
 
 VINEYARD_PATH = "/World/Vineyard"
-ROBOT_PATH = "/World/Robot"
+# Where `design_scene` puts the robot: its scene's one environment.
+ROBOT_PATH = "/World/envs/env_0/Robot"
 
 # The parts of the robot a shoot may bend: the legs. In this scene none of them
 # reaches one -- see `VINEYARD_CFG` -- and every body named here still costs a
@@ -86,19 +89,26 @@ def parse_args() -> argparse.Namespace:
 
 
 def design_scene() -> Articulation:
-    """The vineyard, a sky, and one quadruped to walk it."""
-    # HDR dome light (IBL + visible sky). Outdoor locomotion envs use this map.
-    cfg = sim_utils.DomeLightCfg(
-        intensity=750.0,
-        texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
-    )
-    cfg.func("/World/Light", cfg)
+    """The vineyard, a sky, and one quadruped to walk it.
 
+    Declared as a scene, since Newton steps only what a scene declares.
+    """
+    scene = InteractiveSceneCfg(num_envs=1, env_spacing=0.0)
+    # HDR dome light (IBL + visible sky). Outdoor locomotion envs use this map.
+    scene.light = AssetBaseCfg(
+        prim_path="/World/Light",
+        spawn=sim_utils.DomeLightCfg(
+            intensity=750.0,
+            texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
+        ),
+    )
     # The generated scene brings its own colliders: the ground as its own mesh,
     # the posts and trunks as capsules.
-    VINEYARD_CFG.func(VINEYARD_PATH, VINEYARD_CFG)
-
-    return Articulation(ANYMAL_C_CFG.replace(prim_path=ROBOT_PATH))
+    scene.vineyard = AssetBaseCfg(prim_path=VINEYARD_PATH, spawn=VINEYARD_CFG)
+    scene.robot = ANYMAL_C_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    # `instantiate` builds the `InteractiveScene` the cfg names. Importing that class
+    # loads pip's `pxr`, and Kit's own has to be the first one loaded.
+    return instantiate(scene)["robot"]
 
 
 def run_simulator(sim: sim_utils.SimulationContext, robot: Articulation, route: np.ndarray):
@@ -107,7 +117,7 @@ def run_simulator(sim: sim_utils.SimulationContext, robot: Articulation, route: 
     driver.place()
 
     step = 0
-    while sim.is_headless_or_exist_active_visualizer():
+    while sim.is_running():
         if step % DECIMATION == 0:
             driver.control()
         robot.write_data_to_sim()

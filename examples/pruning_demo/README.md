@@ -17,7 +17,7 @@ collider yet, so the canes and the shear would pass through them.
 
 ## Requirements
  - [uv](https://docs.astral.sh/uv/getting-started/installation/) installed
- - [Isaac Sim 6.1](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/installation/requirements.html) compatible hardware
+ - [Isaac Sim 6.2](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/requirements.html) compatible hardware
  - [Rust](https://www.rust-lang.org/tools/install) installed (this demo builds the scene generator from source)
 
 ## Running the demo
@@ -221,5 +221,5 @@ and the simulation come from one description.
 | `teleop.py` | the keyboard driving the base, jogging the mouth and working the shear |
 | `video.py`, `record.sh` | the video: a vine pruned case by case, filmed headless, and its encoding |
 
-`DEVELOPMENT.md` in `../isaaclab_demo` covers the pinned Isaac Lab revision,
+`DEVELOPMENT.md` in `../isaaclab_demo` covers the pinned Isaac Lab release,
 which this example shares.

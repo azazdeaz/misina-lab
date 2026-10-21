@@ -50,6 +50,15 @@ Two kinds of change break a project that worked on the release before:
 
 ### Changed
 
+- **misina-lab**: The Isaac Lab side runs on Isaac Lab 3.0.0 and the Newton
+  1.6.1 it ships with. Under Newton, Isaac Lab now puts into the physics only
+  the assets a scene declares, so declare a generated scene in a scene config,
+  `AssetBaseCfg(prim_path=..., spawn=...)`: one spawned straight onto the
+  stage with `cfg.func(...)` is drawn, but nothing collides with it. The
+  viewer's **Copy Isaac Lab cfg** snippet says so.
+- The examples run on the Isaac Lab 3.0.0 release and Isaac Sim 6.2, and
+  build their scene as an `InteractiveScene`, which puts the robot in the
+  scene's one environment, at `/World/envs/env_0/Robot`.
 - **greenhouse-lab** (**cfg**): `StemCfg.lowered` is gone: how much stem
   lies along the gutter follows from `SceneCfg.week`.
   `StemCfg.harvest_height` and `StemCfg.trusses` now describe the crop in

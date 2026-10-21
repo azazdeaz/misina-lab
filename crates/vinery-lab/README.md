@@ -70,7 +70,7 @@ many, so set them in the parameter editor and copy them out of it:
 
 ```mermaid
 flowchart LR
-    editor["Parameter editor"] -- "Copy Isaac Lab cfg" --> cfg["VineyardCfg<br/>in your env"]
+    editor["Parameter editor"] -- "Copy Isaac Lab cfg" --> cfg["VineyardCfg<br/>in your scene config"]
     cfg --> cached{"Cached for<br/>these parameters?"}
     cached -- no --> generate["Generate the vineyard<br/>and write its USD"] --> spawn["Spawn the USD"]
     cached -- yes --> spawn
@@ -81,7 +81,7 @@ flowchart LR
 2. Edit the scene parameters in the panel.
 3. Press **Copy Isaac Lab cfg** to put the current settings on the clipboard
    as a `VineyardCfg(...)` construction, with only the fields you moved.
-4. Paste it into your Isaac Lab environment config and spawn it:
+4. Paste it into your Isaac Lab environment's scene config:
 
 ```python
 from vinery_lab.isaaclab import VineyardCfg, ParcelCfg, SceneCfg, VineCfg
@@ -92,21 +92,20 @@ VINEYARD_CFG = VineyardCfg(
     vine=VineCfg(arms=1),
 )
 
-# a plain script, or a direct env's `_setup_scene()`
-VINEYARD_CFG.func("/World/Vineyard", VINEYARD_CFG)
-
-# or a manager-based scene config
+# in the env's scene config
 vineyard = AssetBaseCfg(prim_path="/World/Vineyard", spawn=VINEYARD_CFG)
 ```
 
-`VINEYARD_CFG` in the [quadruped example](../../examples/isaaclab_demo/main.py)
-is one in use.
+Declare it in a scene: under Newton, the physics holds only the assets a scene
+declares, so a vineyard spawned straight onto the stage is one nothing collides
+with. A plain script builds an `InteractiveScene` around it, as `design_scene`
+in the [quadruped example](../../examples/isaaclab_demo/main.py) does.
 
 ## Examples
 
 Each example is a uv project of its own that builds the generator from this
 checkout, so it needs [Rust](https://www.rust-lang.org/tools/install) and
-hardware that runs Isaac Sim 6.1.
+hardware that runs Isaac Sim 6.2.
 
 ### Quadruped
 

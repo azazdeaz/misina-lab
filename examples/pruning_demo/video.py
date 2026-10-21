@@ -321,8 +321,7 @@ def main():
     sim_cfg = demo.simulation_cfg("cuda:0")
     # Kit, headless, with nothing to look at the scene but the camera below:
     # its renderer needs Kit's, which a camera made after launch cannot ask for.
-    launcher = {"headless": True, "enable_cameras": True, "require_kit": True}
-    launcher |= {"visualizer": None, "visualizer_explicit": True}
+    launcher = {"headless": True, "enable_cameras": True, "require_kit": True, "visualizer": []}
     with launch_simulation(sim_cfg, launcher):
         # Imported once Kit is up: they bring `pxr`, and Kit's copy has to win.
         from isaaclab.sensors import Camera, CameraCfg

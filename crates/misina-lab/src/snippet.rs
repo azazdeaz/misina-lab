@@ -57,9 +57,7 @@ pub fn cfg<G: Generator>(current: &G::Params) -> String {
         out.push_str(")\n");
     }
     out.push_str(&format!(
-        "\n# Spawn it directly:\n\
-         #     {var}.func(\"/World/{name}\", {var})\n\
-         # or put it in a scene config:\n\
+        "\n# Put it in a scene config; Newton steps only the assets a scene declares:\n\
          #     {lower} = AssetBaseCfg(\n\
          #         prim_path=\"/World/{name}\", spawn={var})\n",
         name = G::NAME,
