@@ -74,6 +74,12 @@ Two kinds of change break a project that worked on the release before:
   playground moved with it to
   [azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/).
   The old repository URL redirects; the old playground URL does not.
+- The README is misina-lab's front page: the framework's features first,
+  then a section for each reference generator and its examples. The docs
+  site lists the framework first too. The
+  vineyard's page is now
+  [crates/vinery-lab/README.md](crates/vinery-lab/README.md), which is also
+  vinery-lab's description on PyPI.
 
 ### Fixed
 

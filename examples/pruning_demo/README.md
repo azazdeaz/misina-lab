@@ -1,11 +1,19 @@
 # Dormant pruning demo
 
-A Bumblebee-like robot pruning a row of a generated winter vineyard: a
+A Bumblebee-like robot pruning a row of a
+[generated winter vineyard](../../crates/vinery-lab/README.md): a
 skid-steer UGV drives the alley, stops at each vine, and an arm on a linear
 slide cuts every cane back to two buds with a bypass shear. The cuts are
 planned from the scene's own ground truth -- which cane, where each bud is --
 rather than from a sensor. The trellis wires are hidden: they have no
 collider yet, so the canes and the shear would pass through them.
+
+**Contents:** [Requirements](#requirements) ·
+[Running the demo](#running-the-demo) · [Teleoperation](#teleoperation) ·
+[Seeing the colliders](#seeing-the-colliders) ·
+[Recording the video](#recording-the-video) ·
+[What it shows](#what-it-shows) · [How the shear cuts](#how-the-shear-cuts) ·
+[The robot](#the-robot) · [Layout](#layout)
 
 ## Requirements
  - [uv](https://docs.astral.sh/uv/getting-started/installation/) installed

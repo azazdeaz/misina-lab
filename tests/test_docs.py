@@ -39,7 +39,7 @@ of a vine it is built from, and the greenhouse's names and the parts of its
 rows. A generator that joins the repo adds its own."""
 INDEXES = {
     "crates/misina-lab/docs": "crates/misina-lab/README.md",
-    "crates/vinery-lab/docs": "README.md",
+    "crates/vinery-lab/docs": "crates/vinery-lab/README.md",
     "crates/greenhouse-lab/docs": "crates/greenhouse-lab/README.md",
 }
 """Each docs folder, and the file that lists every page in it."""

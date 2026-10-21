@@ -5,7 +5,7 @@ description: Re-records the README's demo video of the viewer with docs/video/re
 
 # README video
 
-The README's **Parameter editor app** section shows a 40-second video of the
+The README's **Try it** section shows a 40-second video of the
 viewer: the parcel from above while the terrain and the row layout are edited,
 a descent into an alley, the vines trained lower, a glimpse of the wireframe,
 stray shoots, a cover crop drying to straw, the vines going dormant, and a
@@ -37,7 +37,7 @@ itself when the video is done.
    hosts, so the script uploads the mp4 in a comment on that pull request,
    where reviewers see it too, and puts the URL GitHub gave it on the
    README's video line: the one `https://github.com/user-attachments/assets/…`
-   line alone, under **Parameter editor app**. It needs gh 2.102 or later and
+   line alone, under **Try it**. It needs gh 2.102 or later and
    push access, and it posts, so run it once the video is right.
 
 A video is right when:

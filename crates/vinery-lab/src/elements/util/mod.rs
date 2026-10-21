@@ -1,7 +1,7 @@
 //! Everything under `elements/` that isn't an element.
 //!
 //! An element owns a config, a params resource, a build system and a UI
-//! fragment (see the "Elements" section of `README.md`). The modules here own
+//! fragment (see `crates/misina-lab/docs/elements.md`). The modules here own
 //! none of that on their own account; they are what elements are *built from*:
 //!
 //! - [`color`] — the vineyard's colours, and the per-mesh jitter applied to
