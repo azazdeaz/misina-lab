@@ -56,6 +56,8 @@ Two kinds of change break a project that worked on the release before:
 - **misina-lab**: `misina_lab.isaaclab.shots` renders a still of a generated
   scene in Isaac Sim from a shot file, its camera a storyboard's, or opens
   Kit's viewport on the scene, where `P` prints the camera in the same terms.
+- **greenhouse-lab**: A web playground, the viewer in the browser, at
+  [azazdeaz.github.io/misina-lab/playground/greenhouse](https://azazdeaz.github.io/misina-lab/playground/greenhouse/).
 
 ### Changed
 
@@ -78,6 +80,10 @@ Two kinds of change break a project that worked on the release before:
 - **misina-lab**: The viewer's camera is `bevy_panorbit_camera` 0.36 from
   crates.io, so a generator in its own repository no longer copies a
   `[patch.crates-io]` section; delete it.
+- **misina-lab**: A web build of a generator gets Bevy's WebGPU backend and
+  `getrandom`'s `wasm_js` from misina-lab, so a generator in its own
+  repository no longer lists them under its `wasm32` dependencies; delete
+  them.
 - **misina-lab**: A storyboard played without `{PACKAGE}_RECORD` hands the
   window back to the pointer once it is over, instead of quitting.
 - The repository is now

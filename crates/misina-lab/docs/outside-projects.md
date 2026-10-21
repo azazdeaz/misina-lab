@@ -75,14 +75,9 @@ opt-level = 3
 - **`extension-module`** unlinks libpython, which breaks `cargo run` and
   `cargo test`, so only maturin turns it on.
 
-A web build also turns on `wasm_js` for both majors of `getrandom` in the
-graph, since neither picks a backend for `wasm32-unknown-unknown` alone:
-
-```toml
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom_04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }
-getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
-```
+A web build needs only the `[profile.wasm-release]` table, copied the same
+way. misina-lab turns on Bevy's WebGPU backend and `getrandom`'s `wasm_js`
+for `wasm32` itself.
 
 ## lib.rs
 

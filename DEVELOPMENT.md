@@ -167,29 +167,32 @@ see [Docs pictures](#docs-pictures).
 
 ### Web build
 
-The same viewer, compiled to wasm, is the playground at
-[azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/).
-The manually triggered `.github/workflows/playground.yml` builds it and
-attaches the bundle to the `playground` release, which the site is deployed
-from; see [Docs site](#docs-site). To reproduce the build locally:
+Each generator's viewer, compiled to wasm, is a playground:
+[vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/) and
+[greenhouse](https://azazdeaz.github.io/misina-lab/playground/greenhouse/).
+The manually triggered `.github/workflows/playground.yml` builds both and
+attaches a bundle per playground to the `playground` release, which the site
+is deployed from; see [Docs site](#docs-site). To reproduce one locally, here
+the greenhouse:
 
     rustup target add wasm32-unknown-unknown
     cargo install wasm-bindgen-cli --version 0.2.127   # must match Cargo.lock
-    cargo build --profile wasm-release --target wasm32-unknown-unknown --bin vinery-lab
-    mkdir -p site/playground/vinery && cp web/index.html site/playground/vinery/
-    wasm-bindgen --target web --no-typescript --out-dir site/playground/vinery \
-      target/wasm32-unknown-unknown/wasm-release/vinery-lab.wasm
-    python3 -m http.server -d site 8000      # localhost:8000/playground/vinery/
+    cargo build --profile wasm-release --target wasm32-unknown-unknown -p greenhouse-lab --bins
+    mkdir -p site/playground/greenhouse
+    sed 's/{title}/Greenhouse Lab/' web/index.html > site/playground/greenhouse/index.html
+    wasm-bindgen --target web --no-typescript --out-name viewer --out-dir site/playground/greenhouse \
+      target/wasm32-unknown-unknown/wasm-release/greenhouse-lab.wasm
+    python3 -m http.server -d site 8000      # localhost:8000/playground/greenhouse/
 
 A docs build empties `site/` first, so build the playground after it. Serve
 it rather than opening the file: the module is fetched, and `localhost`
 is a secure context, which both WebGPU and the clipboard require.
 
 Two things differ from the native build. The renderer is WebGPU — the `webgpu`
-feature in `crates/vinery-lab/Cargo.toml` is target-gated, and WebGL2 would lose compute shaders,
-which this many meshes need. And the `S` key is compiled out, since there is no
-filesystem to write `scene.json` to; **Copy Isaac Lab cfg** is the whole export
-path on the web.
+feature in `crates/misina-lab/Cargo.toml` is target-gated, and WebGL2 would
+lose compute shaders, which this many meshes need. And the `S` key is compiled
+out, since there is no filesystem to write `scene.json` to; **Copy Isaac Lab
+cfg** is the whole export path on the web.
 
 ## Docs pictures
 

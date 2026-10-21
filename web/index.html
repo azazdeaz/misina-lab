@@ -3,7 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Vinery Lab — parameter playground</title>
+    <!-- Each playground's bundle step fills in `{title}`, its generator's name. -->
+    <title>{title} — parameter playground</title>
     <style>
       html, body { margin: 0; height: 100%; overflow: hidden;
         background: #1b1b1b; color: #ddd; font: 14px/1.5 system-ui, sans-serif; }
@@ -18,8 +19,9 @@
     <!-- Named for `Window::canvas` in crates/misina-lab/src/viewer.rs. -->
     <canvas id="viewer"></canvas>
     <script type="module">
-      // Relative, because project pages are served from a subpath.
-      import init from './vinery-lab.js';
+      // Relative, because project pages are served from a subpath. Every
+      // generator's module is bound with `--out-name viewer`.
+      import init from './viewer.js';
 
       const status = document.getElementById('status');
 
