@@ -64,6 +64,17 @@ mod tests {
         );
     }
 
+    /// The docs' pictures of the viewer are storyboards, which a parameter's
+    /// rename would otherwise leave to the next render to find.
+    #[test]
+    fn the_shots_are_valid() {
+        for shot in std::fs::read_dir(root().join("../../docs/shots/greenhouse-lab")).unwrap() {
+            let shot = shot.unwrap().path();
+            misina_lab::tour::load::<elements::GreenhouseParams>(&shot)
+                .unwrap_or_else(|err| panic!("{}: {err:#}", shot.display()));
+        }
+    }
+
     /// Rewrites the generated files from the structs. A dev tool rather than
     /// a test: it writes files and asserts nothing.
     #[test]

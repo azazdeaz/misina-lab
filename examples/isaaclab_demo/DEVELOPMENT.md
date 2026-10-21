@@ -1,7 +1,8 @@
 ## Isaac Lab release
 
 `isaaclab[isaacsim,all]` is pinned to one release from NVIDIA's package index.
-The straddler and pruning demos pin the same one; bump the three together.
+The straddler, pruning and greenhouse demos pin the same one; bump the four
+together.
 
 To move to a newer release:
 
