@@ -133,7 +133,7 @@ Scene document format 10.
   rod joint as the model is built, and a cut writes the joint's pair into
   it, with each capsule pulled back a radius at the cut face so the two
   touch there instead of starting a thickness deep in each other. A scene
-  with rods needs two static colliders a metre apart to park the rows on.
+  with rods needs two static colliders, anywhere, to park the rows on.
 - **misina-lab**: `configs_changed` also fires when a layer's configs are
   removed, so an edit that leaves a layer nothing to build clears its parts
   from the library. Such an edit used to leave the layer's old parts in the
