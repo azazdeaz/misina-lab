@@ -10,6 +10,7 @@ to compute, so the video plays in simulated time.
 """
 
 import argparse
+import dataclasses
 import pathlib
 import subprocess
 
@@ -17,6 +18,8 @@ import numpy as np
 
 import isaaclab.sim as sim_utils
 from isaaclab.app import launch_simulation
+
+from vinery_lab.isaaclab import ShootCfg
 
 import main as demo
 from driver import SIM_DT
@@ -37,8 +40,8 @@ LENGTH = 10.0
 """Seconds of video."""
 
 ROW = 3
-"""The row the robot sets off down: the middle of the default vineyard's
-seven, so there are vines either side of it."""
+"""The row the robot sets off down: the middle of the vineyard's seven, so
+there are vines either side of it."""
 
 EYE = (-6.0, 4.0)
 """Where the camera stands, from where the robot stands once `SETTLE` is
@@ -53,6 +56,10 @@ LENS = 18.15
 """Focal length, in millimetres of a 21 mm wide sensor: the 60 degree view
 Kit's viewport starts with."""
 
+VINEYARD_CFG = dataclasses.replace(demo.VINEYARD_CFG, shoot=ShootCfg(stray=0.35))
+"""The demo's vineyard with a third of its shoots strayed out of the canopy,
+so the frame is seen pushing through them all the way down the row."""
+
 CAMERA = "/World/VideoCamera"
 
 
@@ -60,7 +67,7 @@ def main():
     parser = argparse.ArgumentParser(description="Records the straddler demo's video, headless.")
     parser.add_argument("out", type=pathlib.Path, help="the mp4 to write")
     out = parser.parse_args().out.resolve()
-    vineyard = demo.VINEYARD_CFG
+    vineyard = VINEYARD_CFG
     sim_cfg = demo.simulation_cfg(vineyard, "cuda:0")
     # Kit, headless, with nothing to look at the scene but the camera below:
     # its renderer needs Kit's, which a camera made after launch cannot ask for.

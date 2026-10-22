@@ -23,7 +23,7 @@ uv run main.py
 
 
 
-https://github.com/user-attachments/assets/e04b12ef-6f1e-4c2b-a2b2-417ce8f0fadb
+https://github.com/user-attachments/assets/78d895c8-31ac-419c-9a07-22eaa79a29d6
 
 
 
@@ -43,8 +43,8 @@ backend -- spawns the stray shoots static, at the same lean.
 ./record.sh
 ```
 
-films the robot driving down a row of the default scene, from behind and
-above it, in Isaac Sim's RTX renderer and headless, and writes `target/video/straddler.mp4` at the repo root, small enough to upload,
+films the robot driving down a row of the default scene with a third of its
+shoots strayed into the alleys, from behind and above it, in Isaac Sim's RTX renderer and headless, and writes `target/video/straddler.mp4` at the repo root, small enough to upload,
 and a contact sheet beside it. The shot and its length are the top of
 `video.py`. Run from the repo root on the branch whose pull request changes
 the video,
