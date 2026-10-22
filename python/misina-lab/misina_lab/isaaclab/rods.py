@@ -18,8 +18,9 @@ something does.
 Everything a caller cannot know -- what the cable prims are called, what the
 rod bodies end up labelled, which entry has to own the ground -- is decided
 here. What a caller *does* know, the robot and the parts of it a rod may touch,
-are the arguments. The numbers below were measured on rods a metre or so long
-and a centimetre across, and hold for a rod of that build.
+are the arguments. The numbers below were measured on rods a metre or so long,
+tapering from a centimetre or so across to half that, and hold for a rod of
+that build.
 """
 
 from __future__ import annotations
@@ -65,50 +66,42 @@ of rest, and some end centimetres off where they started.
 """
 
 
-ROD_STIFFEN = 3.0
-"""What a rod joint's bend and twist stiffness is multiplied by.
-
-A trade between the pose the generator drew and a believable swing. A
-cantilever's sag under its own weight and its first frequency are tied by
-gravity alone -- the tip sags about 1.5 g / omega^2, whatever the mass and
-stiffness -- so a rod swinging at the ~0.8 Hz its cable material implies sags
-a quarter metre out of the drawn pose. At this factor a 1.4 m rod sags about
-9 cm and swings at about 1.1 Hz.
-
-Not lower. At two, `VBDSolverCfg.iterations` (ten) sweeps no longer hold a
-chain that soft: a rod creeps for seconds after a push, and some come to rest
-centimetres from where they started.
-"""
-
 ROD_STRETCH = 0.01
 """What a rod joint's stretch and shear stiffness is multiplied by.
 
 Not a preference. VBD solves a rod chain by Gauss-Seidel sweeps, one body at a
 time against its neighbours, and a joint far stiffer than a segment's inertia
 over one step (m / dt^2) is what those converge worst on. The cable material
-makes stretch and shear several hundred times that. The part a sweep leaves
-unconverged becomes velocity: at the authored values, a rod soft enough to
-swing like one never comes to rest, damped or not. A hundredth brings them
-to a few times the inertia, which still holds a 1.4 m rod to under a
-millimetre of stretch. A thousandth is too soft the other way, and the rods
-stop settling again.
+makes stretch and shear several hundred times that, and ten sweeps spent on
+them leave the bend barely felt: at the authored values a 1.4 m rod folds
+over under its own weight and never comes to rest. Compliant ALM converges it
+no better. A hundredth brings them to a few times the inertia, which holds a
+1.4 m rod to about a millimetre of stretch. A tenth already leaves it sagging
+half again as far and never quite still; a thousandth lets it stretch a
+centimetre.
+
+Bend and twist keep the material's stiffness. Each joint's comes from the
+diameter at its point, so a rod tapered as its organ is drawn stands up on
+its thick base: a 1.4 m rod sags about 9 cm out of its drawn pose and swings
+at about 1.2 Hz.
 """
 
 ROD_DAMPING = 0.1
 """Damping a rod joint's bend and twist take as a fraction of their own
 stiffness, in seconds.
 
-Newton builds every rod joint undamped -- the cable importer never passes
-`add_rod` a damping, and the curve material schema has no attribute to carry
-one -- so a rod rings around its rest pose instead of arriving at it. This
-much is a heavily damped swing, the way a leafy stem moves in air: pushed
-aside and let go, a rod swings back past its rest pose once, by about a fifth
-of the push, and is within a centimetre of rest in one to three seconds.
+Newton builds a rod joint undamped unless its material authors a damping, and
+that is one value for the whole curve, while a tapered rod's joints differ in
+stiffness twentyfold from base to tip. Damped here in proportion to its own
+stiffness instead, every joint settles alike. This much is a heavily damped
+swing, the way a leafy stem moves in air: pushed aside and let go, a rod
+swings back past its rest pose once, by about a sixth of the push, and is
+within a centimetre of rest in about a second.
 
 Bend and twist only. VBD adds damping to a slot's stiffness as `kd / dt` every
 sweep, so on stretch and shear it would make the slots that already converge
-worst stiffer still; damped there, rods pump themselves into a swing that
-never stops.
+worst stiffer still; damped there, rods fold over and pump themselves into a
+swing that never stops.
 """
 
 PLANT_GROUPS = 2
@@ -245,11 +238,11 @@ def contact_slots(model) -> ContactSlots:
 
 def tune_rods(
     plant: str,
-    stiffen: float = ROD_STIFFEN,
     damping: float = ROD_DAMPING,
     stretch: float = ROD_STRETCH,
 ) -> CallbackHandle:
-    """Retune every rod joint's stiffness and damping, and group what collides.
+    """Soften every rod joint's stretch and shear, damp its bend and twist, and
+    group what collides.
 
     `plant` is the prim name every plant takes, its index appended -- `Plant`
     for `Plant_007`, the cfg's `PLANT`. A rod's body label and a wood
@@ -272,10 +265,10 @@ def tune_rods(
     the simulation stops -- a further call returns it unchanged, rather than
     multiplying the joints a second time.
 
-    Without the tuning a rod sags out of its drawn pose and swings for as long
-    as the run lasts; see `ROD_STIFFEN` and `ROD_STRETCH`. Without the
-    grouping the scene pays N(N-1)/2 candidate pairs for collisions it never
-    solves; see `PLANT_GROUPS`.
+    Without the tuning a rod folds over under its own weight and never comes
+    to rest; see `ROD_STRETCH` and `ROD_DAMPING`. Without the grouping the
+    scene pays N(N-1)/2 candidate pairs for collisions it never solves; see
+    `PLANT_GROUPS`.
 
     A rod meets its own plant's rods and wood, the ground, the posts and the
     robot, and passes through every other plant.
@@ -308,7 +301,6 @@ def tune_rods(
             for slot in (dof, dof + 1):
                 builder.joint_target_ke[slot] *= stretch
             for slot in (dof + 2, dof + 3):
-                builder.joint_target_ke[slot] *= stiffen
                 builder.joint_target_kd[slot] = damping * builder.joint_target_ke[slot]
 
         # Groups: a plant's for its rods and wood, allotted as they turn up;
@@ -395,7 +387,11 @@ def make_physics_cfg_newton(
                 ),
                 CouplerEntryCfg(
                     name="rods",
-                    solver_cfg=VBDSolverCfg(),
+                    # The legacy AVBD path, named so Newton's warning about the
+                    # default stays quiet. Compliant ALM settles a rod alike on
+                    # the numbers above, costs a little more, and under contact
+                    # two runs of one scene drift apart where these repeat.
+                    solver_cfg=VBDSolverCfg(rigid_compliant_alm=False),
                     # Under any path: only the rod importer labels a body so.
                     bodies=[rf".*/{CABLE}{_ROD_BODY_SUFFIX}"],
                     # An entry that lists no shape still sees its own bodies'

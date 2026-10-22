@@ -95,7 +95,8 @@ fn draw(
             continue;
         };
         let cable = &cable.0;
-        for (index, pair) in cable.points.windows(2).enumerate() {
+        let segments = cable.points.windows(2).zip(cable.widths.windows(2));
+        for (index, (pair, widths)) in segments.enumerate() {
             let [from, to] = [pair[0], pair[1]].map(Vec3::from);
             let along = (to - from).try_normalize().unwrap_or(Vec3::Z);
             let segment = Affine3A::from_rotation_translation(
@@ -103,12 +104,13 @@ fn draw(
                 (from + to) / 2.0,
             );
             // The cylinder spans the whole segment and the caps reach past
-            // both of its points, unlike a proxy's, which end on them.
+            // both of its points, unlike a proxy's, which end on them. Its
+            // diameter is the mean of the two ends', as the importer sizes it.
             capsule_outline(
                 &mut shapes,
                 organ.affine() * segment,
                 from.distance(to) / 2.0,
-                cable.thickness / 2.0,
+                (widths[0] + widths[1]) / 4.0,
                 if index == 0 { STATIC } else { ROD },
             );
         }
@@ -299,8 +301,8 @@ mod tests {
             .id();
         world.spawn((capsule(0.1, 0.0, 1.0), ChildOf(organ)));
 
-        // Three points a metre apart and 10 cm thick: two segments, the first
-        // held.
+        // Three points a metre apart, 10 cm thick tapering to 6: two segments,
+        // the first held.
         let shoot = world.spawn(Transform::IDENTITY).id();
         let skin = Surface {
             color: [0.5; 3],
@@ -311,7 +313,7 @@ mod tests {
             double_sided: false,
         };
         let points = vec![[0.0; 3], [0.0, 0.0, 1.0], [0.0, 0.0, 2.0]];
-        world.spawn((cable(points, vec![0.1; 3], 0.1, skin), ChildOf(shoot)));
+        world.spawn((cable(points, vec![0.1, 0.1, 0.06], skin), ChildOf(shoot)));
 
         // A unit cube that collides, and one that does not.
         let cube = world
@@ -332,7 +334,7 @@ mod tests {
 
         let world = app.world_mut();
         // The proxy reaches 0.2 m round its axis and 0..2 m up it; the held
-        // segment reaches 5 cm past its points.
+        // segment reaches 5 cm past its points, the other 4 cm past its own.
         close(
             bounds(world, STATIC),
             Vec3::new(-0.05, -0.2, -0.05),
@@ -340,8 +342,8 @@ mod tests {
         );
         close(
             bounds(world, ROD),
-            Vec3::new(-0.05, -0.05, 0.95),
-            Vec3::new(0.05, 0.05, 2.05),
+            Vec3::new(-0.04, -0.04, 0.96),
+            Vec3::new(0.04, 0.04, 2.04),
         );
         close(
             bounds(world, SURFACE),

@@ -42,7 +42,7 @@ use serde::{Deserialize, Serialize};
 /// Bumped when the shape of this document changes incompatibly. The builder
 /// refuses anything it does not recognise, so a stale cached scene fails
 /// loudly instead of composing into something subtly wrong.
-pub const FORMAT: u32 = 8;
+pub const FORMAT: u32 = 9;
 
 /// One generated scene, ready to be turned into a USD stage.
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -266,15 +266,15 @@ pub struct Cable {
     /// the segment between the first two is the one bolted down, and does not
     /// move. `n` points become `n - 1` segments, so at least three.
     ///
-    /// Evenly spaced, because one stiffness is derived from the mean segment
-    /// length: an uneven run leaves its outliers mistuned.
+    /// Evenly spaced past the held segment: a point's mass is split between
+    /// the two segments it joins, which weighs each segment right only where
+    /// its neighbours match it in length.
     pub points: Vec<[f32; 3]>,
-    /// The diameter the curve is **drawn** at, one per point, in meters. An
-    /// organ tapers; a rod cannot, so the two disagree on purpose.
+    /// The diameter at each point, in meters: what the curve is drawn at and
+    /// the rod is simulated at. Each segment's capsule is the mean of its two
+    /// ends, and each joint's bending stiffness goes with the fourth power of
+    /// the diameter at its point.
     pub widths: Vec<f32>,
-    /// The one diameter the curve is **simulated** at, in meters. Sizes every
-    /// capsule and, through the fourth power of the radius, its stiffness.
-    pub thickness: f32,
     /// Linear RGB — the same channel a [`PartEntry`] carries, since a curve is
     /// drawn beside the meshes and has to agree with them.
     pub display_color: [f32; 3],
@@ -345,7 +345,6 @@ mod tests {
         rod.cable = Some(Cable {
             points: vec![[0.0; 3], [0.0, 0.0, 0.1], [0.0, 0.0, 0.2]],
             widths: vec![0.011, 0.010, 0.009],
-            thickness: 0.009,
             display_color: [0.2, 0.5, 0.1],
             roughness: 0.85,
             reflectance: 0.25,

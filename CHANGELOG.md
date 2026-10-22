@@ -20,6 +20,8 @@ Two kinds of change break a project that worked on the release before:
 
 ## [Unreleased]
 
+Scene document format 9.
+
 ### Added
 
 - **misina-lab**: `ColliderView` draws every collider of the running Newton
@@ -56,6 +58,14 @@ Two kinds of change break a project that worked on the release before:
 
 ### Changed
 
+- **misina-lab**: A rod tapers as its organ is drawn. The builder authors a
+  cable's `widths` again as its `physics:thicknesses`, so each segment's
+  capsule, mass and stiffness follow the taper, and the scene document's
+  `Cable.thickness`, the one diameter a rod used to be simulated at, is
+  gone: the document is format 9. At its material's own stiffness a tapered
+  1.4 m rod sags about 9 cm and settles in about a second, as the uniform
+  one did stiffened threefold, so `tune_rods`, vinery-lab's `tune_shoots`
+  and `rods` lose `stiffen` and `ROD_STIFFEN`.
 - **misina-lab**: The Isaac Lab side runs on Isaac Lab 3.0.0 and the Newton
   1.6.1 it ships with. Under Newton, Isaac Lab now puts into the physics only
   the assets a scene declares, so declare a generated scene in a scene config,
