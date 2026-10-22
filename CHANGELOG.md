@@ -20,10 +20,23 @@ Two kinds of change break a project that worked on the release before:
 
 ## [Unreleased]
 
-Scene document format 9.
+Scene document format 10.
 
 ### Added
 
+- **greenhouse-lab**: Trusses bend. One whose node on its stem is below
+  `StemCfg.flexible_below` is a rod a solver bends and `Shears` cuts, its
+  peduncle and first rachis the rod and everything else riding the segment
+  that carries it: the pedicels, the fruit, and `Bend`. The fruit weigh on
+  the rod, so a truss hangs with its fruit's weight and falls with it once
+  cut. `Cut` sits within a centimetre of the rod's first joint, so a flush
+  cut there drops the whole truss. `GreenhouseCfg.PLANT` groups a plant's
+  rods for collisions, and `GreenhouseCfg.without_rods()` spawns them rigid
+  under a backend that cannot step them. The default, 0, bends none.
+- **misina-lab**: `spawn_rod` authors a rod's curve and a prim per segment
+  carrying its tube, for whatever else rides the rod; `segment_frames`,
+  `segment_tubes`, `segment_of`, `rebase`, `segment_name` and `STEM` are
+  what a generator places riders with. They were vinery-lab's.
 - **misina-lab**: `ColliderView` draws every collider of the running Newton
   model in Kit's viewport, translucent, and follows the ones moved or resized
   while it runs. Kit draws only a PhysX scene's colliders.
@@ -63,11 +76,14 @@ Scene document format 9.
 
 ### Changed
 
+- **misina-lab**: A rod carries loads: `Cable.loads` is the mass hanging from
+  each point, which the builder adds to the rod's own, and `cable()` takes
+  it after the widths, empty for a rod that carries nothing.
 - **misina-lab**: A rod tapers as its organ is drawn. The builder authors a
   cable's `widths` again as its `physics:thicknesses`, so each segment's
   capsule, mass and stiffness follow the taper, and the scene document's
   `Cable.thickness`, the one diameter a rod used to be simulated at, is
-  gone: the document is format 9. At its material's own stiffness a tapered
+  gone. At its material's own stiffness a tapered
   1.4 m rod sags about 9 cm and settles in about a second, as the uniform
   one did stiffened threefold, so `tune_rods`, vinery-lab's `tune_shoots`
   and `rods` lose `stiffen` and `ROD_STIFFEN`.

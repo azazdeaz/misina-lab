@@ -191,7 +191,7 @@ from typing import Any
 
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
 
-FORMAT = 9
+FORMAT = 10
 """Document version this builder understands. See `crates/misina-lab/src/scene/doc.rs`."""
 
 PARTS = "parts"
@@ -759,11 +759,13 @@ def _author_cable(spec: Sdf.PrimSpec, cable: Mapping[str, Any]) -> None:
     ).default = "point"
     Sdf.AttributeSpec(
         spec, "physics:masses", Sdf.ValueTypeNames.FloatArray
-    ).default = Vt.FloatArray(_cable_point_masses(points, widths))
+    ).default = Vt.FloatArray(_cable_point_masses(points, widths, cable.get("loads", ())))
 
 
 def _cable_point_masses(
-    points: Sequence[tuple[float, float, float]], widths: Sequence[float]
+    points: Sequence[tuple[float, float, float]],
+    widths: Sequence[float],
+    loads: Sequence[float] = (),
 ) -> list[float]:
     """Per-point masses that bolt a cable's first segment down and weigh the rest.
 
@@ -790,6 +792,9 @@ def _cable_point_masses(
     lumps back to about each segment's own mass. The second segment is the one
     exception, left at half weight because the point below it is one of the
     zeroed pair -- an edge effect on the segment next to a rigid one.
+
+    A point's load, the mass of whatever hangs from it, is added to its own;
+    one on the zeroed pair weighs on the wood, and stays off the rod.
     """
     spans = [math.dist(a, b) for a, b in zip(points, points[1:])]
     density = CABLE_MATERIAL_ATTRS["density"]
@@ -801,5 +806,6 @@ def _cable_point_masses(
         * (width / 2.0) ** 2
         * 0.5
         * ((spans[index - 1] if index else 0.0) + (spans[index] if index < len(spans) else 0.0))
+        + (loads[index] if loads else 0.0)
         for index, width in enumerate(widths)
     ]

@@ -313,7 +313,10 @@ mod tests {
             double_sided: false,
         };
         let points = vec![[0.0; 3], [0.0, 0.0, 1.0], [0.0, 0.0, 2.0]];
-        world.spawn((cable(points, vec![0.1, 0.1, 0.06], skin), ChildOf(shoot)));
+        world.spawn((
+            cable(points, vec![0.1, 0.1, 0.06], Vec::new(), skin),
+            ChildOf(shoot),
+        ));
 
         // A unit cube that collides, and one that does not.
         let cube = world

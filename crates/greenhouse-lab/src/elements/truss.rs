@@ -35,8 +35,32 @@
 //! truss: one cuts flush at the stem, the other clamps the bend and cuts
 //! beside it. Both are frames, since the approach matters as much as the
 //! point.
+//!
+//! A truss whose node is below
+//! [`StemParams::flexible_below`](super::stem::StemParams::flexible_below)
+//! is a rod instead. Its main axis, the peduncle and the first rachis, is a
+//! [`cable`] a solver bends and a robot can cut, and everything else rides the
+//! segment of it that carries it, in that segment's frame: the pedicels, the
+//! fruit, a branched truss's second rachis on the segment it forks from, and
+//! `Bend` on the one at the middle of the bend. The fruit's mass is the rod's
+//! load, so it hangs, and falls once cut, with their weight. `Cut` stays on
+//! the truss, where the rod's held segment ends:
+//!
+//! ```text
+//! Truss_04              Xform, a TrussConfig
+//!   Cable               the main axis, simulated; `guide`, so never drawn
+//!   Cable_edge_body_0   the held segment, from the stem's axis out past it
+//!     Stem              -> parts/TrussTube_n
+//!   Cable_edge_body_1   a segment, its transform driven by the solver
+//!     Stem
+//!     Pedicels          -> parts/Pedicels_n, those leaving the axis here
+//!     Fruit_00          rebased into the segment's frame
+//!   …
+//!   Cut
+//! ```
 
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
+use std::iter::once;
 
 use bevy::prelude::*;
 use misina_lab::geometry::mesh::{MeshData, merge_meshes};
@@ -46,7 +70,10 @@ use misina_lab::palette::{COLOR_STREAM, Response, shade, srgb};
 use misina_lab::params::{Label, Slider};
 use misina_lab::quantize::{Metric, farthest_first};
 use misina_lab::rng::{Rng, salt};
-use misina_lab::scene::{Library, Order, configs_changed};
+use misina_lab::scene::{
+    Library, Order, cable, configs_changed, rebase, segment_frames, segment_of, segment_tubes,
+    spawn_rod,
+};
 use nalgebra::Point3;
 
 use super::fruit::{FruitConfig, FruitParams, Hung};
@@ -54,6 +81,23 @@ use super::{Grow, SceneParams};
 
 /// The mesh-library prefix the trusses register under.
 pub const PART: &str = "Truss";
+
+/// The mesh-library prefixes a bent truss's parts register under: the tube
+/// on each segment of its rod, and the pedicels a segment carries. Layers of
+/// their own, because a representative has one of each per segment where it
+/// has one mesh, and [`Library::clear`] drops a whole prefix at a time.
+const TUBE: &str = "TrussTube";
+const PEDICELS: &str = "Pedicels";
+
+/// The held segment of a bent truss's rod, from the stem's axis out along the
+/// peduncle, in meters: past the surface of the thickest stem, so a cut flush
+/// at `Cut` lands within a splinter of the first joint (`SPLINTER` in
+/// `misina_lab/isaaclab/cutting.py`).
+const HELD: f32 = 0.012;
+
+/// Length of one of the rod's moving segments, in meters: about ten to a
+/// medium truss, so the bend turns about 45° at a joint.
+const SEGMENT: f32 = 0.025;
 
 /// Salts splitting a truss's shape draws, its fruit draws and each fruit's
 /// own shape off the scene seed.
@@ -155,6 +199,9 @@ pub struct Node {
     /// How far its fruit have come toward full size, 0 just set to 1: the
     /// trusses nearest the head set theirs last.
     pub growth: f32,
+    /// Whether it is a rod a solver bends rather than a static mesh: its node
+    /// is below [`StemParams::flexible_below`](super::stem::StemParams::flexible_below).
+    pub flexible: bool,
 }
 
 impl TrussConfig {
@@ -301,10 +348,148 @@ fn reauthor(
     }
 }
 
-/// One representative truss: its mesh, and the frames its instances hang
-/// things on.
-struct Built {
-    mesh: Mesh,
+/// The yaw of each rachis off where a simple one would hang: one, or a
+/// branched truss's two.
+fn arms(config: &TrussConfig) -> &'static [f32] {
+    if config.branched {
+        &[BRANCH, -BRANCH]
+    } else {
+        &[0.0]
+    }
+}
+
+/// A truss's main axis by arc length: out of the stem's axis along the
+/// peduncle, round its bend, and down the first rachis to its tip. The
+/// peduncle and the first rachis are drawn along it, and a bent truss's rod is
+/// cut from it.
+struct Axis {
+    /// Off vertical where it leaves the stem, and how much further the bend
+    /// turns it, in radians.
+    angle: f32,
+    turn: f32,
+    /// The straight run out of the stem, and the bend's radius, in meters.
+    straight: f32,
+    bend: f32,
+    /// The first rachis's direction, and its length to its tip.
+    along: Vec3,
+    reach: f32,
+    /// The peduncle's radius, which the rachis tapers from.
+    radius: f32,
+}
+
+impl Axis {
+    fn new(config: &TrussConfig) -> Self {
+        let angle = config.peduncle_angle;
+        let turn = (PI - RACHIS_TILT - angle).max(MIN_TURN);
+        let arms = arms(config);
+        let per_arm = (config.fruits as usize).div_ceil(arms.len());
+        Self {
+            angle,
+            turn,
+            straight: config.peduncle_length * STRAIGHT,
+            bend: config.peduncle_length * (1.0 - STRAIGHT) / turn,
+            along: Quat::from_rotation_z(arms[0]) * heading(angle + turn),
+            reach: ((per_arm - 1) as f32 + RACHIS_TIP) * config.fruit_diameter * FRUIT_PITCH,
+            radius: config.peduncle_radius,
+        }
+    }
+
+    /// Where the bend ends and the rachis starts, at the first fruit; where a
+    /// branched truss forks.
+    fn fork(&self) -> f32 {
+        self.straight + self.bend * self.turn
+    }
+
+    fn length(&self) -> f32 {
+        self.fork() + self.reach
+    }
+
+    /// The point `s` along.
+    fn at(&self, s: f32) -> Vec3 {
+        if s <= self.straight {
+            return heading(self.angle) * s;
+        }
+        // Round a circle from where the straight run ends, then on down the
+        // rachis.
+        let a = self.angle + ((s - self.straight) / self.bend).min(self.turn);
+        heading(self.angle) * self.straight
+            + self.bend * Vec3::new(self.angle.cos() - a.cos(), 0.0, a.sin() - self.angle.sin())
+            + self.along * (s - self.fork()).max(0.0)
+    }
+
+    /// The radius `s` along: the peduncle's, tapering down the rachis to
+    /// [`RACHIS_TAPER`] of it at the tip.
+    fn radius_at(&self, s: f32) -> f32 {
+        let down = ((s - self.fork()) / self.reach).clamp(0.0, 1.0);
+        self.radius * (1.0 - (1.0 - RACHIS_TAPER) * down)
+    }
+}
+
+/// A bent truss's rod: what its curve is authored from and what rides each
+/// of its segments. `M` is a mesh while it is built and the part it was
+/// registered as once it is.
+struct Rod<M> {
+    /// Its points, held end first, how far along the axis each sits, and the
+    /// diameter at each.
+    points: Vec<[f32; 3]>,
+    stations: Vec<f32>,
+    widths: Vec<f32>,
+    /// Each segment's rest frame, its tube, and the pedicels it carries, in
+    /// that frame: on a branched truss's fork segment, the second rachis too.
+    frames: Vec<Transform>,
+    tubes: Vec<M>,
+    pedicels: Vec<Option<M>>,
+    /// Where along the axis each fruit's pedicel leaves it, from the truss's
+    /// base to its tip, and where the `Bend` sits.
+    holds: Vec<f32>,
+    bend: f32,
+}
+
+impl Rod<Mesh> {
+    /// The rod cut from `axis`, carrying each of `riders` on the segment at
+    /// its station. Its points are evenly spaced past the held segment.
+    fn new(axis: &Axis, riders: &[(f32, Strand)], holds: Vec<f32>, bend: f32) -> Result<Self> {
+        let length = axis.length();
+        let held = HELD.min(length / 2.0);
+        let count = ((length - held) / SEGMENT).round().max(2.0) as usize;
+        let stations: Vec<f32> = once(0.0)
+            .chain((0..=count).map(|k| held + (length - held) * k as f32 / count as f32))
+            .collect();
+        let points: Vec<[f32; 3]> = stations.iter().map(|s| axis.at(*s).to_array()).collect();
+        let widths: Vec<f32> = stations.iter().map(|s| 2.0 * axis.radius_at(*s)).collect();
+        let frames = segment_frames(&points);
+        let mut carried = vec![Vec::new(); frames.len()];
+        for (at, rider) in riders {
+            let k = segment_of(&stations, *at);
+            let into = rebase(&frames[k], &Transform::IDENTITY);
+            carried[k].push(strand_mesh(rider)?.transformed(&into));
+        }
+        Ok(Self {
+            tubes: segment_tubes(&points, &widths, SIDES)
+                .iter()
+                .map(MeshData::to_mesh)
+                .collect(),
+            pedicels: carried
+                .iter()
+                .map(|meshes| (!meshes.is_empty()).then(|| merge_meshes(meshes).to_mesh()))
+                .collect(),
+            points,
+            stations,
+            widths,
+            frames,
+            holds,
+            bend,
+        })
+    }
+}
+
+/// One representative truss: what its instances are drawn with, and the
+/// frames and fruit they hang off it.
+struct Built<M> {
+    /// The whole truss as one mesh, for one that stays rigid, and its rod,
+    /// for one that bends; each only if some truss that drew it needs it.
+    mesh: Option<M>,
+    rod: Option<Rod<M>>,
     /// The peduncle's direction leaving the stem, which `Cut` faces.
     leaves: Vec3,
     bend: Transform,
@@ -326,61 +511,59 @@ fn strand(points: &[Vec3], radii: &[f32], sides: usize) -> Strand {
     Strand::new(points, radii, sides, DETAIL, Bark::none())
 }
 
-/// Builds one truss in its own frame.
-fn build_truss(config: &TrussConfig) -> Result<Built> {
-    let angle = config.peduncle_angle;
-    let turn = (PI - RACHIS_TILT - angle).max(MIN_TURN);
-    let straight = config.peduncle_length * STRAIGHT;
-    let radius = config.peduncle_length * (1.0 - STRAIGHT) / turn;
-    // Out of the stem along `angle`, then round a circle of `radius` until it
-    // heads `turn` further over.
-    let start = heading(angle) * straight;
-    let arc =
-        |a: f32| start + radius * Vec3::new(angle.cos() - a.cos(), 0.0, a.sin() - angle.sin());
-    let mut peduncle = vec![Vec3::ZERO, start / 2.0, start];
-    peduncle.extend((1..=BEND_POINTS).map(|i| arc(angle + turn * i as f32 / BEND_POINTS as f32)));
-    let fork = arc(angle + turn);
-    let hang = heading(angle + turn);
+/// Builds one truss in its own frame: as one mesh if `whole`, and as a rod if
+/// `bent`.
+fn build_truss(config: &TrussConfig, whole: bool, bent: bool) -> Result<Built<Mesh>> {
+    let axis = Axis::new(config);
+    let (straight, fork) = (axis.straight, axis.fork());
+    // Out of the stem along `angle`, then round the bend until it heads `turn`
+    // further over.
+    let mut peduncle = vec![axis.at(0.0), axis.at(straight / 2.0), axis.at(straight)];
+    peduncle.extend(
+        (1..=BEND_POINTS)
+            .map(|i| axis.at(straight + (fork - straight) * i as f32 / BEND_POINTS as f32)),
+    );
+    let (base, hang) = (axis.at(fork), heading(axis.angle + axis.turn));
 
-    let arms: &[f32] = if config.branched {
-        &[BRANCH, -BRANCH]
-    } else {
-        &[0.0]
-    };
-    let per_arm = (config.fruits as usize).div_ceil(arms.len());
+    let arms = arms(config);
     let (pitch, fruit) = (
         config.fruit_diameter * FRUIT_PITCH,
         config.fruit_diameter / 2.0,
     );
-    let reach = ((per_arm - 1) as f32 + RACHIS_TIP) * pitch;
     let r = config.peduncle_radius;
 
-    let mut strands = Vec::new();
+    // The first rachis carries on from the peduncle; everything else hangs off
+    // the axis they make, where it leaves it.
+    let mut main = None;
+    let mut riders = Vec::new();
     let mut tips = vec![Vec3::ZERO; config.fruits as usize];
+    let mut holds = vec![fork; config.fruits as usize];
     for (arm, yaw) in arms.iter().enumerate() {
         let along = Quat::from_rotation_z(*yaw) * hang;
         let side = Vec3::Z.cross(along).normalize();
-        // The first rachis carries on from the peduncle; a second starts a
-        // little back inside it.
+        // A second rachis starts a little back inside the first.
         let mut points = if arm == 0 {
             peduncle.clone()
         } else {
-            vec![fork - hang * pitch * 0.5, fork]
+            vec![base - hang * pitch * 0.5, base]
         };
         let mut radii = vec![r; points.len()];
-        let rachis = (1..=4).map(|i| reach * i as f32 / 4.0);
-        for s in rachis {
-            points.push(fork + along * s);
-            radii.push(r * (1.0 - (1.0 - RACHIS_TAPER) * s / reach));
+        for s in (1..=4).map(|i| axis.reach * i as f32 / 4.0) {
+            points.push(base + along * s);
+            radii.push(axis.radius_at(fork + s));
         }
-        strands.push(strand(&points, &radii, SIDES));
+        if arm == 0 {
+            main = Some(strand(&points, &radii, SIDES));
+        } else {
+            riders.push((fork, strand(&points, &radii, SIDES)));
+        }
 
         // Fruit alternate between the arms, then between the sides of each.
         for (i, j) in (arm..config.fruits as usize)
             .step_by(arms.len())
             .enumerate()
         {
-            let base = fork + along * (i as f32 * pitch);
+            let base = base + along * (i as f32 * pitch);
             let flip = if (i % 2 == 0) == (arm == 0) {
                 1.0
             } else {
@@ -388,22 +571,41 @@ fn build_truss(config: &TrussConfig) -> Result<Built> {
             };
             let tip = base + (side * flip * PEDICEL.x - Vec3::Z * PEDICEL.y) * fruit;
             let mid = base.lerp(tip, 0.5) + Vec3::Z * fruit * 0.15;
-            strands.push(strand(
-                &[base, mid, tip],
-                &[PEDICEL_RADIUS; 3],
-                PEDICEL_SIDES,
+            // A second rachis's pedicels ride with it, from the fork.
+            if arm == 0 {
+                holds[j] = fork + i as f32 * pitch;
+            }
+            riders.push((
+                holds[j],
+                strand(&[base, mid, tip], &[PEDICEL_RADIUS; 3], PEDICEL_SIDES),
             ));
             tips[j] = tip;
         }
     }
 
-    let meshes: Vec<MeshData> = strands.iter().map(strand_mesh).collect::<Result<_, _>>()?;
-    let middle = angle + turn / 2.0;
+    let main = main.expect("a truss has a first rachis");
+    let mesh = if whole {
+        let meshes: Vec<MeshData> = once(&main)
+            .chain(riders.iter().map(|(_, rider)| rider))
+            .map(strand_mesh)
+            .collect::<Result<_, _>>()?;
+        Some(merge_meshes(&meshes).to_mesh())
+    } else {
+        None
+    };
+    let middle = straight + (fork - straight) / 2.0;
+    let rod = if bent {
+        Some(Rod::new(&axis, &riders, holds, middle)?)
+    } else {
+        None
+    };
+    let turned = axis.angle + axis.turn / 2.0;
     Ok(Built {
-        mesh: merge_meshes(&meshes).to_mesh(),
-        leaves: heading(angle),
-        bend: Transform::from_translation(arc(middle))
-            .with_rotation(Quat::from_rotation_y(middle - FRAC_PI_2)),
+        mesh,
+        rod,
+        leaves: heading(axis.angle),
+        bend: Transform::from_translation(axis.at(middle))
+            .with_rotation(Quat::from_rotation_y(turned - FRAC_PI_2)),
         tips,
     })
 }
@@ -413,8 +615,24 @@ fn facing(direction: Vec3) -> Quat {
     Quat::from_rotation_y(-direction.z.atan2(direction.x))
 }
 
-/// Builds one mesh per distinct truss, and hangs its frames and its fruit off
-/// every truss.
+/// `fruit`, a station and a mass for each, as loads on the points of a rod
+/// whose points sit at `stations`: each fruit's mass split between the two
+/// points either side of where its pedicel leaves the rod, the nearer taking
+/// more.
+fn loads(stations: &[f32], fruit: impl Iterator<Item = (f32, f32)>) -> Vec<f32> {
+    let mut loads = vec![0.0; stations.len()];
+    for (at, mass) in fruit {
+        let k = segment_of(stations, at);
+        let t = ((at - stations[k]) / (stations[k + 1] - stations[k])).clamp(0.0, 1.0);
+        loads[k] += mass * (1.0 - t);
+        loads[k + 1] += mass * t;
+    }
+    loads
+}
+
+/// Builds the meshes for every distinct truss, and hangs its frames and its
+/// fruit off every truss: on the truss itself, or on a bent one's rod, each
+/// on the segment that carries it.
 ///
 /// Each truss's fruit draw from a stream keyed on its [`Order`]: three draws
 /// per pedicel, whether its fruit is missing, how big it is and how it is
@@ -429,7 +647,9 @@ pub(crate) fn build(
     fruit_params: Res<FruitParams>,
     trusses: Query<(Entity, &Order, &TrussConfig)>,
 ) -> Result<()> {
-    library.clear(PART);
+    for prefix in [PART, TUBE, PEDICELS] {
+        library.clear(prefix);
+    }
 
     let mut hung: Vec<(Order, Entity, TrussConfig)> = trusses
         .iter()
@@ -444,7 +664,24 @@ pub(crate) fn build(
         0.0,
         &TrussMetric,
     );
-    let shapes = par_map(&book.representatives, |_, config| build_truss(config));
+    // Which ways each representative is drawn: whole for the trusses that drew
+    // it and stay rigid, as a rod for the ones that bend.
+    let mut ways = vec![(false, false); book.len()];
+    for (config, drew) in configs.iter().zip(&book.assignment) {
+        let way = &mut ways[*drew as usize];
+        if config.node.flexible {
+            way.1 = true;
+        } else {
+            way.0 = true;
+        }
+    }
+    let shapes = par_map(&book.representatives, |index, config| {
+        build_truss(config, ways[index].0, ways[index].1)
+    });
+
+    // Tubes and pedicels are numbered across the whole layer, because how many
+    // a representative needs depends on how long its rod came out.
+    let (mut tubes, mut pedicels) = (0, 0);
     let mut built = Vec::with_capacity(book.len());
     for (index, shape) in shapes.into_iter().enumerate() {
         let shape = shape?;
@@ -452,29 +689,51 @@ pub(crate) fn build(
             srgb(COLOR),
             &mut Rng::new(scene.seed ^ COLOR_STREAM ^ salt(index as u64)),
         ));
-        let geometry = library.part(PART, index, shape.mesh, surface);
-        built.push((geometry, shape.leaves, shape.bend, shape.tips));
+        let mut register = |prefix: &str, count: &mut usize, mesh: Mesh| {
+            *count += 1;
+            library.part(prefix, *count - 1, mesh, surface)
+        };
+        let rod = shape.rod.map(|rod| Rod {
+            tubes: rod
+                .tubes
+                .into_iter()
+                .map(|tube| register(TUBE, &mut tubes, tube))
+                .collect(),
+            pedicels: rod
+                .pedicels
+                .into_iter()
+                .map(|mesh| mesh.map(|mesh| register(PEDICELS, &mut pedicels, mesh)))
+                .collect(),
+            points: rod.points,
+            stations: rod.stations,
+            widths: rod.widths,
+            frames: rod.frames,
+            holds: rod.holds,
+            bend: rod.bend,
+        });
+        let mesh = shape
+            .mesh
+            .map(|mesh| library.part(PART, index, mesh, surface));
+        built.push((
+            Built {
+                mesh,
+                rod,
+                leaves: shape.leaves,
+                bend: shape.bend,
+                tips: shape.tips,
+            },
+            surface,
+        ));
     }
 
     let mut fruit_order = 0u64;
     for ((order, entity, config), drew) in hung.iter().zip(&book.assignment) {
-        let (geometry, leaves, bend, tips) = &built[*drew as usize];
-        let mut truss = commands.entity(*entity);
-        // The layer owns everything below a truss, and a rebuild may hang a
-        // different number of fruit than the last one did.
-        truss.despawn_children();
-        truss.with_child((Name::new("Peduncle"), geometry.clone()));
-        truss.with_child((
-            Name::new("Cut"),
-            Transform::from_translation(*leaves * config.node.stem_radius)
-                .with_rotation(facing(*leaves)),
-            Visibility::default(),
-        ));
-        truss.with_child((Name::new("Bend"), *bend, Visibility::default()));
+        let (built, surface) = &built[*drew as usize];
 
         let mut rng = Rng::new(scene.seed ^ FRUIT_STREAM ^ salt(order.0));
-        let last = (tips.len() - 1).max(1) as f32;
-        for (j, tip) in tips.iter().enumerate() {
+        let last = (built.tips.len() - 1).max(1) as f32;
+        let mut fruit = Vec::new();
+        for (j, tip) in built.tips.iter().enumerate() {
             let missing = rng.unit() < params.missing_fruit as f64;
             let size = rng.range(1.0 - FRUIT_JITTER, 1.0 + FRUIT_JITTER) as f32;
             let spin = rng.unit() as f32 * TAU;
@@ -482,25 +741,256 @@ pub(crate) fn build(
                 continue;
             }
             let along = j as f32 / last;
+            let config = FruitConfig::new(
+                &fruit_params,
+                // A truss holds fewer than 256 fruit.
+                scene.seed ^ FRUIT_SHAPE_STREAM ^ salt(order.0 << 8 | j as u64),
+                config.fruit_diameter * (1.0 - TIP_SHRINK * along) * size,
+                Hung {
+                    rank: config.node.rank,
+                    along,
+                    growth: config.node.growth,
+                },
+            );
+            let placement =
+                Transform::from_translation(*tip).with_rotation(Quat::from_rotation_z(spin));
+            fruit.push((j, placement, config));
+        }
+
+        let mut truss = commands.entity(*entity);
+        // The layer owns everything below a truss, and a rebuild may hang a
+        // different number of fruit than the last one did.
+        truss.despawn_children();
+        let rod = config.node.flexible.then(|| {
+            built
+                .rod
+                .as_ref()
+                .expect("built as a rod for a truss that bends")
+        });
+        let segments = match rod {
+            Some(rod) => {
+                let loads = loads(
+                    &rod.stations,
+                    fruit
+                        .iter()
+                        .map(|(j, _, fruit)| (rod.holds[*j], fruit.mass())),
+                );
+                let curve = cable(rod.points.clone(), rod.widths.clone(), loads, *surface);
+                spawn_rod(&mut truss, curve, &rod.frames, &rod.tubes)
+            }
+            None => {
+                let mesh = built
+                    .mesh
+                    .clone()
+                    .expect("built whole for a truss that stays rigid");
+                truss.with_child((Name::new("Peduncle"), mesh));
+                Vec::new()
+            }
+        };
+        truss.with_child((
+            Name::new("Cut"),
+            Transform::from_translation(built.leaves * config.node.stem_radius)
+                .with_rotation(facing(built.leaves)),
+            Visibility::default(),
+        ));
+
+        // What hangs `at` along the axis, and where it is placed under what
+        // carries it: the truss, or the rod segment there in its own frame.
+        let host = |at: f32, placement: &Transform| match rod {
+            Some(rod) => {
+                let k = segment_of(&rod.stations, at);
+                (segments[k], rebase(&rod.frames[k], placement))
+            }
+            None => (*entity, *placement),
+        };
+        if let Some(rod) = rod {
+            for (segment, mesh) in segments.iter().zip(&rod.pedicels) {
+                if let Some(mesh) = mesh {
+                    commands
+                        .entity(*segment)
+                        .with_child((Name::new(PEDICELS), mesh.clone()));
+                }
+            }
+        }
+        let (on, bend) = host(rod.map_or(0.0, |rod| rod.bend), &built.bend);
+        commands
+            .entity(on)
+            .with_child((Name::new("Bend"), bend, Visibility::default()));
+        for (j, placement, fruit) in fruit {
             fruit_order += 1;
-            truss.with_child((
+            let (on, placement) = host(rod.map_or(0.0, |rod| rod.holds[j]), &placement);
+            commands.entity(on).with_child((
                 Name::new(format!("Fruit_{j:02}")),
-                Transform::from_translation(*tip).with_rotation(Quat::from_rotation_z(spin)),
+                placement,
                 Visibility::default(),
-                FruitConfig::new(
-                    &fruit_params,
-                    // A truss holds fewer than 256 fruit.
-                    scene.seed ^ FRUIT_SHAPE_STREAM ^ salt(order.0 << 8 | j as u64),
-                    config.fruit_diameter * (1.0 - TIP_SHRINK * along) * size,
-                    Hung {
-                        rank: config.node.rank,
-                        along,
-                        growth: config.node.growth,
-                    },
-                ),
+                fruit,
                 Order(fruit_order),
             ));
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use misina_lab::scene::{CABLE, Cable, STEM, segment_name};
+    use misina_lab::testing::{named_children, prim_path};
+
+    use super::*;
+    use crate::elements::{grown, in_scene, small};
+
+    /// What hangs off each truss, its `Bend` and its fruit, keyed by the
+    /// truss's path and its own name, and where it lands in the scene, however
+    /// deep under the truss it hangs.
+    fn riders(world: &mut World) -> BTreeMap<(String, String), Transform> {
+        let named: Vec<(Entity, String)> = world
+            .query::<(Entity, &Name)>()
+            .iter(world)
+            .map(|(entity, name)| (entity, name.to_string()))
+            .filter(|(_, name)| name == "Bend" || name.starts_with("Fruit_"))
+            .collect();
+        let mut riders = BTreeMap::new();
+        for (entity, name) in named {
+            let mut truss = entity;
+            while !world.entity(truss).contains::<TrussConfig>() {
+                truss = world.entity(truss).get::<ChildOf>().unwrap().parent();
+            }
+            riders.insert((prim_path(world, truss), name), in_scene(world, entity));
+        }
+        riders
+    }
+
+    /// A truss whose node is below `flexible_below` is a rod, and the rest are
+    /// meshes. The rod is held from the stem's axis to within a splinter past
+    /// `Cut`, its moving segments are even and taper toward the tip, a tube
+    /// rides each, and its fruit's weight hangs off its moving points. Whatever
+    /// hangs off a truss lands where it does on a rigid one: a simple truss
+    /// and a branched one.
+    #[test]
+    fn a_truss_below_the_bend_height_is_a_rod_its_fruit_ride() {
+        const BELOW: f32 = 1.8;
+        for branched in [false, true] {
+            let mut params = small();
+            params.truss.branched = branched;
+            let rigid = riders(grown(params.clone()).world_mut());
+            params.stem.flexible_below = BELOW;
+            let mut app = grown(params);
+            let world = app.world_mut();
+
+            let bent = riders(world);
+            assert_eq!(bent.len(), rigid.len());
+            for ((key, at), (_, was)) in bent.iter().zip(&rigid) {
+                // By the axes it turns, as `angle_between` is all rounding
+                // this close to none.
+                let turned = [Vec3::X, Vec3::Z]
+                    .map(|axis| (at.rotation * axis).distance(was.rotation * axis))
+                    .into_iter()
+                    .fold(0.0, f32::max);
+                assert!(
+                    at.translation.distance(was.translation) < 1e-5 && turned < 1e-5,
+                    "branched {branched}: {key:?} moved from {was:?} to {at:?}"
+                );
+            }
+
+            let trusses: Vec<(Entity, TrussConfig)> = world
+                .query::<(Entity, &TrussConfig)>()
+                .iter(world)
+                .map(|(entity, config)| (entity, *config))
+                .collect();
+            let mut rods = 0;
+            for (truss, config) in &trusses {
+                let path = prim_path(world, *truss);
+                let node = in_scene(world, *truss).translation.z;
+                assert_eq!(config.node.flexible, node < BELOW, "{path} at {node}");
+                let children: BTreeMap<String, Entity> =
+                    named_children(world, *truss).into_iter().collect();
+                assert!(children.contains_key("Cut"), "{path}");
+                assert_eq!(
+                    children.contains_key("Peduncle"),
+                    !config.node.flexible,
+                    "{path}: drawn as a mesh"
+                );
+                if !config.node.flexible {
+                    continue;
+                }
+                rods += 1;
+
+                let rod = world
+                    .entity(children[CABLE])
+                    .get::<Cable>()
+                    .unwrap()
+                    .0
+                    .clone();
+                let points: Vec<Vec3> = rod.points.iter().map(|p| Vec3::from(*p)).collect();
+                assert_eq!(points[0], Vec3::ZERO, "{path}: held off the stem's axis");
+                let past = points[1].length() - config.node.stem_radius;
+                assert!(
+                    (0.0..0.01).contains(&past),
+                    "{path}: held {past} m past `Cut`"
+                );
+                // Even along the axis, so as long as each other where it runs
+                // straight; a chord across the bend is shorter than its arc.
+                let spans: Vec<f32> = points.windows(2).map(|w| w[0].distance(w[1])).collect();
+                let even = spans[1..].iter().copied().fold(0.0, f32::max);
+                assert!(
+                    spans[1..].iter().all(|span| *span > 0.75 * even),
+                    "{path}: spans {spans:?}"
+                );
+                assert!(
+                    rod.widths.windows(2).all(|w| w[1] <= w[0]),
+                    "{path}: widths {:?}",
+                    rod.widths
+                );
+                for index in 0..spans.len() {
+                    let segment = children[&segment_name(index)];
+                    let carried = named_children(world, segment);
+                    assert!(
+                        carried.iter().any(|(name, _)| name == STEM),
+                        "{path}: segment {index}"
+                    );
+                }
+
+                // The weight of the fruit under this truss, wherever they hang.
+                let mut weight = 0.0;
+                let mut below = vec![*truss];
+                while let Some(at) = below.pop() {
+                    if let Some(fruit) = world.entity(at).get::<FruitConfig>() {
+                        weight += fruit.mass();
+                    }
+                    below.extend(world.entity(at).get::<Children>().into_iter().flatten());
+                }
+                let loads = &rod.loads;
+                assert_eq!(loads.len(), points.len(), "{path}");
+                assert!(
+                    loads[0] == 0.0 && loads[1] == 0.0,
+                    "{path}: a load on the held segment"
+                );
+                let carried: f32 = loads.iter().sum();
+                assert!(
+                    weight > 0.0 && (carried / weight - 1.0).abs() < 1e-4,
+                    "{path}: carries {carried} kg of {weight}"
+                );
+            }
+            assert!(
+                rods > 0 && rods < trusses.len(),
+                "branched {branched}: {rods} of {} bent",
+                trusses.len()
+            );
+        }
+    }
+
+    /// A fruit's mass goes to the two points either side of where it hangs,
+    /// the nearer taking more, and one past the last point to the last.
+    #[test]
+    fn a_fruits_mass_is_shared_by_the_points_either_side() {
+        let shared = loads(
+            &[0.0, 0.01, 0.03, 0.05],
+            [(0.025, 0.2), (0.06, 0.1)].into_iter(),
+        );
+        for (got, want) in shared.iter().zip([0.0, 0.05, 0.15, 0.1]) {
+            assert!((got - want).abs() < 1e-6, "{shared:?}");
+        }
+    }
 }

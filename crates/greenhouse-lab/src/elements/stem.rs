@@ -249,6 +249,15 @@ pub struct StemParams {
     /// the crop as often as not, where a harvester has to skip them.
     #[reflect(@Slider { min: 0.0, max: 1.0, step: 0.05 }, @Label("Trusses turned to the path"))]
     pub turned_to_path: f32,
+    /// Height above the floor, in meters, below which a truss bends: one
+    /// whose node is lower is exported as a rod a physics engine bends and a
+    /// robot can cut, carrying its fruit, rather than as a static mesh. 0
+    /// bends none.
+    ///
+    /// A bent truss is about ten rigid bodies, so this is what sets the cost
+    /// of simulating the crop.
+    #[reflect(@Slider { min: 0.0, max: 5.5, step: 0.05 }, @Label("Trusses bend below"))]
+    pub flexible_below: f32,
 }
 
 impl Default for StemParams {
@@ -259,6 +268,7 @@ impl Default for StemParams {
             leaves_kept: 16,
             extra_stems: 0.0,
             turned_to_path: 0.8,
+            flexible_below: 0.0,
         }
     }
 }
@@ -376,6 +386,8 @@ struct Live {
     spread: f32,
     /// Where along the row the runs turn round the gutter.
     ends: (f32, f32),
+    /// How high a truss's node may be and the truss still bend.
+    flexible_below: f32,
 }
 
 /// One stem, solved in the row frame: everything its meshes and its trusses
@@ -517,6 +529,7 @@ fn grow(
                 stem_radius: thin(d),
                 rank: live.trusses as f32 - t - ripening,
                 growth: (t / GROWING_TRUSSES).min(1.0),
+                flexible: rise(d).z < live.flexible_below,
             };
             (rise(d), yaw, node)
         })
@@ -636,6 +649,7 @@ fn author(
         trusses: params.trusses.max(1),
         spread: wire.spread,
         ends: (RUN_TURN, (layout.length - RUN_TURN).max(RUN_TURN)),
+        flexible_below: params.flexible_below,
     };
     let week = scene.week.max(0.0);
 
@@ -914,6 +928,7 @@ mod tests {
             trusses: 9,
             spread: 0.35,
             ends: (0.2, 39.8),
+            flexible_below: 0.0,
         };
         let weekly = (live.head - live.harvest) / live.trusses as f32;
         let root = Vec3::new(1.0, 0.0, 0.64);
