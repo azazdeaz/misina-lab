@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Encodes a recording into a video GitHub takes, and a contact sheet to check
-# it by. Both README videos go through it.
+# it by. Every README video goes through it.
 #
 #   docs/video/encode.sh in.mp4 out.mp4 [filters]
 #

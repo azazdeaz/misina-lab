@@ -6,7 +6,8 @@ alley either side of the row, the trellis passing under its frame. The navigatio
 path is derived from the USD. No sensor input is used in this demo. 
 
 **Contents:** [Requirements](#requirements) ·
-[Running the demo](#running-the-demo) · [What it shows](#what-it-shows) ·
+[Running the demo](#running-the-demo) ·
+[Recording the video](#recording-the-video) · [What it shows](#what-it-shows) ·
 [Trimming](#trimming) · [The robot](#the-robot) · [Layout](#layout)
 
 ## Requirements
@@ -22,7 +23,7 @@ uv run main.py
 
 
 
-https://github.com/user-attachments/assets/fd3fa3ef-3130-49ce-b59d-d5a1189af516
+https://github.com/user-attachments/assets/e04b12ef-6f1e-4c2b-a2b2-417ce8f0fadb
 
 
 
@@ -35,6 +36,20 @@ The default backend is Newton coupled with VBD, the one solver that bends the
 vineyard's flexible shoots as the frame pushes through them. Any other --
 `--physics newton_mjwarp` for the robot alone at near real time, or a PhysX
 backend -- spawns the stray shoots static, at the same lean.
+
+## Recording the video
+
+```bash
+./record.sh
+```
+
+films the robot driving down a row of the default scene, from behind and
+above it, in Isaac Sim's RTX renderer and headless, and writes `target/video/straddler.mp4` at the repo root, small enough to upload,
+and a contact sheet beside it. The shot and its length are the top of
+`video.py`. Run from the repo root on the branch whose pull request changes
+the video,
+`docs/video/publish.sh target/video/straddler.mp4 examples/straddler_demo/README.md`
+uploads it to that pull request and puts it on this page.
 
 ## What it shows
 
@@ -122,6 +137,7 @@ the wheels — so there is no manufacturer's description in here to be bound by.
 | `straddler.py` | the robot: its dimensions, the URDF built from them, the actuators, the trimmer |
 | `route.py` | waypoints down every row, read off the trellis posts |
 | `driver.py` | waypoint following and swerve kinematics |
+| `video.py`, `record.sh` | the video: the robot driving down a row, filmed headless, and its encoding |
 
 `DEVELOPMENT.md` in `../isaaclab_demo` covers the pinned Isaac Lab release,
 which this example shares.

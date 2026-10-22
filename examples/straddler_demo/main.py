@@ -18,7 +18,7 @@ across it -- see `straddler.Trimmer` and `misina_lab.isaaclab.cutting`.
 
 import argparse
 import dataclasses
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 
 import numpy as np
 
@@ -185,8 +185,11 @@ def run_simulator(
     robot: Articulation,
     driver: Driver,
     trim: Callable[[], None] | None = None,
-):
-    """Runs the simulation loop."""
+    render: bool = True,
+) -> Iterator[None]:
+    """Drive the route for as long as the run lasts, yielding after every
+    physics step. Without `render` no step renders, and what does is up to
+    the caller."""
     driver.place()
 
     step = 0
@@ -196,19 +199,42 @@ def run_simulator(
             if trim is not None:
                 trim()
         robot.write_data_to_sim()
-        sim.step()
+        sim.step(render=render)
         robot.update(SIM_DT)
         step += 1
+        yield
+
+
+def simulation_cfg(vineyard: VineyardCfg, device: str) -> sim_utils.SimulationCfg:
+    """The simulation of `vineyard` on `device`: Newton coupled with VBD, the
+    whole robot among what a shoot collides with."""
+    return sim_utils.SimulationCfg(
+        dt=SIM_DT,
+        device=device,
+        physics=make_physics_cfg_newton(vineyard, ROBOT_PATH, ROBOT_CONTACT),
+    )
+
+
+def start(
+    sim: sim_utils.SimulationContext,
+    robot: Articulation,
+    machine: Straddler,
+    vineyard: VineyardCfg,
+    row: int,
+) -> tuple[Driver, np.ndarray]:
+    """Reset the simulation of the scene `design_scene` laid out, and read off
+    `vineyard` the route round it from `row`: the driver that follows it, and
+    its waypoints."""
+    route, heading, ground = row_route(vineyard, row)
+    sim.reset()
+    fix_heightfield_offsets()
+    return Driver(route, heading, machine, robot, ground), route
 
 
 def main():
     args_cli = parse_args()
     vineyard = TRIM_VINEYARD_CFG if args_cli.trim else VINEYARD_CFG
-    sim_cfg = sim_utils.SimulationCfg(
-        dt=SIM_DT,
-        device=args_cli.device,
-        physics=make_physics_cfg_newton(vineyard, ROBOT_PATH, ROBOT_CONTACT),
-    )
+    sim_cfg = simulation_cfg(vineyard, args_cli.device)
     # Starts Isaac Sim when the chosen backend or viewer needs it, and closes it
     # on exit. An explicit --physics replaces the config built above.
     with launch_simulation(sim_cfg, args_cli):
@@ -218,30 +244,28 @@ def main():
         if "kit" in args_cli.visualizer:
             sim_utils.enable_extension("omni.kit.window.movie_capture")
         sim = sim_utils.SimulationContext(sim_cfg)
-        route, heading, ground = row_route(vineyard, args_cli.row)
         # The robot is sized to the field it works: a leg in each alley, and
         # the frame over the trellis wire.
         machine = Straddler.for_vineyard(vineyard)
         if args_cli.trim:
             machine = dataclasses.replace(machine, trimmer=Trimmer())
         robot = design_scene(vineyard, machine)
+        driver, route = start(sim, robot, machine, vineyard, args_cli.row)
         # Behind the robot at its start, looking the way it drives off. Taken
-        # from the route rather than from `heading`, which is the row direction
-        # only: alternate passes run down it backwards, and so does a start row
-        # chosen with --row.
+        # from the route rather than from the row heading, which is the row
+        # direction only: alternate passes run down it backwards, and so does a
+        # start row chosen with --row.
         back = route[0, :2] - route[1, :2]
         sim.set_camera_view(
             eye=(route[0] + [*(6.0 * back / np.linalg.norm(back)), 4.0]).tolist(),
             target=route[0].tolist(),
         )
-        # Play the simulator
-        sim.reset()
-        fix_heightfield_offsets()
         # Now we are ready!
         print(f"[INFO]: Setup complete, {len(route)} waypoints to drive...")
         # Run the simulator
         trim = trimming(sim, machine, robot) if machine.trimmer else None
-        run_simulator(sim, robot, Driver(route, heading, machine, robot, ground), trim)
+        for _ in run_simulator(sim, robot, driver, trim):
+            pass
 
 
 if __name__ == "__main__":
