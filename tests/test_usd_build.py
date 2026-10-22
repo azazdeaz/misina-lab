@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import pathlib
 
 import pytest
@@ -453,10 +454,13 @@ def test_a_flexible_organ_is_a_curve_a_solver_can_recognise(stage: Usd.Stage):
     assert curves.GetPurposeAttr().Get() == UsdGeom.Tokens.guide
     assert list(curves.GetCurveVertexCountsAttr().Get()) == [4]
     assert tuple(curves.GetPointsAttr().Get()[1]) == pytest.approx((0.04, 0.0, 0.02))
-    # Drawn tapering, one width per point, while the rod stays uniform: no
-    # importer reads `widths`, so the two are free to disagree.
-    assert list(curves.GetWidthsAttr().Get()) == pytest.approx([0.012, 0.011, 0.01, 0.009])
+    # Drawn tapering, one width per point, and simulated at the same taper. No
+    # importer reads `widths`, so the rod's diameters are authored again.
+    taper = [0.012, 0.011, 0.01, 0.009]
+    assert list(curves.GetWidthsAttr().Get()) == pytest.approx(taper)
     assert curves.GetWidthsInterpolation() == UsdGeom.Tokens.vertex
+    assert list(prim.GetAttribute("physics:thicknesses").Get()) == pytest.approx(taper)
+    assert prim.GetAttribute("physics:thicknesses:elementType").Get() == "point"
 
 
 def test_a_cable_bounds_the_tube_it_is_drawn_as(stage: Usd.Stage):
@@ -484,27 +488,31 @@ def test_a_flexible_organ_binds_the_material_it_bends_by(stage: Usd.Stage):
     bound = UsdShade.MaterialBindingAPI(prim).GetDirectBinding("physics")
     assert bound.GetMaterialPath() == material.GetPath()
     assert "PhysicsCurvesDeformableMaterialAPI" in applied_schemas(material)
-    # Thickness here, not `widths`, is what sizes the capsules and their
-    # inertia; the importer assumes a millimetre without it.
-    assert material.GetAttribute("physics:curvesThickness").Get() == pytest.approx(0.009)
     assert material.GetAttribute("physics:youngsModulus").Get() > 0.0
     assert material.GetAttribute("physics:density").Get() > 0.0
 
 
 def test_a_flexible_organ_is_bolted_down_by_its_leading_masses(stage: Usd.Stage):
     """A rod floats free otherwise. A point is a junction, not a body -- the
-    importer lumps `m[s] + m[s+1]/2` onto the segment between two of them -- so
-    the two zeroes make the first segment massless, which Newton simulates as
+    importer splits its mass between the segments either side of it -- so the
+    two zeroes make the first segment massless, which Newton simulates as
     static in position and orientation both."""
-    masses = list(stage.GetPrimAtPath(CABLE).GetAttribute("physics:masses").Get())
+    prim = stage.GetPrimAtPath(CABLE)
+    masses = list(prim.GetAttribute("physics:masses").Get())
 
-    # One per control point, or the importer ignores the array outright.
+    # One per control point, untyped, or the importer ignores the array.
     assert len(masses) == 4
+    assert not prim.HasAttribute("physics:masses:elementType")
     assert masses[:2] == [0.0, 0.0]
-    assert all(mass > 0.0 for mass in masses[2:])
-    # Half of each segment the point joins: an end point borders one segment
-    # and an interior point two, so an end point carries less.
-    assert masses[3] < masses[2]
+    # Every other point the cross-section at its own diameter over half of
+    # each segment it joins: authored masses replace the taper's.
+    points = prim.GetAttribute("points").Get()
+    widths = prim.GetAttribute("widths").Get()
+    spans = [math.dist(a, b) for a, b in zip(points, points[1:])]
+    density = stage.GetPrimAtPath(f"{CABLE}/{CABLE_MATERIAL}").GetAttribute("physics:density").Get()
+    for index, joined in ((2, spans[1] + spans[2]), (3, spans[2])):
+        area = math.pi * (widths[index] / 2.0) ** 2
+        assert masses[index] == pytest.approx(density * area * joined / 2.0), index
 
 
 def test_a_transform_round_trips_through_the_op_stack(stage: Usd.Stage):

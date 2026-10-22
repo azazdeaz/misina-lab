@@ -212,20 +212,21 @@ def builder(monkeypatch) -> object:
     return builder
 
 
-def test_a_rods_linear_slots_are_softened_and_its_angular_ones_stiffened(builder):
-    """Two factors, one per pair: stretch and shear are what the solver
-    converges worst on, and bend and twist are what a cane stands up with."""
-    physics.tune_shoots(stiffen=10.0, damping=0.0, stretch=0.5)
+def test_a_rods_linear_slots_are_softened_and_its_angular_ones_kept(builder):
+    """Stretch and shear are what the solver converges worst on. Bend and
+    twist are what a cane stands up with, at the stiffness its taper gave
+    each joint."""
+    physics.tune_shoots(damping=0.0, stretch=0.5)
     NewtonManager.dispatch_event(PhysicsEvent.MODEL_INIT)
 
-    assert builder.joint_target_ke == pytest.approx([1.0] * 6 + [100.0, 50.0, 40.0, 20.0] + [1.0])
+    assert builder.joint_target_ke == pytest.approx([1.0] * 6 + [100.0, 50.0, 4.0, 2.0] + [1.0])
 
 
 def test_only_a_rods_angular_slots_take_damping_from_their_own_stiffness(builder):
     """A fraction of each slot's own stiffness is a time constant, so bend and
     twist settle alike. Stretch and shear are left undamped: VBD adds damping
     to a slot's stiffness every sweep, and there it keeps the canes swinging."""
-    physics.tune_shoots(stiffen=1.0, damping=0.1, stretch=1.0)
+    physics.tune_shoots(damping=0.1, stretch=1.0)
     NewtonManager.dispatch_event(PhysicsEvent.MODEL_INIT)
 
     assert builder.joint_target_kd == pytest.approx([0.0] * 8 + [0.4, 0.2] + [0.0])
@@ -234,10 +235,10 @@ def test_only_a_rods_angular_slots_take_damping_from_their_own_stiffness(builder
 def test_tune_shoots_registers_once_while_its_registration_stands(builder):
     """The spawner and a script may both call it. A second callback would
     multiply the joints over again, and nothing would report it."""
-    first = physics.tune_shoots(stiffen=10.0, damping=0.0)
-    assert physics.tune_shoots(stiffen=10.0, damping=0.0) is first
+    first = physics.tune_shoots(damping=0.0, stretch=0.5)
+    assert physics.tune_shoots(damping=0.0, stretch=0.5) is first
     NewtonManager.dispatch_event(PhysicsEvent.MODEL_INIT)
-    assert builder.joint_target_ke[8] == pytest.approx(40.0)
+    assert builder.joint_target_ke[6] == pytest.approx(100.0)
 
     # Dropped by the manager when the simulation stops; the next call stands anew.
     NewtonManager.clear_callbacks()

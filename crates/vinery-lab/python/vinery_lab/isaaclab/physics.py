@@ -49,14 +49,13 @@ the shoots sag about twice as far.
 
 
 def tune_shoots(
-    stiffen: float = rods.ROD_STIFFEN,
     damping: float = rods.ROD_DAMPING,
     stretch: float = rods.ROD_STRETCH,
 ) -> CallbackHandle:
     """`rods.tune_rods` for a vineyard: a rod meets its own vine's canes and
     wood, the ground, the posts and the robot, and passes through every other
     vine."""
-    return rods.tune_rods(VINE, stiffen=stiffen, damping=damping, stretch=stretch)
+    return rods.tune_rods(VINE, damping=damping, stretch=stretch)
 
 
 def make_physics_cfg_newton(

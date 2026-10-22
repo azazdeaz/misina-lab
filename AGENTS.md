@@ -83,14 +83,14 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinery_lab`,
 | --- | --- |
 | [tests/](tests/) | Python tests: the params, the USD build, the Isaac Lab cfg and physics |
 | [examples/isaaclab_demo/](examples/isaaclab_demo/) | a quadruped walking the alleys; its own uv project |
-| [examples/straddler_demo/](examples/straddler_demo/) | a straddling robot driving every row, `--trim` to hedge it; its own uv project |
+| [examples/straddler_demo/](examples/straddler_demo/) | a straddling robot driving every row, `--trim` to hedge it, and `record.sh`, which films it; its own uv project |
 | [examples/pruning_demo/](examples/pruning_demo/) | a Bumblebee-like arm pruning a dormant row to two-bud spurs, and `record.sh`, which films it; its own uv project |
 | [examples/greenhouse_demo/](examples/greenhouse_demo/) | the greenhouse alone in Isaac Sim, which its docs picture is rendered from; its own uv project |
 | [assets/leaves/](crates/vinery-lab/assets/leaves/) | traced leaf outlines, compiled in with `include_str!` |
 | [web/index.html](web/index.html) | host page for the wasm playground |
 | [web/stage_docs.py](web/stage_docs.py) | copies the docs site's pages to where Zensical builds them from, pointing links to anything else at GitHub |
 | [zensical.toml](zensical.toml) | the docs site; its nav lists every page on it |
-| [docs/video/](docs/video/) | the README video: `record.sh` and the storyboard it plays, `encode.sh`, which both videos are encoded with, and `publish.sh`, which uploads either to GitHub, the only host github.com plays video from, and points its README at it |
+| [docs/video/](docs/video/) | the README video: `record.sh` and the storyboard it plays, `encode.sh`, which every video is encoded with, and `publish.sh`, which uploads any of them to GitHub, the only host github.com plays video from, and points its README at it |
 | [docs/shots/](docs/shots/) | the docs' pictures: a shot file per picture, in a folder named after what renders it; `render.sh`, which renders them into `target/docs-assets`, and `publish.sh`, which force-pushes that folder to the assets repository the docs link |
 
 ## Docs

@@ -59,7 +59,8 @@ class Rig:
         builder.color()
         self.model = builder.finalize()
         rods.reserve_contact_slots(self.model)
-        self.solver = SolverVBD(self.model, iterations=10)
+        # The path `rods.make_physics_cfg_newton` puts the rods on.
+        self.solver = SolverVBD(self.model, iterations=10, rigid_compliant_alm=False)
         self.state, self.next = self.model.state(), self.model.state()
         self.control = self.model.control()
         self.collision = CollisionPipeline(self.model)

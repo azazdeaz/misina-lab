@@ -853,16 +853,10 @@ struct Centerline {
     points: Vec<[f32; 3]>,
     /// How far along the shoot each point sits, in meters from the bud.
     stations: Vec<f32>,
-    /// The diameter each point is **drawn** at — the same taper as the stem
-    /// mesh, so a cane reads as the shoots beside it. Nothing sizes a capsule
-    /// from these; see `thickness`.
+    /// The diameter at each point — the same taper as the stem mesh, so a
+    /// cane reads as the shoots beside it, and the taper its rod is simulated
+    /// at.
     widths: Vec<f32>,
-    /// The one thickness the cable is **simulated** at, in meters.
-    ///
-    /// A rod has a single radius where the mesh tapers, so this splits the
-    /// difference: the diameter at the taper's midpoint, too thin at the bud
-    /// and too thick at the tip by the same amount.
-    thickness: f32,
     /// How far the rise is pitched off vertical, in radians. What a leaf's
     /// posture is turned over by, so its ranks stay around the stem.
     pitch: f32,
@@ -883,7 +877,6 @@ impl Centerline {
                 .iter()
                 .map(|s| 2.0 * axis.radius_at(*s) as f32)
                 .collect(),
-            thickness: 2.0 * axis.radius_at(axis.length() / 2.0) as f32,
             stations: stations.into_iter().map(|s| s as f32).collect(),
             pitch: axis.pitch as f32,
         }
@@ -897,9 +890,10 @@ impl Centerline {
 /// happens to cut across. That segment is the one bolted down — see
 /// `_cable_point_masses` in `misina_lab/usd/build.py` — so its shape is
 /// static and only its endpoints matter, while every segment that does move is
-/// a piece of the rise of the same length. A solver derives one stiffness from
-/// the mean segment length and mistunes whatever differs from it, so evenness
-/// is worth arranging rather than hoping for.
+/// a piece of the rise of the same length. A point's mass is split between the
+/// two segments it joins, which weighs a segment right only where its
+/// neighbours match it in length, so evenness is worth arranging rather than
+/// hoping for.
 ///
 /// Cut by arc rather than by run, because the lean curls the rise and a chain
 /// cut at even runs comes out uneven where it curls most: the run is sampled
@@ -1193,12 +1187,7 @@ pub(crate) fn build(
             Drawn::Tubes(tubes) => {
                 shoot.with_child((
                     Name::new(CABLE),
-                    cable(
-                        centerline.points.clone(),
-                        centerline.widths.clone(),
-                        centerline.thickness,
-                        *skin,
-                    ),
+                    cable(centerline.points.clone(), centerline.widths.clone(), *skin),
                 ));
                 frames = segment_frames(&centerline.points);
                 // Every segment up front rather than the ones that turn out to
@@ -1411,9 +1400,9 @@ mod tests {
         }
     }
 
-    /// One stiffness is derived from the mean segment length, so a run that is
-    /// not even leaves its outliers mistuned. The bend is exempt — it is the
-    /// bolted segment, and does not move.
+    /// A point's mass is split between the two segments it joins, so a run
+    /// that is not even weighs its outliers wrong. The bend is exempt — it is
+    /// the bolted segment, and does not move.
     #[test]
     fn a_cables_moving_segments_are_evenly_spaced() {
         for length in [MIN_LENGTH, 0.4, 0.75, 1.6] {
@@ -1441,8 +1430,8 @@ mod tests {
     }
 
     /// The bolted segment is the *whole* bend, at every length. Any of it left
-    /// over would be a short second segment among the even ones, mistuned and
-    /// free to move.
+    /// over would be a short second segment among the even ones, weighed wrong
+    /// and free to move.
     #[test]
     fn the_bend_is_the_first_segment_and_nothing_more() {
         for length in [MIN_LENGTH, 0.4, 0.75, 1.6] {
@@ -1465,11 +1454,11 @@ mod tests {
         }
     }
 
-    /// A rod is one radius and a shoot is not, so the drawn taper is the whole
-    /// of what makes a flexible cane read as the shoots beside it. It has to
-    /// run bud to tip like the stem mesh, and the rod has to sit inside it.
+    /// The taper is what makes a flexible cane read as the shoots beside it,
+    /// and what its rod is simulated at, so it has to run bud to tip like the
+    /// stem mesh.
     #[test]
-    fn a_cable_is_drawn_tapering_and_simulated_between_its_ends() {
+    fn a_cable_tapers_bud_to_tip() {
         for config in both() {
             let cable = centerline(&config, 3);
             let widths = &cable.widths;
@@ -1481,7 +1470,6 @@ mod tests {
                 (tip - 2.0 * config.radius * TIP_TAPER as f32).abs() < 1e-6,
                 "the tip"
             );
-            assert!(tip < cable.thickness && cable.thickness < widths[0]);
         }
     }
 

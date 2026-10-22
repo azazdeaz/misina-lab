@@ -135,6 +135,12 @@ A flexible organ is a curve and the material it bends by
       segment is a static one, so zeroing the leading points bolts the curve to
       where it was authored. See `_cable_point_masses`.
 
+    The rod tapers as the curve is drawn. The importer reads no ``widths``, so
+    ``physics:thicknesses`` repeats them, one diameter per point: each
+    segment's capsule is the mean of its two ends, and each joint bends as
+    stiffly as the diameter at its point. Unauthored, every capsule is a
+    millimetre across.
+
     Only Newton's VBD solver simulates one. Under every other backend nothing
     drives the segment prims, so a flexible organ draws correctly at its rest
     shape and never moves.
@@ -185,7 +191,7 @@ from typing import Any
 
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
 
-FORMAT = 8
+FORMAT = 9
 """Document version this builder understands. See `crates/misina-lab/src/scene/doc.rs`."""
 
 PARTS = "parts"
@@ -678,16 +684,15 @@ def _author_cable(spec: Sdf.PrimSpec, cable: Mapping[str, Any]) -> None:
     the importer drives instead.
 
     ``widths`` and ``displayColor`` are authored anyway, so the curve reads as
-    the organ it stands for when guides are turned on. Nothing in the import
-    path reads either, and neither sizes the rod: that is a chain of equal
-    capsules sized by the material's ``physics:curvesThickness``.
+    the organ it stands for when guides are turned on. The importer reads
+    neither, so the taper is authored a second time, as the rod's
+    ``physics:thicknesses``.
 
     What holds the curve in place is ``physics:masses``; see
     `_cable_point_masses`.
     """
     points = Vt.Vec3fArray([tuple(p) for p in cable["points"]])
     widths = Vt.FloatArray([float(w) for w in cable["widths"]])
-    thickness = float(cable["thickness"])
     for name, value_type, value in (
         ("points", Sdf.ValueTypeNames.Point3fArray, points),
         # One curve per prim: the importer builds a rod per curve, and a
@@ -738,9 +743,7 @@ def _author_cable(spec: Sdf.PrimSpec, cable: Mapping[str, Any]) -> None:
 
     material = Sdf.PrimSpec(spec, CABLE_MATERIAL, Sdf.SpecifierDef, "Material")
     material.SetInfo("apiSchemas", _CABLE_MATERIAL_API)
-    # The thickness here, not the `widths` above, is what sizes the capsules and
-    # their inertia; without it the importer assumes a millimeter and says so.
-    for name, value in (("curvesThickness", thickness), *CABLE_MATERIAL_ATTRS.items()):
+    for name, value in CABLE_MATERIAL_ATTRS.items():
         Sdf.AttributeSpec(material, f"physics:{name}", Sdf.ValueTypeNames.Float).default = value
     # Bound rather than merely authored: the importer reads the stiffnesses off
     # the *bound* material and silently uses its own defaults without this.
@@ -748,21 +751,28 @@ def _author_cable(spec: Sdf.PrimSpec, cable: Mapping[str, Any]) -> None:
         spec, "material:binding:physics", custom=False
     ).targetPathList.explicitItems = [material.path]
 
+    # One diameter per point: the drawn taper, which sizes every capsule and
+    # every joint's stiffness. See the module docstring.
+    Sdf.AttributeSpec(spec, "physics:thicknesses", Sdf.ValueTypeNames.FloatArray).default = widths
+    Sdf.AttributeSpec(
+        spec, "physics:thicknesses:elementType", Sdf.ValueTypeNames.Token, Sdf.VariabilityUniform
+    ).default = "point"
     Sdf.AttributeSpec(
         spec, "physics:masses", Sdf.ValueTypeNames.FloatArray
-    ).default = Vt.FloatArray(_cable_point_masses(points, thickness))
+    ).default = Vt.FloatArray(_cable_point_masses(points, widths))
 
 
 def _cable_point_masses(
-    points: Sequence[tuple[float, float, float]], thickness: float
+    points: Sequence[tuple[float, float, float]], widths: Sequence[float]
 ) -> list[float]:
     """Per-point masses that bolt a cable's first segment down and weigh the rest.
 
     Authoring these is the whole of the anchor. A control point is a junction
-    rather than a body -- the importer lumps ``m[s] + m[s+1]/2`` onto the segment
-    between two of them -- so zeroing the first two leaves the first segment
-    massless, which Newton simulates as **static**: fixed in position *and* in
-    orientation, the way a stem is held where it leaves the wood.
+    rather than a body -- the importer splits each point's mass between the two
+    segments it joins, and gives an end point's to its one segment -- so
+    zeroing the first two leaves the first segment massless, which Newton
+    simulates as **static**: fixed in position *and* in orientation, the way a
+    stem is held where it leaves the wood.
 
     The schema's own anchor, a ``PhysicsAttachment``, is the worse tool here. It
     lowers only to *ball* joints, so one pins a position and leaves the curve
@@ -770,20 +780,26 @@ def _cable_point_masses(
     compliant: past roughly 1e10 Pa a stiff rod overpowers them and the base
     swings free again. A massless body has no such ceiling, and costs no prim.
 
-    Every other point carries the density times half of each segment it joins,
-    which lumps back to the cylinder mass of each. The second segment is the one
+    The array must stay untyped. With ``physics:masses:elementType`` authored
+    the importer refuses a zero, drops the whole array, and the first segment
+    falls with the rest.
+
+    Authored masses replace the ones the importer derives from the taper, so
+    every other point carries its own: the density times the cross-section at
+    the point, over half of each segment it joins. On evenly spaced points that
+    lumps back to about each segment's own mass. The second segment is the one
     exception, left at half weight because the point below it is one of the
     zeroed pair -- an edge effect on the segment next to a rigid one.
     """
-    volume = math.pi * (thickness / 2.0) ** 2
     spans = [math.dist(a, b) for a, b in zip(points, points[1:])]
     density = CABLE_MATERIAL_ATTRS["density"]
     return [
         0.0
         if index < _BOLTED_POINTS
         else density
-        * volume
+        * math.pi
+        * (width / 2.0) ** 2
         * 0.5
         * ((spans[index - 1] if index else 0.0) + (spans[index] if index < len(spans) else 0.0))
-        for index in range(len(points))
+        for index, width in enumerate(widths)
     ]

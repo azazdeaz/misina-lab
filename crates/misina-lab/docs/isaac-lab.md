@@ -68,25 +68,27 @@ serialization and a new process.
 
 Nothing in a generated scene is a rigid body except a flexible organ
 authored as a `Cable` ([export.md](export.md#colliders)), imported by Newton
-as a **rod**: one capsule body per segment, joined by rod joints and clamped
-to the wood it grew from. Only Newton's VBD solver steps one, and a robot
-needs MuJoCo, so a scene with any runs the two side by side as entries of a
-coupled solver, `rigid` and `rods`, with the robot's bodies handed across as
-proxies. `make_physics_cfg_newton(cfg, robot, contact_bodies, substeps)`
-picks between that and plain MJWarp by asking `cfg.without_rods()`.
+as a **rod**: one capsule body per segment, as thick as the organ is drawn
+there, joined by rod joints and clamped to the wood it grew from. Only
+Newton's VBD solver steps one, and a robot needs MuJoCo, so a scene with any
+runs the two side by side as entries of a coupled solver, `rigid` and
+`rods`, with the robot's bodies handed across as proxies.
+`make_physics_cfg_newton(cfg, robot, contact_bodies, substeps)` picks
+between that and plain MJWarp by asking `cfg.without_rods()`.
 
 The choice is provisional, an override can replace the backend before the
 scene is built, so the spawner checks the cfg against the backend in force
 when it runs. Where nothing steps a rod the scene is spawned from
 `without_rods()` instead, the same shapes as static meshes. Where something
-does, `tune_rods(cfg.PLANT)` registers a hook on the model build that sets
-every rod joint's stiffness and damping and groups what collides: each
-plant's rods and wood share a positive group of their own, and the ground,
-the trellis and the robot are negative, so a rod meets its own plant, the
-scene and the robot and passes through every other plant. Without the
-grouping the model holds a candidate pair for every two segments in the
-scene. The tuning numbers were measured on a metre-long, centimetre-thick
-rod; `rods.py` says what each one does and what went wrong at other values.
+does, `tune_rods(cfg.PLANT)` registers a hook on the model build that
+softens every rod joint's stretch and shear, damps its bend and twist, and
+groups what collides: each plant's rods and wood share a positive group of
+their own, and the ground, the trellis and the robot are negative, so a rod
+meets its own plant, the scene and the robot and passes through every other
+plant. Without the grouping the model holds a candidate pair for every two
+segments in the scene. The tuning numbers were measured on metre-long rods
+tapering from a centimetre across; `rods.py` says what each one does and
+what went wrong at other values.
 
 `Shears` cuts a rod anywhere along it while the simulation runs, and the
 piece lands on the stub it was cut from. How, given that Newton allows no
