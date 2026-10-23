@@ -26,8 +26,8 @@ collider yet, so the canes and the shear would pass through them.
 uv run main.py
 ```
 
-The first run generates the vineyard and converts the robot, and caches both;
-later runs start straight up. `--help` lists the launcher's options --
+The first run downloads the Warthog, generates the vineyard and converts the
+robot, and caches all three; later runs start straight up. `--help` lists the launcher's options --
 `--row` picks the row pruned, `--physics` the backend and `--viz` the viewer.
 
 Only the default backend, Newton coupled with VBD, bends a cane and so can cut
@@ -36,7 +36,7 @@ nothing to do.
 
 
 
-https://github.com/user-attachments/assets/b94b3eda-fdbe-4e14-8a5f-930b085a149f
+https://github.com/user-attachments/assets/b3965a39-2b8c-4160-bcfe-491c178272e7
 
 
 
@@ -95,9 +95,9 @@ re-recording it and changing what it shows.
 ## What it shows
 
 The layout is [Bumblebee's](https://arxiv.org/abs/2112.00291) (Silwal et al.,
-2021): a Clearpath Warthog in the alley, an arm on a 1.35 m slide across its
-deck -- a UR10 here, where the paper has a UR5 -- and a bypass shear in its
-hand. So is the pipeline, minus the cameras:
+2021): a Clearpath Warthog in the alley with an aluminium frame on its back,
+an arm on a 1.35 m slide along the frame -- a UR10 here, where the paper has a
+UR5 -- and a bypass shear in its hand. So is the pipeline, minus the cameras:
 
 1. **The rule.** Keep two buds on every cane and cut midway between the second
    and the third. The scene is generated dormant, so every cane is a rod a
@@ -199,22 +199,29 @@ closes on through it.
 ## The robot
 
 `Bumblebee` in `bumblebee.py` is a dataclass of dimensions, and the URDF is
-generated from it. The chassis is a Warthog at its published size and mass and
-the slide is the paper's, both drawn from primitives. The arm is the stock UR10
-that Isaac Sim's URDF importer ships, Universal Robots' meshes and all: its
-links are copied into the generated URDF as they are, standing on the
-carriage, so the arm is part of the robot's one articulation and rides the
-slide. Isaac Lab's `UR10_CFG` would spawn it as an articulation of its own,
-fixed to the world. `Bumblebee.chain` reads the same joints out of that URDF
-for `kinematics.py`, which poses the arm with damped least squares; the solver
-and the simulation come from one description.
+generated from it. The chassis is the Warthog as Clearpath's own
+[description](https://github.com/warthog-cpr/warthog/tree/55555b6db5fc7aa7b710b5652f7cb5bf0589ec6a/warthog_description)
+draws and weighs it; the first run downloads it from the
+[misina-lab-sim-assets](https://huggingface.co/datasets/azazdeaz/misina-lab-sim-assets)
+dataset on Hugging Face, and later runs find it in the local cache. Its links
+are copied into the generated URDF with its rockers fixed: the real machine has
+a differential bar between them that holds the chassis level, which the URDF
+leaves out. The frame on its back and the slide along it are the paper's, drawn
+from primitives, the rail out over the Warthog's left fenders, toward the row.
+The arm is the stock UR10 that Isaac Sim's URDF importer ships, Universal
+Robots' meshes and all: its links are copied into the generated URDF as they
+are, standing on the carriage, so the arm is part of the robot's one
+articulation and rides the slide. Isaac Lab's `UR10_CFG` would spawn it as an
+articulation of its own, fixed to the world. `Bumblebee.chain` reads the same
+joints out of that URDF for `kinematics.py`, which poses the arm with damped
+least squares; the solver and the simulation come from one description.
 
 ## Layout
 
 | file | what it owns |
 | --- | --- |
 | `main.py` | the vineyard, the sky, the robot, the simulation loop |
-| `bumblebee.py` | the robot: its dimensions, the URDF built from them, the actuators, the shear |
+| `bumblebee.py` | the robot: the Warthog, its dimensions, the URDF built from them, the actuators, the shear |
 | `kinematics.py` | forward and inverse kinematics of the arm on its slide |
 | `pruner.py` | the ground truth off the stage, the rule, the cut sequence, the score |
 | `driver.py` | driving the skid steer from stop to stop |

@@ -2,13 +2,15 @@
 
 `bumblebee` reaches Isaac Lab through `isaaclab.sim`, so this is skipped
 entirely where that isn't installed. The generated URDF is the subject of
-most of them: it is where the dimensions above end up.
+most of them: it is where the dimensions above end up. The Warthog is
+downloaded on first use, so the first run needs the network.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import math
+import pathlib
 import xml.etree.ElementTree as ElementTree
 
 import numpy as np
@@ -59,8 +61,9 @@ def test_the_arm_stands_on_the_rail_and_folds_over_the_deck():
     q = np.array([0.0, *bumblebee.ARM_HOME])
     mouth = (kinematics.frames(MACHINE.chain, q)[-1] @ MACHINE.tool)[:3, 3]
 
+    front = max(x for x, _ in MACHINE.corners) + MACHINE.wheel_radius
     assert MACHINE.deck < mouth[2] < MACHINE.deck + 1.0
-    assert abs(mouth[0]) < MACHINE.length / 2 and abs(mouth[1]) < MACHINE.width / 2 + 0.05
+    assert abs(mouth[0]) < front and abs(mouth[1]) < MACHINE.track / 2 + 0.2
     assert MACHINE.chain[0].xyz == pytest.approx(MACHINE.rail)
 
 
@@ -152,23 +155,19 @@ def test_every_part_has_a_positive_size(built):
     assert sizes and all(size > 0 for size in sizes)
 
 
-def test_the_wheels_carry_the_chassis(built):
-    """Four wheels at the corners, about the machine's Y, and the whole UGV
-    mass between the chassis and them."""
-    masses = {
-        link.get("name"): float(link.find("./inertial/mass").get("value"))
-        for link in built.iter("link")
-    }
-    wheels = [built.find(f"./joint[@name='{joint}']") for joint in bumblebee.WHEEL_JOINTS]
-
-    for joint, (x, y) in zip(wheels, MACHINE.corners, strict=True):
-        assert joint.find("axis").get("xyz") == "0 1 0"
-        assert joint.find("origin").get("xyz") == f"{x} {y} {MACHINE.wheel_radius}"
-    ugv = masses["base_link"] + sum(m for name, m in masses.items() if name.startswith("wheel_"))
-    assert ugv == pytest.approx(MACHINE.mass)
+def test_the_warthog_stands_on_its_wheels(built):
+    """Each wheel turns about the machine's Y at its corner with its bottom
+    on the ground under `base_link`, and every mesh the robot is drawn with
+    is found."""
+    for joint, (x, y) in zip(bumblebee.WHEEL_JOINTS, MACHINE.corners, strict=True):
+        element = built.find(f"./joint[@name='{joint}']")
+        centre = bumblebee._placement(built, element.find("child").get("link"))[:3, 3]
+        assert element.find("axis").get("xyz") == "0 1 0"
+        assert centre == pytest.approx([x, y, MACHINE.wheel_radius])
+    assert all(pathlib.Path(mesh.get("filename")).is_file() for mesh in built.iter("mesh"))
 
 
-@pytest.mark.parametrize("impossible", [{"travel": 3.0}, {"clearance": 0.0}, {"deck": 0.2}])
+@pytest.mark.parametrize("impossible", [{"travel": 3.0}, {"deck": 0.8}])
 def test_a_machine_that_cannot_be_built_is_refused(impossible):
     with pytest.raises(ValueError):
         dataclasses.replace(MACHINE, **impossible)
