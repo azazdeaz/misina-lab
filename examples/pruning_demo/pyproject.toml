@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "vinery-lab",
+    "huggingface-hub>=1.16",
     "isaaclab[isaacsim,all]==3.0.0",
 ]
 

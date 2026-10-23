@@ -1,15 +1,17 @@
-"""A Bumblebee-like pruning robot, generated from its published dimensions.
+"""A Bumblebee-like pruning robot: a real Warthog and UR10, and the rest
+generated from Bumblebee's published dimensions.
 
 Bumblebee (Silwal et al., 2021) is a Clearpath Warthog driving the alley with
-a UR5 on a 1.35 m linear slide across its deck and a bypass shear in the arm's
-hand. This is that layout with a UR10 in the UR5's place: a skid-steer
-chassis on four wheels and a rail along its body's row-side edge carrying a
-carriage on a prismatic joint, from primitives; the stock UR10 Isaac Sim
-ships, standing on the carriage; and a shear head whose one blade swings on a
-revolute joint. Every dimension of the chassis is a field of `Bumblebee`;
-`urdf` writes the robot from them and the UR10's own URDF, and
-`Bumblebee.chain` is the same joints for `kinematics`, so the arm the solver
-poses is the arm the simulation steps.
+an aluminium extrusion frame on its back, a UR5 on a 1.35 m linear slide along
+the frame, and a bypass shear in the arm's hand. This is that layout with a
+UR10 in the UR5's place: the Warthog as Clearpath's own URDF draws and weighs
+it, fetched from the demos' asset dataset; a frame on its deck and a rail
+along the frame's row-side edge carrying a carriage on a prismatic joint,
+from primitives; the stock UR10 Isaac Sim ships, standing on the carriage;
+and a shear head whose one blade swings on a revolute joint. `urdf` writes
+the robot from the Warthog's URDF, the fields of `Bumblebee` and the UR10's
+own URDF, and `Bumblebee.chain` is the same joints for `kinematics`, so the
+arm the solver poses is the arm the simulation steps.
 
 The shear touches what it prunes. Its head and both blades collide with the
 canes, so a cane the shear comes in on is pushed aside or funnelled into the
@@ -22,13 +24,14 @@ The moving blade collides as `Shear.slices` pieces end to end along it, and
 blade itself closes on through it; the rest go on with the blade.
 
 The robot drives with the row on its left: the rail is on the +Y edge of the
-deck, and the arm reaches out that way.
+frame, and the arm reaches out that way.
 """
 
 from __future__ import annotations
 
 import copy
 import dataclasses
+import functools
 import hashlib
 import importlib.util
 import math
@@ -44,10 +47,31 @@ from isaaclab.assets import ArticulationCfg
 
 from kinematics import Joint, rpy_of, transform
 
+ASSETS = "azazdeaz/misina-lab-sim-assets"
+"""The Hugging Face dataset the demos' larger assets live in. `huggingface_hub`
+fetches what a demo needs from it on first use and caches it."""
+
+ASSETS_REVISION = "7fca5f5bdadb2b5217d1e86726cf16431e1978b4"
+"""The dataset commit the demo is pinned to."""
+
+WARTHOG = "clearpath_warthog"
+"""Clearpath's Warthog, as warthog-cpr/warthog@55555b6 describes it:
+`warthog.urdf`, expanded from its xacro with the default options, its meshes
+and its BSD licence."""
+
+MOUNT = "top_chassis_link"
+"""The Warthog's link the frame stands on: the top of its deck, where
+Clearpath mount its accessories."""
+
+CLEARED = "left_diff_unit_antenna_link"
+"""The Warthog's link left off: its left antenna, which stands up through
+where the rail runs."""
+
 CORNERS = ("front_left", "front_right", "rear_left", "rear_right")
-WHEEL_JOINTS = [f"wheel_{corner}" for corner in CORNERS]
-"""The drive joints, in `CORNERS` order. A skid steer has no steering joint:
-the left pair and the right pair turn at different speeds."""
+WHEEL_JOINTS = [f"{corner}_wheel_joint" for corner in CORNERS]
+"""The drive joints, in `CORNERS` order, as the Warthog names them. A skid
+steer has no steering joint: the left pair and the right pair turn at
+different speeds."""
 
 LEFT = [joint for joint in WHEEL_JOINTS if "left" in joint]
 RIGHT = [joint for joint in WHEEL_JOINTS if "right" in joint]
@@ -146,15 +170,29 @@ DRIVE_EFFORT_PER_KG = 0.5
 """N m per kilogram of machine each wheel may push with: what a wheel can
 push is what is standing on it."""
 
-# How the chassis mass is shared out.
-WHEEL_SHARE = 0.2  # the four wheels together
+# -- The frame on the Warthog's back.
+FENDERS = 0.85
+"""The top of the Warthog's fenders, above the ground, as `urdf` stands it:
+fenders.stl's highest point."""
+
+POSTS = (0.6, 0.3)
+"""Where the frame's four posts stand on `MOUNT`: this far either way along
+the deck and across it."""
+
+BEAM = 0.04
+"""The side of the frame's square extrusion."""
+
+RAIL = (0.08, 0.06)
+"""The rail's width and height."""
+
+FRAME_MASS = 20.0
+"""The frame and the rail together."""
 
 MATERIALS = {
-    "chassis": "0.93 0.72 0.10 1",
-    "tire": "0.05 0.05 0.05 1",
     "steel": "0.55 0.57 0.60 1",
+    "aluminium": "0.78 0.80 0.82 1",
 }
-"""Colours, as URDF rgba: a yellow chassis, rubber and galvanized steel."""
+"""Colours, as URDF rgba: galvanized steel and bare aluminium."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -236,32 +274,20 @@ class Shear:
 class Bumblebee:
     """One machine, in meters and kilograms.
 
-    The chassis is a Clearpath Warthog at its published size and the slide
-    the paper's; the arm is the stock UR10 whatever the machine. Everything
-    here is free to move with `dataclasses.replace`.
+    The chassis is a Clearpath Warthog whatever the machine, and its wheels
+    and mass are read off its URDF; the slide is the paper's, and the arm the
+    stock UR10. Everything here is free to move with `dataclasses.replace`.
     """
-
-    length: float = 1.52
-    width: float = 1.38
-    """The chassis, over the wheels."""
-
-    deck: float = 0.8
-    """The chassis top, above the ground."""
-
-    clearance: float = 0.3
-    """The chassis underside, above the ground."""
-
-    wheelbase: float = 1.1
-    wheel_radius: float = 0.3
-    wheel_width: float = 0.2
-    mass: float = 280.0
-    """The UGV alone, without the gantry and the arm."""
 
     travel: float = 1.35
     """The slide's stroke, along the row, centered on the chassis."""
 
-    rail_height: float = 0.2
-    """The rail top above the deck; the carriage rides on it."""
+    deck: float = 0.94
+    """The frame's top, above the ground, which the rail sits on."""
+
+    rail_offset: float = 0.45
+    """The rail's centre line, out from the machine's toward the row: over
+    the Warthog's left fenders."""
 
     carriage: float = 0.08
     """The carriage's height, which is what the arm stands on."""
@@ -272,23 +298,37 @@ class Bumblebee:
     place for it."""
 
     def __post_init__(self):
-        if self.travel >= self.length + 2 * self.wheel_radius:
+        x = max(x for x, _ in self.corners) + self.wheel_radius
+        if self.travel >= 2 * x:
             raise ValueError(f"{self} slides past the ends of its chassis")
-        if self.clearance <= 0 or self.deck <= self.clearance:
-            raise ValueError(f"{self} has no chassis between the ground and its deck")
-
-    @property
-    def track(self) -> float:
-        """Wheel centre to wheel centre, across the machine."""
-        return self.width - self.wheel_width
+        if self.deck - BEAM <= FENDERS:
+            raise ValueError(f"{self} has its frame in the Warthog's fenders")
 
     @property
     def corners(self) -> list[tuple[float, float]]:
         """Each wheel's `(x, y)` in the base frame, in `CORNERS` order."""
         return [
-            (x * self.wheelbase / 2, y * self.track / 2)
-            for x, y in ((1, 1), (1, -1), (-1, 1), (-1, -1))
+            tuple(float(v) for v in _placement(_warthog(), _child(joint))[:2, 3])
+            for joint in WHEEL_JOINTS
         ]
+
+    @property
+    def track(self) -> float:
+        """Wheel centre to wheel centre, across the machine."""
+        return self.corners[0][1] - self.corners[1][1]
+
+    @property
+    def wheel_radius(self) -> float:
+        """The radius of the Warthog's wheel colliders."""
+        link = _child(WHEEL_JOINTS[0])
+        return float(
+            _warthog().find(f"link[@name='{link}']/collision/geometry/cylinder").get("radius")
+        )
+
+    @property
+    def mass(self) -> float:
+        """The Warthog alone, without the frame and the arm."""
+        return sum(float(mass.get("value")) for mass in _warthog().iter("mass"))
 
     @property
     def max_wheel_speed(self) -> float:
@@ -302,10 +342,8 @@ class Bumblebee:
 
     @property
     def rail(self) -> tuple[float, float, float]:
-        """Where the rail's top surface is, at mid-stroke, in the base frame:
-        along the chassis body's +Y edge, the rail's 8 cm flush with its
-        side, so the posts under it stand on the body."""
-        return (0.0, self.width / 2 - self.wheel_width - 0.04, self.deck + self.rail_height)
+        """Where the rail's top surface is, at mid-stroke, in the base frame."""
+        return (0.0, self.rail_offset, self.deck + RAIL[1])
 
     @property
     def chain(self) -> tuple[Joint, ...]:
@@ -414,6 +452,54 @@ def bumblebee_cfg(machine: Bumblebee, prim_path: str) -> ArticulationCfg:
 
 
 ##
+# The Warthog.
+##
+
+
+@functools.cache
+def warthog_folder() -> pathlib.Path:
+    """The Warthog's folder, downloaded from `ASSETS` the first time."""
+    from huggingface_hub import snapshot_download
+
+    root = snapshot_download(
+        ASSETS, repo_type="dataset", revision=ASSETS_REVISION, allow_patterns=f"{WARTHOG}/*"
+    )
+    return pathlib.Path(root) / WARTHOG
+
+
+@functools.cache
+def _warthog() -> ElementTree.Element:
+    """The Warthog's URDF, its meshes found by absolute path. Its root,
+    `base_link`, is between the axles at their height."""
+    folder = warthog_folder()
+    robot = ElementTree.parse(folder / "warthog.urdf").getroot()
+    for mesh in robot.iter("mesh"):
+        mesh.set("filename", str(folder / mesh.get("filename")))
+    return robot
+
+
+def _child(joint: str) -> str:
+    return _warthog().find(f"joint[@name='{joint}']/child").get("link")
+
+
+def _lift(m: Bumblebee) -> float:
+    """How far `urdf` raises the Warthog's root, so its wheels stand on the
+    ground."""
+    return m.wheel_radius - _placement(_warthog(), _child(WHEEL_JOINTS[0]))[2, 3]
+
+
+def _placement(robot: ElementTree.Element, link: str) -> np.ndarray:
+    """`link`'s frame in that of the root of `robot`'s tree."""
+    joint = robot.find(f"joint/child[@link='{link}']/..")
+    if joint is None:
+        return np.eye(4)
+    origin = joint.find("origin")
+    return _placement(robot, joint.find("parent").get("link")) @ transform(
+        _numbers(origin.get("xyz")), _numbers(origin.get("rpy"))
+    )
+
+
+##
 # URDF generation.
 ##
 
@@ -434,52 +520,55 @@ def _write_urdf(machine: Bumblebee) -> str:
 def urdf(machine: Bumblebee) -> str:
     """`machine` as a URDF document.
 
-    `base_link` is the chassis with its origin on the ground under the
-    chassis centre, the rail and its posts included, since nothing between
-    them moves. The wheels hang off it on continuous joints, the carriage on
-    the slide, and the arm stands on the carriage through a fixed joint the
-    importer merges away.
+    `base_link` is the frame with its origin on the ground between the
+    Warthog's wheels, the rail included, since nothing between them moves.
+    The Warthog hangs off it, the carriage off the slide, and the arm stands
+    on the carriage through a fixed joint the importer merges away.
     """
     m = machine
     x, y, z = m.rail
+    px, py = POSTS
+    mount = _lift(m) + _placement(_warthog(), MOUNT)[2, 3]
     rail_length = m.travel + 0.2
-    chassis_height = m.deck - m.clearance
-    chassis_mass = (1 - WHEEL_SHARE) * m.mass
-    chassis = "\n".join(
+    beams = m.deck - BEAM / 2
+    outer = y + RAIL[0] / 2
+    frame = "\n".join(
         [
-            _box(
-                (0.0, 0.0, m.clearance + chassis_height / 2),
-                (m.length, m.width - 2 * m.wheel_width, chassis_height),
-                "chassis",
-            ),
-            _box((x, y, z - 0.03), (rail_length, 0.08, 0.06), "steel"),
             *(
                 _box(
-                    (post * m.travel / 2, y, (m.deck + z - 0.06) / 2),
-                    (0.06, 0.06, z - 0.06 - m.deck),
-                    "steel",
+                    (sx * px, sy * py, (mount + m.deck - BEAM) / 2),
+                    (BEAM, BEAM, m.deck - BEAM - mount),
+                    "aluminium",
                 )
-                for post in (-1, 1)
+                for sx in (-1, 1)
+                for sy in (-1, 1)
             ),
+            # Across the deck and out to the rail, and along its far side.
+            *(
+                _box(
+                    (sx * px, (outer - py - BEAM / 2) / 2, beams),
+                    (BEAM, outer + py + BEAM / 2, BEAM),
+                    "aluminium",
+                )
+                for sx in (-1, 1)
+            ),
+            _box((0.0, -py, beams), (2 * px - BEAM, BEAM, BEAM), "aluminium"),
+            _box((x, y, z - RAIL[1] / 2), (rail_length, *RAIL), "steel"),
         ]
-    )
-    wheels = "\n".join(
-        _wheel(m, joint, corner, x, y)
-        for joint, corner, (x, y) in zip(WHEEL_JOINTS, CORNERS, m.corners, strict=True)
     )
     slide, *arm = m.chain
     return f"""<?xml version="1.0"?>
 <!-- Generated by bumblebee.py; edit that, not this. -->
 <robot name="bumblebee">
   <link name="base_link">
-{chassis}
+{frame}
     <inertial>
-      <origin xyz="0 0 {m.clearance + chassis_height / 2}"/>
-      <mass value="{chassis_mass}"/>
-{_box_inertia(chassis_mass, m.length, m.width, chassis_height)}
+      <origin xyz="0 0 {(mount + m.deck) / 2}"/>
+      <mass value="{FRAME_MASS}"/>
+{_box_inertia(FRAME_MASS, rail_length, 2 * py, m.deck - mount)}
     </inertial>
   </link>
-{wheels}
+{_chassis(m)}
 {_joint(slide, "base_link", "carriage")}
   <link name="carriage">
 {_box((0.0, 0.0, m.carriage / 2), (0.15, 0.15, m.carriage), "steel")}
@@ -495,25 +584,38 @@ def urdf(machine: Bumblebee) -> str:
 """
 
 
-def _wheel(m: Bumblebee, joint: str, corner: str, x: float, y: float) -> str:
-    """One wheel on a continuous joint about the machine's Y."""
-    mass = WHEEL_SHARE * m.mass / 4
-    return f"""
-  <joint name="{joint}" type="continuous">
-    <parent link="base_link"/>
-    <child link="wheel_{corner}_link"/>
-    <origin xyz="{x} {y} {m.wheel_radius}"/>
-    <axis xyz="0 1 0"/>
-    <limit effort="{m.drive_effort}" velocity="{m.max_wheel_speed}"/>
-  </joint>
-  <link name="wheel_{corner}_link">
-{_cylinder((0.0, 0.0, 0.0), (math.pi / 2, 0.0, 0.0), m.wheel_radius, m.wheel_width, "tire")}
-    <inertial>
-      <origin rpy="{math.pi / 2} 0 0"/>
-      <mass value="{mass}"/>
-{_cylinder_inertia(mass, m.wheel_radius, m.wheel_width)}
-    </inertial>
-  </link>"""
+def _chassis(m: Bumblebee) -> str:
+    """The Warthog: its materials, links and joints as its URDF has them,
+    raised so its wheels stand on the ground. Its rockers are fixed: on the
+    real machine a differential bar holds the chassis level between them,
+    which the URDF leaves out. Its wheels get the drive's limits."""
+    robot = copy.deepcopy(_warthog())
+    lift = _lift(m)
+    for joint in robot.findall("joint"):
+        if joint.get("type") == "revolute":
+            joint.set("type", "fixed")
+        elif joint.get("type") == "continuous":
+            ElementTree.SubElement(
+                joint, "limit", effort=str(m.drive_effort), velocity=str(m.max_wheel_speed)
+            )
+        if joint.find("parent").get("link") == "base_link":
+            origin = joint.find("origin")
+            x, y, z = _numbers(origin.get("xyz"))
+            origin.set("xyz", f"{x} {y} {z + lift}")
+
+    def carried(element: ElementTree.Element) -> str:
+        """A link by its name, a joint by the link it carries."""
+        return element.find("child").get("link") if element.tag == "joint" else element.get("name")
+
+    # The Warthog's own `base_link` is empty: its chassis joint hangs off this
+    # robot's instead.
+    kept = [
+        element
+        for element in robot
+        if element.tag in ("material", "link", "joint")
+        and carried(element) not in ("base_link", CLEARED)
+    ]
+    return "\n".join("  " + ElementTree.tostring(e, encoding="unicode").rstrip() for e in kept)
 
 
 def _arm(m: Bumblebee, joints: list[Joint]) -> str:
@@ -618,14 +720,6 @@ def _box(xyz, size, material: str, tags: tuple[str, ...] = ("visual", "collision
     return _shaped(shape, tags, material)
 
 
-def _cylinder(xyz, rpy, radius: float, length: float, material: str) -> str:
-    shape = (
-        f'      <origin xyz="{xyz[0]} {xyz[1]} {xyz[2]}" rpy="{rpy[0]} {rpy[1]} {rpy[2]}"/>\n'
-        f'      <geometry><cylinder radius="{radius}" length="{length}"/></geometry>'
-    )
-    return _shaped(shape, ("visual", "collision"), material)
-
-
 def _shaped(shape: str, tags: tuple[str, ...], material: str) -> str:
     """One geometry repeated as each of `tags`, coloured where it is a visual."""
     colour = f'\n      <material name="{material}"><color rgba="{MATERIALS[material]}"/></material>'
@@ -638,11 +732,6 @@ def _box_inertia(mass: float, x: float, y: float, z: float) -> str:
     return _inertia(
         mass * (y * y + z * z) / 12, mass * (x * x + z * z) / 12, mass * (x * x + y * y) / 12
     )
-
-
-def _cylinder_inertia(mass: float, radius: float, length: float) -> str:
-    across = mass * (3 * radius * radius + length * length) / 12
-    return _inertia(across, across, mass * radius * radius / 2)
 
 
 def _inertia(ixx: float, iyy: float, izz: float) -> str:
