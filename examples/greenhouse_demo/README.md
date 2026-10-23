@@ -5,8 +5,11 @@ the smallest script that spawns `GreenhouseCfg`, which renders the
 greenhouse's picture in Isaac Lab for the docs, one that bends and cuts its
 lowest trusses, and a pipe-rail robot harvesting them.
 
+![The harvester cutting a truss in Isaac Lab](https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/greenhouse_demo/harvest.webp)
+
 **Contents:** [Requirements](#requirements) · [Running it](#running-it) ·
-[Harvesting](#harvesting) · [Layout](#layout)
+[Harvesting](#harvesting) · [Recording the video](#recording-the-video) ·
+[Layout](#layout)
 
 ## Requirements
  - [uv](https://docs.astral.sh/uv/getting-started/installation/) installed
@@ -51,6 +54,8 @@ start straight up.
 
 ## Harvesting
 
+https://github.com/user-attachments/assets/1c498746-754b-422e-ab37-57b7c7bb456f
+
 The robot has the layout of eternal.ag's Harvester and most robots of its
 kind: a trolley as wide as the heating pipes are spaced, a lift on it, a
 UR5e on the lift and a cutter in its hand. The trolley does not roll here: it
@@ -88,14 +93,31 @@ cuts every one, each dropping whole to the floor: about 3 s of simulated
 time a cut and 150 s for the whole run, which takes about six minutes on an
 RTX 5070 Ti.
 
+## Recording the video
+
+```bash
+./record.sh
+```
+
+films the harvester cutting Path_01's due trusses, the first three close up,
+in Isaac Sim's RTX renderer and headless, and writes
+`target/video/harvest.mp4` at the repo root, captioned and small enough to
+upload, and a contact sheet beside it. Its storyboard -- the shots, the takes,
+the pacing -- is the top of `video.py`, and the run fails if a take's truss
+was not cut. Run from the repo root on the branch whose pull request changes
+the video,
+`docs/video/publish.sh target/video/harvest.mp4 examples/greenhouse_demo/README.md`
+uploads it and points the video line above at it.
+
 ## Layout
 
 | file | what it owns |
 | --- | --- |
-| `shot.py` | the greenhouse, the sky, and a still of them from a shot file in `docs/shots/greenhouse_demo/`; see [docs-shots](../../.claude/skills/docs-shots/SKILL.md) |
+| `shot.py` | a still from a shot file in `docs/shots/greenhouse_demo/`: the greenhouse under a sky, or the harvester at work; see [docs-shots](../../.claude/skills/docs-shots/SKILL.md) |
 | `bend.py` | a row with bent trusses under VBD, the capsules that sweep through them, and the cut |
 | `harvest.py` | two rows and the harvester: the ground truth off the stage, the plan, the cuts, the tally |
 | `harvester.py` | the robot: its dimensions, the UR5e read out of Menagerie's MJCF, the URDF built from both, the actuators |
+| `video.py`, `record.sh` | the video: Path_01 harvested, filmed headless, and its encoding |
 | `kinematics.py` | forward and inverse kinematics of the trolley and the arm; the pruning demo's module, kept the same |
 
 [`examples/isaaclab_demo/DEVELOPMENT.md`](../isaaclab_demo/DEVELOPMENT.md)

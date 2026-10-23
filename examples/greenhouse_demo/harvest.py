@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import re
+from collections.abc import Iterator
 
 import numpy as np
 import torch
@@ -150,6 +151,16 @@ def design_scene(machine: Harvester):
             intensity=750.0,
             texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
         ),
+    )
+    # Bare ground around the floor, its top a centimeter under the floor's:
+    # past the floor's edge a camera sees ground, not the underside of the sky.
+    scene.ground = AssetBaseCfg(
+        prim_path="/World/Ground",
+        spawn=sim_utils.CuboidCfg(
+            size=(200.0, 200.0, 0.1),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.3, 0.27, 0.22)),
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -0.06)),
     )
     scene.greenhouse = AssetBaseCfg(prim_path=GREENHOUSE_PATH, spawn=GREENHOUSE_CFG)
     # Its base on the main path's centre line; the rows run from x = 0.
@@ -421,82 +432,109 @@ def frame_of(position: np.ndarray, quat: np.ndarray) -> np.ndarray:
     return frame
 
 
-def main():
-    args = parse_args()
-    sim_cfg = sim_utils.SimulationCfg(
+def simulation_cfg() -> sim_utils.SimulationCfg:
+    """Newton coupled with VBD, the robot's forearm and wrists among what a
+    truss collides with."""
+    return sim_utils.SimulationCfg(
         dt=SIM_DT,
         physics=rods.make_physics_cfg_newton(GREENHOUSE_CFG, ROBOT_PATH, ROBOT_CONTACT, SUBSTEPS),
     )
+
+
+def make_machine() -> Harvester:
+    """The harvester for `GREENHOUSE_CFG`'s rail."""
+    rail = GREENHOUSE_CFG.rail
+    return Harvester(gauge=rail.gauge, rail_top=rail.height + rail.pipe_diameter / 2)
+
+
+def run(
+    sim: sim_utils.SimulationContext,
+    robot,
+    machine: Harvester,
+    paths: list[int] | None = None,
+    render: bool = True,
+) -> Iterator[Harvest]:
+    """Reset the simulation of the scene `design_scene` laid out and harvest
+    `paths`, every one by default, for as long as the run lasts, yielding the
+    `Harvest` after every physics step. `FALL` seconds after its last job the
+    tally is printed, and a run without a window ends. Without `render` no
+    step renders, and what does is up to the caller."""
+    from isaaclab_newton.physics import NewtonManager
+
+    from misina_lab.isaaclab.cutting import Shears
+
+    stage = sim_utils.get_current_stage()
+    sim.reset()
+    shears = Shears()
+    chains: dict[str, list[tuple[int, int]]] = {}
+    for body, label in enumerate(shears.labels):
+        if match := SEGMENT.match(label):
+            chains.setdefault(match[1], []).append((int(match[2]), body))
+    trusses = read_trusses(stage, GREENHOUSE_PATH)
+    for truss in trusses:
+        truss.bodies = [body for _, body in sorted(chains[truss.prim])]
+    ys = path_ys(stage, GREENHOUSE_PATH)
+    paths = paths if paths is not None else list(range(len(ys)))
+    if not all(0 <= path < len(ys) for path in paths):
+        raise ValueError(f"no path {paths}: the greenhouse has {len(ys)} paths")
+    jobs = plan(trusses, ys, paths, GREENHOUSE_CFG.layout.pitch)
+    tally = Tally(due=sum(isinstance(job, Truss) for job in jobs))
+
+    joints, _ = robot.find_joints([AISLE, RAIL, LIFT, *arm_joints()], preserve_order=True)
+    hand, _ = robot.find_bodies([HAND])
+    base = frame_of(
+        robot.data.root_pos_w.torch[0].cpu().numpy(),
+        robot.data.root_quat_w.torch[0].cpu().numpy(),
+    )
+
+    def hold(targets) -> None:
+        robot.actuators.target_command.set_position_index(
+            value=torch.tensor(targets, dtype=torch.float32, device=robot.device).unsqueeze(0),
+            joint_ids=joints,
+        )
+
+    def mouth() -> np.ndarray:
+        hand_pose = frame_of(
+            robot.data.body_link_pos_w.torch[0, hand[0]].cpu().numpy(),
+            robot.data.body_link_quat_w.torch[0, hand[0]].cpu().numpy(),
+        )
+        return hand_pose @ machine.tool
+
+    # A drive with no target holds zero, so the arm is held home first.
+    hold([0.0, 0.0, 0.0, *ARM_HOME])
+    harvest = Harvest(
+        machine, jobs, base, robot.data.joint_pos.torch[0, joints].cpu().numpy(), shears, tally
+    )
+    print(f"[INFO]: {len(trusses)} trusses bend, {tally.due} due on paths {paths}", flush=True)
+    sim.set_camera_view(eye=[-3.5, -2.5, 2.8], target=[1.5, 0.0, 1.0])
+    rest = NewtonManager.get_state_0().body_q.numpy()[:, 2].copy()
+    step, after = 0, 0
+    while sim.is_running():
+        if step % DECIMATION == 0:
+            hold(harvest.control(robot.data.joint_pos.torch[0, joints].cpu().numpy(), mouth()))
+        robot.write_data_to_sim()
+        sim.step(render=render)
+        robot.update(SIM_DT)
+        step += 1
+        yield harvest
+        after = after + 1 if harvest.done else 0
+        if after == round(FALL / SIM_DT):
+            drop = rest - NewtonManager.get_state_0().body_q.numpy()[:, 2]
+            tally.fell = sum(drop[t.bodies[1:]].min() > FELL for t in harvest.cut)
+            print(f"[INFO]: done in {harvest.time:.0f} s. {tally.summary()}", flush=True)
+            if not sim.has_gui:
+                return
+
+
+def main():
+    args = parse_args()
+    sim_cfg = simulation_cfg()
     with launch_simulation(sim_cfg, args):
-        from isaaclab_newton.physics import NewtonManager
-
-        from misina_lab.isaaclab.cutting import Shears
-
         sim = sim_utils.SimulationContext(sim_cfg)
-        rail = GREENHOUSE_CFG.rail
-        machine = Harvester(gauge=rail.gauge, rail_top=rail.height + rail.pipe_diameter / 2)
+        machine = make_machine()
         robot = design_scene(machine)
-        stage = sim_utils.get_current_stage()
-        sim.reset()
-
-        shears = Shears()
-        chains: dict[str, list[tuple[int, int]]] = {}
-        for body, label in enumerate(shears.labels):
-            if match := SEGMENT.match(label):
-                chains.setdefault(match[1], []).append((int(match[2]), body))
-        trusses = read_trusses(stage, GREENHOUSE_PATH)
-        for truss in trusses:
-            truss.bodies = [body for _, body in sorted(chains[truss.prim])]
-        ys = path_ys(stage, GREENHOUSE_PATH)
-        paths = args.paths if args.paths is not None else list(range(len(ys)))
-        if not all(0 <= path < len(ys) for path in paths):
-            raise ValueError(f"no path {paths}: the greenhouse has {len(ys)} paths")
-        jobs = plan(trusses, ys, paths, GREENHOUSE_CFG.layout.pitch)
-        tally = Tally(due=sum(isinstance(job, Truss) for job in jobs))
-
-        joints, _ = robot.find_joints([AISLE, RAIL, LIFT, *arm_joints()], preserve_order=True)
-        hand, _ = robot.find_bodies([HAND])
-        base = frame_of(
-            robot.data.root_pos_w.torch[0].cpu().numpy(),
-            robot.data.root_quat_w.torch[0].cpu().numpy(),
-        )
-
-        def hold(targets) -> None:
-            robot.actuators.target_command.set_position_index(
-                value=torch.tensor(targets, dtype=torch.float32, device=robot.device).unsqueeze(0),
-                joint_ids=joints,
-            )
-
-        def mouth() -> np.ndarray:
-            hand_pose = frame_of(
-                robot.data.body_link_pos_w.torch[0, hand[0]].cpu().numpy(),
-                robot.data.body_link_quat_w.torch[0, hand[0]].cpu().numpy(),
-            )
-            return hand_pose @ machine.tool
-
-        # A drive with no target holds zero, so the arm is held home first.
-        hold([0.0, 0.0, 0.0, *ARM_HOME])
-        harvest = Harvest(
-            machine, jobs, base, robot.data.joint_pos.torch[0, joints].cpu().numpy(), shears, tally
-        )
-        print(f"[INFO]: {len(trusses)} trusses bend, {tally.due} due on paths {paths}", flush=True)
-        sim.set_camera_view(eye=[-3.5, -2.5, 2.8], target=[1.5, 0.0, 1.0])
-        rest = NewtonManager.get_state_0().body_q.numpy()[:, 2].copy()
-        step, after = 0, 0
-        while sim.is_running():
-            if step % DECIMATION == 0:
-                hold(harvest.control(robot.data.joint_pos.torch[0, joints].cpu().numpy(), mouth()))
-            robot.write_data_to_sim()
-            sim.step()
-            robot.update(SIM_DT)
-            step += 1
-            after = after + 1 if harvest.done else 0
-            if after == round(FALL / SIM_DT):
-                drop = rest - NewtonManager.get_state_0().body_q.numpy()[:, 2]
-                tally.fell = sum(drop[t.bodies[1:]].min() > FELL for t in harvest.cut)
-                print(f"[INFO]: done in {harvest.time:.0f} s. {tally.summary()}", flush=True)
-                if not sim.has_gui:
-                    break
+        for _ in run(sim, robot, machine, args.paths):
+            pass
 
 
 if __name__ == "__main__":
