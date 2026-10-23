@@ -39,7 +39,7 @@ growers leave it, so the trusses in the harvest band hang off bare stem.
 | Wires | two crop wires over every gutter, for the V the stems are trained in | height, spread |
 | Stems | two to a plant, each grown up its twine to a hook on its wire and lowered along the gutter from then on; a leaf at every node and a truss in every third internode, the leaves stripped below the top few with a stub left at each | the crop's age, harvest height, trusses on a stem, leaves kept, extra stems, trusses turned to the path |
 | Leaves | a compound leaf: a petiole and a rachis with a terminal leaflet, three or four pairs of laterals and small leaflets between them, each leaflet outlined from its veins; small and upright at the head, drooping further down. Visual only, with no collider | length, droop, mesh detail |
-| Trusses | peduncle, rachis and a pedicel to every fruit, with a `Cut` and a `Bend` frame | fruit count and diameter, branched, peduncle length, diameter and angle, missing fruit |
+| Trusses | peduncle, rachis and a pedicel to every fruit, with a `Cut` and a `Bend` frame; below a height, a rod a solver bends and a robot cuts, carrying its fruit | fruit count and diameter, branched, peduncle length, diameter and angle, missing fruit; the height trusses bend below, on the stems |
 | Fruit | every fruit its own prim, with a calyx of five or six sepals and a stage from fruit set to red: fruit grow toward the head, a stem ripens from the bottom up, a truss from its base to its tip, and a fruit from its blossom end | ripe trusses on a stem, the spread in a truss, the ripe colour, height to width, ribbing, jointed pedicels |
 
 Rows run along +X from the row head at x = 0, the main path lies at
@@ -109,6 +109,21 @@ lists every parameter, with its default and range.
 take a truss. Every fruit carries `greenhouse_lab:stage`, its growth stage
 or USDA colour class, and `greenhouse_lab:ripeness`, the share of its
 surface that has coloured.
+
+A truss whose node is below `StemCfg.flexible_below` is a rod instead, its
+peduncle and rachis a `Cable` and a prim per segment that Newton drives:
+
+```text
+        /Truss_00
+          /Cable                      the curve the solver bends, never drawn
+          /Cable_edge_body_0 …        a segment, its tube as /Stem
+            /Pedicels  /Fruit_00 …    whatever leaves the rachis on it
+            /Bend                     on the segment at the bend's middle
+          /Cut
+```
+
+The fruit weigh on the rod, and `Cut` sits within a centimetre of its first
+joint, so `Shears` cutting there drops the whole truss.
 
 Left is +Y: the side on the left looking down a row from its head. A
 standing gutter has `Stand_00 …` where a hanging one has hangers.

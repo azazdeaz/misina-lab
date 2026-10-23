@@ -91,6 +91,7 @@ Each stem grows a truss a week from planting, up its twine to a hook on the wire
 | `leaves_kept` | int | `16` | 10 to 21 | Leaves on a stem, counted down from the head. Growers strip the ones below, so the stem under them is bare, and the two trusses nearest their picking always hang on bare stem however many are kept. |
 | `extra_stems` | float | `0.0` | 0 to 0.5 | Share of plants grown on with a third stem, which growers keep to raise the stem density. |
 | `turned_to_path` | float | `0.8` | 0 to 1 | Share of trusses turned to face the path. The rest face anywhere, into the crop as often as not, where a harvester has to skip them. |
+| `flexible_below` | float | `0.0` | 0 to 5.5 | Height above the floor, in meters, below which a truss bends: one whose node is lower is exported as a rod a physics engine bends and a robot can cut, carrying its fruit, rather than as a static mesh. 0 bends none. |
 
 ## Leaves
 

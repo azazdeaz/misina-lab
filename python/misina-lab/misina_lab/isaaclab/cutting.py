@@ -53,10 +53,10 @@ shortened to nothing has no mass left, and the solver divides by it.
 """
 
 STEM = "Stem"
-"""The prim each rod segment's tube is drawn as, below the segment's own.
-
-The generator picks it, and `Shears` takes another name for a generator that
-drew its tubes differently."""
+"""The prim each rod segment's tube is drawn as, below the segment's own:
+`STEM` in `crates/misina-lab/src/scene/mod.rs`, where `spawn_rod` draws every
+tube under it. `Shears` takes another name for a scene whose tubes were drawn
+some other way."""
 
 
 class Shears:

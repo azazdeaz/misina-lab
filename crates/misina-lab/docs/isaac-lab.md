@@ -165,4 +165,4 @@ with launch_simulation(sim_cfg, shots.launcher(args.out)):
 - [`misina_lab/isaaclab/cutting.py`](../../../python/misina-lab/misina_lab/isaaclab/cutting.py): `Shears.colliders` and `Shears.place` for a collider that moves; the cut itself is [cutting.md](cutting.md)
 - [`misina_lab/isaaclab/colliders.py`](../../../python/misina-lab/misina_lab/isaaclab/colliders.py): `ColliderView`
 - [`misina_lab/isaaclab/shots.py`](../../../python/misina-lab/misina_lab/isaaclab/shots.py): the shot file, `sensor` and `finish`
-- [`src/scene/mod.rs`](../src/scene/mod.rs): `cable`, what the Rust side authors
+- [`src/scene/mod.rs`](../src/scene/mod.rs): `cable` and `spawn_rod`, what the Rust side authors

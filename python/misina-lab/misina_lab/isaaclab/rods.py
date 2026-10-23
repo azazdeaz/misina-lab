@@ -140,11 +140,6 @@ time for them."""
 _tuning: CallbackHandle | None = None
 """The registration `tune_rods` made, while it stands."""
 
-PARKING_CLEARANCE = 1.0
-"""How far apart, in meters, the two static shapes a parked row names have to
-be beyond their bounding spheres: wider than any contact gap, so the broad
-phase drops the row on their boxes every step."""
-
 _slots: ContactSlots | None = None
 """The rows `reserve_contact_slots` added to the model built last."""
 
@@ -159,8 +154,9 @@ class ContactSlots:
     the two faces of the cut, with no row between them, and the piece would
     fall through the stub. So the list gets one more row per rod joint while
     it can still grow -- the model finalized, nothing yet holding a pointer
-    into it -- parked on a pair of static shapes too far apart to ever meet,
-    and `Shears` writes the joint's own pair into the row when the joint goes.
+    into it -- parked on a pair of static shapes, which the broad phase never
+    tests, and `Shears` writes the joint's own pair into the row when the
+    joint goes.
 
     A coupled solver's entry clones the list and compacts it to the shapes it
     sees, keeping the order, so the rows are the last `count` of every copy.
@@ -186,31 +182,27 @@ class ContactSlots:
 
 
 def _parking(model) -> np.ndarray:
-    """A pair of static shapes `PARKING_CLEARANCE` clear of each other's
-    bounding spheres, in the list's (low, high) order: the two furthest apart
-    along the axis the static scene is widest on, the ground left out."""
+    """Two static shapes that collide, in the list's (low, high) order, the
+    ground left out.
+
+    Every broad phase drops a pair of two static shapes before testing it,
+    wherever they are, so a row parked on one is never a contact. They have
+    to collide: a coupled solver's entry compacts its copy of the list to
+    the shapes it collides, and a row naming another would drop out of it.
+    """
     from newton import GeoType, ShapeFlags
 
-    kind = model.shape_type.numpy()
-    radius = model.shape_collision_radius.numpy()
     static = (
         (model.shape_body.numpy() < 0)
         & (model.shape_flags.numpy() & int(ShapeFlags.COLLIDE_SHAPES) != 0)
-        & ~np.isin(kind, [int(GeoType.PLANE), int(GeoType.HFIELD)])
+        & ~np.isin(model.shape_type.numpy(), [int(GeoType.PLANE), int(GeoType.HFIELD)])
     )
-    shapes = np.flatnonzero(static)
-    position = model.shape_transform.numpy()[shapes, :3]
-    if len(shapes) >= 2:
-        axis = int(np.argmax(position.max(axis=0) - position.min(axis=0)))
-        low, high = np.argmin(position[:, axis]), np.argmax(position[:, axis])
-        apart = position[high, axis] - position[low, axis]
-        a, b = int(shapes[low]), int(shapes[high])
-        if apart > radius[a] + radius[b] + PARKING_CLEARANCE:
-            return np.array(sorted((a, b)), dtype=np.int32)
-    raise ValueError(
-        "no two static shapes far enough apart to park a contact row on: a scene with rods"
-        f" needs two, {PARKING_CLEARANCE} m clear of each other"
-    )
+    shapes = np.flatnonzero(static)[:2]
+    if len(shapes) < 2:
+        raise ValueError(
+            "no two static shapes to park a contact row on: a scene with rods needs two"
+        )
+    return shapes.astype(np.int32)
 
 
 def reserve_contact_slots(model) -> ContactSlots:

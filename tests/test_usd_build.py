@@ -505,14 +505,15 @@ def test_a_flexible_organ_is_bolted_down_by_its_leading_masses(stage: Usd.Stage)
     assert not prim.HasAttribute("physics:masses:elementType")
     assert masses[:2] == [0.0, 0.0]
     # Every other point the cross-section at its own diameter over half of
-    # each segment it joins: authored masses replace the taper's.
+    # each segment it joins, authored masses replacing the taper's, and the
+    # load hanging from it on top.
     points = prim.GetAttribute("points").Get()
     widths = prim.GetAttribute("widths").Get()
     spans = [math.dist(a, b) for a, b in zip(points, points[1:])]
     density = stage.GetPrimAtPath(f"{CABLE}/{CABLE_MATERIAL}").GetAttribute("physics:density").Get()
-    for index, joined in ((2, spans[1] + spans[2]), (3, spans[2])):
+    for index, joined, load in ((2, spans[1] + spans[2], 0.0), (3, spans[2], 0.05)):
         area = math.pi * (widths[index] / 2.0) ** 2
-        assert masses[index] == pytest.approx(density * area * joined / 2.0), index
+        assert masses[index] == pytest.approx(density * area * joined / 2.0 + load), index
 
 
 def test_a_transform_round_trips_through_the_op_stack(stage: Usd.Stage):

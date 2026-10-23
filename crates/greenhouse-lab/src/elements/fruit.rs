@@ -86,6 +86,9 @@ const SET_SIZE: f32 = 0.15;
 /// How far a fruit's height-to-width varies about the params, as a fraction.
 const ASPECT_JITTER: f64 = 0.05;
 
+/// A fruit's density, in kg/m³: about water's (est.).
+const DENSITY: f32 = 1000.0;
+
 /// Lobes a fruit may have, and the fewest sides round the body: a whole
 /// number of sides per lobe, at least this many in all.
 const LOBES: (u32, u32) = (3, 5);
@@ -274,6 +277,12 @@ impl FruitConfig {
     pub fn across(&self) -> f32 {
         let t = (self.stage / MATURE_GREEN).clamp(0.0, 1.0);
         self.diameter * (SET_SIZE + (1.0 - SET_SIZE) * t * t * (3.0 - 2.0 * t))
+    }
+
+    /// Its mass now, in kilograms: a spheroid `across` wide and `aspect` as
+    /// tall as that.
+    pub fn mass(&self) -> f32 {
+        DENSITY * PI / 6.0 * self.across().powi(3) * self.aspect
     }
 }
 
