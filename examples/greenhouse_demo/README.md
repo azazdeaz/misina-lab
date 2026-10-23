@@ -2,11 +2,11 @@
 
 A [generated greenhouse](../../crates/greenhouse-lab/README.md) in Isaac Sim:
 the smallest script that spawns `GreenhouseCfg`, which renders the
-greenhouse's picture in Isaac Lab for the docs, and one that bends and cuts
-its lowest trusses. No robot works it yet.
+greenhouse's picture in Isaac Lab for the docs, one that bends and cuts its
+lowest trusses, and a pipe-rail robot harvesting them.
 
 **Contents:** [Requirements](#requirements) · [Running it](#running-it) ·
-[Layout](#layout)
+[Harvesting](#harvesting) · [Layout](#layout)
 
 ## Requirements
  - [uv](https://docs.astral.sh/uv/getting-started/installation/) installed
@@ -35,8 +35,58 @@ stem and falls. `--viz none` runs it without a window and prints how far
 the trusses were pushed, how close to where they settled they came back,
 and how many fell.
 
-The first run of either generates its greenhouse and caches it; later runs
+```bash
+uv run harvest.py
+```
+
+opens Kit on two short rows and the harvester at their heads, which cuts
+every due truss below 1.8 m, where the trusses are rods, and lets it fall,
+as the next section tells.
+`--paths` picks the paths it works, every one by default, and
+`HEADLESS=1 uv run harvest.py --viz kit` runs it without a window and
+prints the tally once the last truss has fallen.
+
+The first run of each generates its greenhouse and caches it; later runs
 start straight up.
+
+## Harvesting
+
+The robot has the layout of eternal.ag's Harvester and most robots of its
+kind: a trolley as wide as the heating pipes are spaced, a lift on it, a
+UR5e on the lift and a cutter in its hand. The trolley does not roll here: it
+rides prismatic joints off a base fixed in the main path, across the row
+heads to a path, down it and up. The arm is
+[MuJoCo Menagerie's UR5e](https://github.com/google-deepmind/mujoco_menagerie/tree/main/universal_robots_ur5e),
+read out of its MJCF; the first run downloads it from the
+[misina-lab-sim-assets](https://huggingface.co/datasets/azazdeaz/misina-lab-sim-assets)
+dataset on Hugging Face, and later runs find it in the local cache.
+
+The plan comes from the scene's own ground truth, not from a camera:
+
+1. **What is due.** A truss is due once its least ripe fruit is turning, by
+   the stage the generator gives every fruit.
+2. **The order.** The robot crosses to each path in turn, cuts the due
+   trusses on its left going down it and the ones on its right coming back,
+   folding the arm before any run longer than half a meter, so it never
+   sweeps the crop wall.
+3. **The approach.** Each truss is cut at its `Cut` frame, where the
+   peduncle leaves the stem. The cutter's V comes in level and square to
+   the peduncle, so the peduncle lies across it. The trolley runs to a
+   station behind the cut, the arm moves to a stand-off 12 cm short of it,
+   and closes in on a straight line.
+4. **The cut.** Once the arm holds still with the mouth within 1.5 cm of the
+   cut, the truss is cut there by rule, with `Shears`, at its rod's first
+   joint, and drops whole to the floor. The blades are drawn only, so the
+   truss falls past them. The forearm, the wrists and the cutter's head
+   collide with the trusses they pass; the rest of the robot passes through
+   them.
+
+The tally counts the trusses due on the paths worked, how many the arm
+reaches, cuts and sees fall, and the seconds per truss cut. On the demo's two
+4 m rows, 36 trusses are due on the three paths, and the robot reaches and
+cuts every one, each dropping whole to the floor: about 3 s of simulated
+time a cut and 150 s for the whole run, which takes about six minutes on an
+RTX 5070 Ti.
 
 ## Layout
 
@@ -44,6 +94,9 @@ start straight up.
 | --- | --- |
 | `shot.py` | the greenhouse, the sky, and a still of them from a shot file in `docs/shots/greenhouse_demo/`; see [docs-shots](../../.claude/skills/docs-shots/SKILL.md) |
 | `bend.py` | a row with bent trusses under VBD, the capsules that sweep through them, and the cut |
+| `harvest.py` | two rows and the harvester: the ground truth off the stage, the plan, the cuts, the tally |
+| `harvester.py` | the robot: its dimensions, the UR5e read out of Menagerie's MJCF, the URDF built from both, the actuators |
+| `kinematics.py` | forward and inverse kinematics of the trolley and the arm; the pruning demo's module, kept the same |
 
 [`examples/isaaclab_demo/DEVELOPMENT.md`](../isaaclab_demo/DEVELOPMENT.md)
 covers the pinned Isaac Lab release, which this demo pins too.
