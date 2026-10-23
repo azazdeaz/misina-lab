@@ -109,6 +109,7 @@ starting point for a new generator.
     - [Straddler example](examples/straddler_demo/README.md)
     - [Pruning example](examples/pruning_demo/README.md)
 - [Greenhouse Lab](#greenhouse-lab): tomato greenhouses
+    - [Greenhouse example](examples/greenhouse_demo/README.md)
 
 ### Vinery Lab
 
@@ -154,6 +155,12 @@ The rows of a high-wire tomato greenhouse, grown to any week of the season.
 [Parameters](crates/greenhouse-lab/docs/parameters.md) ·
 [Playground](https://azazdeaz.github.io/misina-lab/playground/greenhouse/) ·
 `pip install greenhouse-lab`
+
+#### Examples
+
+| Example | What it shows |
+| --- | --- |
+| [Greenhouse](examples/greenhouse_demo/README.md) | A pipe-rail robot with a UR5e on its lift cuts every due truss in the harvest band of each path, which drops to the floor. |
 
 ## Try it
 
