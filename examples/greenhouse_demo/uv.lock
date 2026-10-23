@@ -1399,6 +1399,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "greenhouse-lab" },
+    { name = "huggingface-hub" },
     { name = "isaaclab", extra = ["all", "isaacsim"] },
 ]
 
@@ -1410,6 +1411,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "greenhouse-lab", editable = "../../crates/greenhouse-lab" },
+    { name = "huggingface-hub", specifier = ">=1.16" },
     { name = "isaaclab", extras = ["isaacsim", "all"], specifier = "==3.0.0" },
 ]
 

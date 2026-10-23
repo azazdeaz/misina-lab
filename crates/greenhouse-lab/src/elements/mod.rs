@@ -210,21 +210,26 @@ mod tests {
 
     /// Three things a USD consumer assumes and never checks: every reference
     /// names a part, every part is drawn by some prim, and no two prims share
-    /// a path, which a config keyed on one would be silently repointed by.
+    /// a path, which a config keyed on one would be silently repointed by. At
+    /// the defaults, and with the lowest trusses bent.
     #[test]
     fn every_reference_resolves_and_every_path_is_unique() {
-        let doc = scene_doc(grown(GreenhouseParams::default()).world_mut()).unwrap();
-        let mut prims = Vec::new();
-        walk(&doc.root, "", &mut prims);
+        let mut bent = GreenhouseParams::default();
+        bent.stem.flexible_below = 1.8;
+        for params in [GreenhouseParams::default(), bent] {
+            let doc = scene_doc(grown(params).world_mut()).unwrap();
+            let mut prims = Vec::new();
+            walk(&doc.root, "", &mut prims);
 
-        let paths: BTreeSet<&str> = prims.iter().map(|(path, _)| path.as_str()).collect();
-        assert_eq!(paths.len(), prims.len(), "a prim path repeats");
-        let drawn: BTreeSet<&str> = prims
-            .iter()
-            .filter_map(|(_, node)| node.reference.as_deref())
-            .collect();
-        let parts: BTreeSet<&str> = doc.parts.iter().map(|part| part.name.as_str()).collect();
-        assert_eq!(drawn, parts);
+            let paths: BTreeSet<&str> = prims.iter().map(|(path, _)| path.as_str()).collect();
+            assert_eq!(paths.len(), prims.len(), "a prim path repeats");
+            let drawn: BTreeSet<&str> = prims
+                .iter()
+                .filter_map(|(_, node)| node.reference.as_deref())
+                .collect();
+            let parts: BTreeSet<&str> = doc.parts.iter().map(|part| part.name.as_str()).collect();
+            assert_eq!(drawn, parts);
+        }
     }
 
     /// An edit to a standing scene lands exactly where generating from scratch
@@ -250,6 +255,7 @@ mod tests {
             ("leaf length", edited(|p| p.leaf.length = 0.5)),
             ("leaf detail", edited(|p| p.leaf.detail = 0.5)),
             ("peduncle", edited(|p| p.truss.peduncle_length = 0.1)),
+            ("bent trusses", edited(|p| p.stem.flexible_below = 1.8)),
             ("ripeness", edited(|p| p.fruit.ripe_trusses = 2.5)),
             ("seed", edited(|p| p.scene.seed = 7)),
         ] {

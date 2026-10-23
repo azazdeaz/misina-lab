@@ -36,8 +36,8 @@ class Rig:
     from a meter, `upright` -- its first body held still the way the importer
     bolts a shoot to the wood. A ground, if `ground` is given, that many
     meters up. Its segments share the default group, so they collide, but for
-    each pair a joint ties. Two static boxes far apart, for a parked contact
-    row to name."""
+    each pair a joint ties. Two static boxes, for a parked contact row to
+    name."""
 
     def __init__(self, monkeypatch, ground: float | None = None, upright: bool = False):
         builder = ModelBuilder(gravity=(0.0, 0.0, -GRAVITY))

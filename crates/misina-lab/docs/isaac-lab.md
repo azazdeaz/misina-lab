@@ -88,7 +88,12 @@ meets its own plant, the scene and the robot and passes through every other
 plant. Without the grouping the model holds a candidate pair for every two
 segments in the scene. The tuning numbers were measured on metre-long rods
 tapering from a centimetre across; `rods.py` says what each one does and
-what went wrong at other values.
+what went wrong at other values. The same hook first seats every collider
+authored under a segment's prim on the segment's body, `carry_riders`: the
+importer reads one as static, since the prim is no rigid body, and left so
+it would stand where it was authored while the segment moved on. Seated, it
+moves and falls with the segment, takes the plant's group, and passes
+through its own rod, which it was authored to clear by little.
 
 `Shears` cuts a rod anywhere along it while the simulation runs, and the
 piece lands on the stub it was cut from. How, given that Newton allows no
@@ -158,6 +163,16 @@ with launch_simulation(sim_cfg, shots.launcher(args.out)):
     shots.finish(sim, shot, None, camera, args.out)
 ```
 
+## A video of the scene
+
+`misina_lab.isaaclab.film` films the running simulation in the same
+renderer, for a script that samples the camera every so many physics steps,
+so the video plays in simulated time however long the steps take to compute.
+`sensor` makes the camera; `Rig` moves it from shot to shot, easing on a smoothstep, and cuts
+instead when the move is long enough to fly through the scene; `Film` pipes
+the frames to ffmpeg and writes their captions beside the video as SubRip.
+The module's docstring has the loop a script runs.
+
 ## Where it lives
 
 - [`misina_lab/isaaclab/spawn.py`](../../../python/misina-lab/misina_lab/isaaclab/spawn.py): `GeneratedSceneCfg`, `spawn_generated`, `resolve_usd_path`, `to_params`, and the cache key
@@ -165,4 +180,5 @@ with launch_simulation(sim_cfg, shots.launcher(args.out)):
 - [`misina_lab/isaaclab/cutting.py`](../../../python/misina-lab/misina_lab/isaaclab/cutting.py): `Shears.colliders` and `Shears.place` for a collider that moves; the cut itself is [cutting.md](cutting.md)
 - [`misina_lab/isaaclab/colliders.py`](../../../python/misina-lab/misina_lab/isaaclab/colliders.py): `ColliderView`
 - [`misina_lab/isaaclab/shots.py`](../../../python/misina-lab/misina_lab/isaaclab/shots.py): the shot file, `sensor` and `finish`
-- [`src/scene/mod.rs`](../src/scene/mod.rs): `cable`, what the Rust side authors
+- [`misina_lab/isaaclab/film.py`](../../../python/misina-lab/misina_lab/isaaclab/film.py): `sensor`, `Rig` and `Film`
+- [`src/scene/mod.rs`](../src/scene/mod.rs): `cable` and `spawn_rod`, what the Rust side authors

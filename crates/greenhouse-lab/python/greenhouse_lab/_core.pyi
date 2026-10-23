@@ -188,6 +188,11 @@ class StemParams:
     """Share of trusses turned to face the path. The rest face anywhere, into the crop
     as often as not, where a harvester has to skip them.
     """
+    flexible_below: float
+    """Height above the floor, in meters, below which a truss bends: one whose node is
+    lower is exported as a rod a physics engine bends and a robot can cut, carrying
+    its fruit, rather than as a static mesh. 0 bends none.
+    """
 
     def __init__(
         self,
@@ -197,6 +202,7 @@ class StemParams:
         leaves_kept: int = 16,
         extra_stems: float = 0.0,
         turned_to_path: float = 0.8,
+        flexible_below: float = 0.0,
     ) -> None: ...
     def __repr__(self) -> str: ...
 

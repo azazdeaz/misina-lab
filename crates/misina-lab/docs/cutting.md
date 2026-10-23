@@ -101,7 +101,10 @@ flowchart LR
 The rendered organ follows. The tube drawn along a segment is scaled along
 its axis to the capsule's new span, and anything hanging off the shortened
 segment past the cut, a leaf, is hidden, since a prim cannot move to the
-piece that carries on without it. The piece of body i past the cut now
+piece that carries on without it; a collider of its own, seated on the body
+by `rods.carry_riders`, is parked far above it, where it meets nothing. The
+body's own capsule is found by the label the rod importer gives it, so the
+seated shapes never pass for it. The piece of body i past the cut now
 belongs to body i+1, along body i+1's own axis: on a rod bent at the joint
 the piece lands a little out of line, about a centimetre for a full-length
 piece at ten degrees.
@@ -119,10 +122,10 @@ nothing does: the model is finalized, and no collision pipeline and no
 solver entry has taken the list yet. Isaac Lab fires `PHYSICS_READY` in
 that window, and `rods.ContactSlots`, registered there by `tune_rods`,
 replaces the list with a longer one: every row it had, then one spare row
-per rod joint. The spare rows are *parked* on a pair of two static shapes a
-metre clear of each other, the two furthest apart in the scene. The broad
-phase tests every row it is given, static or not, and drops this one on
-their bounding boxes every step, so a parked row costs one box test.
+per rod joint. The spare rows are *parked* on a pair of two static shapes,
+which the broad phase drops before testing their boxes, wherever they are:
+two static shapes never make a contact, so a parked row costs next to
+nothing.
 
 When a cut turns a rod joint off, `Shears` writes the joint's own two
 shapes into the joint's row, and from the next step the broad phase tests
@@ -167,5 +170,5 @@ the edge of the terrain if nothing stops it.
 ## Where it lives
 
 - [`misina_lab/isaaclab/cutting.py`](../../../python/misina-lab/misina_lab/isaaclab/cutting.py): `Shears`, `SPLINTER`; `Shears.cut`, `cut_through` and `crossing`; `_split` for moving the joint, `_release` for the pair and the pull-back
-- [`misina_lab/isaaclab/rods.py`](../../../python/misina-lab/misina_lab/isaaclab/rods.py): `ContactSlots`, `reserve_contact_slots`, `PARKING_CLEARANCE`, and `tune_rods`, which registers the reservation
+- [`misina_lab/isaaclab/rods.py`](../../../python/misina-lab/misina_lab/isaaclab/rods.py): `ContactSlots`, `reserve_contact_slots`, and `tune_rods`, which registers the reservation
 - [`tests/test_isaaclab_cutting.py`](../../../tests/test_isaaclab_cutting.py): a bare Newton rod, no Kit and no coupler, cut and stepped

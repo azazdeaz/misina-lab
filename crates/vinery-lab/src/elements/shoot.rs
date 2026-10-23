@@ -104,7 +104,10 @@ use misina_lab::geometry::mesh::{MeshData, cylinder_mesh};
 use misina_lab::geometry::strand::{Bark, Strand, strand_mesh};
 use misina_lab::params::{Label, Slider};
 use misina_lab::quantize::{Metric, farthest_first};
-use misina_lab::scene::{CABLE, Geometry, Library, Order, Surface, cable, configs_changed, placed};
+use misina_lab::scene::{
+    Geometry, Library, Order, Surface, cable, configs_changed, placed, rebase, segment_frames,
+    segment_of, segment_tubes, spawn_rod,
+};
 
 /// The mesh-library prefix this element registers its stems under.
 pub const PART: &str = "Shoot";
@@ -124,10 +127,10 @@ pub const BUD: &str = "Bud";
 /// the shoot prim itself, because a shoot has leaves hanging off it and
 /// geometry prims carry no children.
 ///
-/// A flexible shoot uses the same name once per rod segment — see
-/// [`segment_tubes`] — so a consumer looking for a shoot's geometry has one
-/// rule whichever way it was drawn.
-pub const STEM: &str = "Stem";
+/// A flexible shoot's tubes take the same name once per rod segment — the
+/// framework's name for a segment's tube, which this is — so a consumer
+/// looking for a shoot's geometry has one rule whichever way it was drawn.
+pub const STEM: &str = misina_lab::scene::STEM;
 
 // ─── Shape constants ────────────────────────────────────────────────
 
@@ -941,90 +944,6 @@ fn cable_stations(axis: &ShootAxis) -> Vec<f64> {
     stations
 }
 
-/// The prim name Newton gives the rigid body it builds for segment `index` of
-/// this shoot's cable.
-///
-/// A **sibling** of the curve rather than a child: the label is the curve's own
-/// prim path with this suffix. Authoring the prim ourselves is the whole of how
-/// a leaf gets attached — the importer adopts a prim already sitting at the
-/// path, keeps its children, and drives its transform from then on.
-///
-/// Get the name wrong and nothing fails loudly: the importer defines its own
-/// prim beside ours, and the leaves stay at the cane's rest shape.
-fn segment_name(index: usize) -> String {
-    format!("{CABLE}_edge_body_{index}")
-}
-
-/// The rest frame of every segment `points` becomes, in the shoot's own frame:
-/// origin at the segment's midpoint, local +Z along it.
-///
-/// That is Newton's frame for the capsule body, so a prim authored here starts
-/// exactly where the solver will go on keeping it.
-fn segment_frames(points: &[[f32; 3]]) -> Vec<Transform> {
-    points
-        .windows(2)
-        .map(|pair| {
-            let (from, to) = (Vec3::from(pair[0]), Vec3::from(pair[1]));
-            Transform {
-                translation: (from + to) * 0.5,
-                rotation: Quat::from_rotation_arc(Vec3::Z, (to - from).normalize()),
-                scale: Vec3::ONE,
-            }
-        })
-        .collect()
-}
-
-/// One tube per segment of `centerline`, each in that segment's own frame —
-/// the geometry a flexible shoot is drawn with, in place of its curve.
-///
-/// Drawn at the widths the curve carries, so a cane and a rigid shoot off the
-/// same representative still read alike. Each tube is centered on the segment
-/// midpoint to match [`segment_frames`], and overruns both of its ends by its
-/// own radius there: the tubes are butt-jointed and turn by up to about 45° at
-/// the bend, where flush ends would leave a wedge of daylight.
-fn segment_tubes(centerline: &Centerline, sides: usize) -> Vec<MeshData> {
-    centerline
-        .points
-        .windows(2)
-        .zip(centerline.widths.windows(2))
-        .map(|(pair, widths)| {
-            let (from, to) = (Vec3::from(pair[0]), Vec3::from(pair[1]));
-            let length = (to - from).length();
-            let (base, top) = (widths[0] / 2.0, widths[1] / 2.0);
-            let mut tube = cylinder_mesh(base, top, length + base + top, sides);
-            for point in &mut tube.points {
-                point[2] -= length / 2.0 + base;
-            }
-            tube
-        })
-        .collect()
-}
-
-/// Which segment of a cable whose points sit at `stations` carries whatever
-/// sits at station `s`.
-///
-/// Segment 0 is the bend and is the one bolted down; no leaf lands there,
-/// because the nodes start above it.
-fn segment_of(stations: &[f32], s: f32) -> usize {
-    stations
-        .iter()
-        .rposition(|station| *station <= s)
-        .unwrap_or(0)
-        .min(stations.len() - 2)
-}
-
-/// `placement` expressed in `frame`, so that a prim under `frame` still lands
-/// where `placement` put it. A frame is a rotation and a translation only,
-/// which is what makes the inverse this short.
-fn rebase(frame: &Transform, placement: &Transform) -> Transform {
-    let turn = frame.rotation.inverse();
-    Transform {
-        translation: turn * (placement.translation - frame.translation),
-        rotation: turn * placement.rotation,
-        scale: placement.scale,
-    }
-}
-
 /// How far the shoot authored at `order` leans out of the trellis, in radians:
 /// zero for one the trellis holds, a draw across [`STRAY_PITCH`] for a stray
 /// one.
@@ -1068,10 +987,14 @@ fn build_shoot(config: &ShootConfig, seed: u64, flexible: bool) -> anyhow::Resul
     let centerline = Centerline::new(&axis);
     let drawn = if config.is_simulated() && flexible {
         Drawn::Tubes(
-            segment_tubes(&centerline, config.sides as usize)
-                .iter()
-                .map(MeshData::to_mesh)
-                .collect(),
+            segment_tubes(
+                &centerline.points,
+                &centerline.widths,
+                config.sides as usize,
+            )
+            .iter()
+            .map(MeshData::to_mesh)
+            .collect(),
         )
     } else {
         Drawn::Stem(strand_mesh(&shoot_strand(&axis, config))?.to_mesh())
@@ -1199,33 +1122,14 @@ pub(crate) fn build(
                 shoot.with_child((Name::new(STEM), stem.clone()));
             }
             Drawn::Tubes(tubes) => {
-                shoot.with_child((
-                    Name::new(CABLE),
-                    cable(centerline.points.clone(), centerline.widths.clone(), *skin),
-                ));
                 frames = segment_frames(&centerline.points);
-                // Every segment up front rather than the ones that turn out to
-                // carry a leaf, so an index into `frames` is an index into
-                // these.
-                shoot.with_children(|shoot| {
-                    segments.extend(frames.iter().zip(tubes).enumerate().map(
-                        |(index, (frame, tube))| {
-                            shoot
-                                .spawn((
-                                    Name::new(segment_name(index)),
-                                    *frame,
-                                    Visibility::default(),
-                                ))
-                                // The tube rides the segment rather than the
-                                // segment prim carrying the mesh itself,
-                                // because the solver drives that prim and a
-                                // prim holding a reference can have no children
-                                // — the leaves are already down here.
-                                .with_child((Name::new(STEM), tube.clone()))
-                                .id()
-                        },
-                    ));
-                });
+                let curve = cable(
+                    centerline.points.clone(),
+                    centerline.widths.clone(),
+                    Vec::new(),
+                    *skin,
+                );
+                segments = spawn_rod(&mut shoot, curve, &frames, tubes);
             }
         }
 
@@ -1347,7 +1251,7 @@ mod tests {
     use crate::elements::util::testing::{self, bounds, named_children, organs};
     use crate::elements::vine;
     use misina_lab::geometry::mesh::MeshData;
-    use misina_lab::scene::{Cable, Prototypes, UsdReference};
+    use misina_lab::scene::{CABLE, Cable, Prototypes, UsdReference, segment_name};
 
     fn params() -> ShootParams {
         ShootParams::default()
@@ -1513,7 +1417,7 @@ mod tests {
     fn a_canes_tubes_cover_the_segments_they_stand_on() {
         for config in both() {
             let cable = centerline(&config, 3);
-            let tubes = segment_tubes(&cable, config.sides as usize);
+            let tubes = segment_tubes(&cable.points, &cable.widths, config.sides as usize);
 
             assert_eq!(
                 tubes.len(),

@@ -20,7 +20,7 @@ Two kinds of change break a project that worked on the release before:
 
 ## [Unreleased]
 
-Scene document format 9.
+Scene document format 10.
 
 ### Added
 
@@ -31,6 +31,32 @@ Scene document format 9.
 - **misina-lab**: `geometry::shapes` gains `cubic`, `serrate`, `simplify`
   and `untangle`, the pieces a lobed, toothed margin is built from, so a
   generator strings its own ring from an organ's veins.
+- **misina-lab**: `misina_lab.isaaclab.film` films a video of the running
+  simulation in Isaac Sim: `Rig` eases a camera from shot to shot and cuts
+  the long moves, and `Film` pipes the frames to ffmpeg and writes their
+  captions as SubRip. Every demo's video is filmed through it.
+- **greenhouse-lab**: Every fruit has a collider: a sphere round its body, a
+  capsule on an elongated one, as `Fruit_nn/Collision`; the mesh moved under
+  the fruit's prim as `Fruit_nn/Skin`. On a bent truss it rides the
+  segment's body.
+- **misina-lab**: `rods.carry_riders` seats a collider authored under a rod
+  segment's prim on that segment's body, which the importer had left static,
+  and lets it through its own rod; `tune_rods` calls it. `Shears` finds a
+  body's rod capsule by its label, so a body may carry other shapes, and
+  parks the colliders of whatever a cut hides.
+- **greenhouse-lab**: Trusses bend. One whose node on its stem is below
+  `StemCfg.flexible_below` is a rod a solver bends and `Shears` cuts, its
+  peduncle and first rachis the rod and everything else riding the segment
+  that carries it: the pedicels, the fruit, and `Bend`. The fruit weigh on
+  the rod, so a truss hangs with its fruit's weight and falls with it once
+  cut. `Cut` sits within a centimetre of the rod's first joint, so a flush
+  cut there drops the whole truss. `GreenhouseCfg.PLANT` groups a plant's
+  rods for collisions, and `GreenhouseCfg.without_rods()` spawns them rigid
+  under a backend that cannot step them. The default, 0, bends none.
+- **misina-lab**: `spawn_rod` authors a rod's curve and a prim per segment
+  carrying its tube, for whatever else rides the rod; `segment_frames`,
+  `segment_tubes`, `segment_of`, `rebase`, `segment_name` and `STEM` are
+  what a generator places riders with. They were vinery-lab's.
 - **misina-lab**: `ColliderView` draws every collider of the running Newton
   model in Kit's viewport, translucent, and follows the ones moved or resized
   while it runs. Kit draws only a PhysX scene's colliders.
@@ -104,11 +130,22 @@ Scene document format 9.
 - **misina-lab**: `Outline::from_svg` is gone, and with it the `usvg`
   dependency: an outline is a ring built in code, which `geometry::outline`
   fills. A generator that traced its shapes in SVG builds the ring itself.
+- **greenhouse-lab**: Trusses are modelled closer to life. The rachis is a
+  chain of internodes that zigzags, kinking away from each pedicel, and
+  hangs nearer vertical toward its tip; the peduncle bends over a longer
+  arc. A pedicel is sized to its fruit, arches up and over and comes down
+  onto the fruit vertically, with the knuckle just under its tip, where the
+  fruit hangs a little off vertical. The sepals are half the fruit's
+  diameter long, lift off the shoulders to spread, and are folded and
+  twisted. Every representative truss draws its own kinks.
+- **misina-lab**: A rod carries loads: `Cable.loads` is the mass hanging from
+  each point, which the builder adds to the rod's own, and `cable()` takes
+  it after the widths, empty for a rod that carries nothing.
 - **misina-lab**: A rod tapers as its organ is drawn. The builder authors a
   cable's `widths` again as its `physics:thicknesses`, so each segment's
   capsule, mass and stiffness follow the taper, and the scene document's
   `Cable.thickness`, the one diameter a rod used to be simulated at, is
-  gone: the document is format 9. At its material's own stiffness a tapered
+  gone. At its material's own stiffness a tapered
   1.4 m rod sags about 9 cm and settles in about a second, as the uniform
   one did stiffened threefold, so `tune_rods`, vinery-lab's `tune_shoots`
   and `rods` lose `stiffen` and `ROD_STIFFEN`.
@@ -158,7 +195,7 @@ Scene document format 9.
   rod joint as the model is built, and a cut writes the joint's pair into
   it, with each capsule pulled back a radius at the cut face so the two
   touch there instead of starting a thickness deep in each other. A scene
-  with rods needs two static colliders a metre apart to park the rows on.
+  with rods needs two static colliders, anywhere, to park the rows on.
 - **misina-lab**: `configs_changed` also fires when a layer's configs are
   removed, so an edit that leaves a layer nothing to build clears its parts
   from the library. Such an edit used to leave the layer's old parts in the

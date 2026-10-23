@@ -23,6 +23,7 @@ repository. `tests/test_docs.py` fails on a link to a picture no shot renders.
 | `docs/shots/isaaclab_demo/alley.json` | `examples/isaaclab_demo/shot.py` | the top of `README.md` and of `crates/vinery-lab/README.md` |
 | `docs/shots/greenhouse-lab/editor.json` | the greenhouse's viewer | the top of `crates/greenhouse-lab/README.md` |
 | `docs/shots/greenhouse_demo/rows.json` | `examples/greenhouse_demo/shot.py` | the top of `crates/greenhouse-lab/README.md`, and its section of `README.md` |
+| `docs/shots/greenhouse_demo/harvest.json` | `examples/greenhouse_demo/shot.py` | the top of `examples/greenhouse_demo/README.md` |
 
 ## Render them
 
@@ -67,7 +68,8 @@ and `start`, with the `camera`, the parameters to `set` and a `note`.
 `set`, parameters changed from the example's own; and `camera`. An example
 may add fields of its own, which its `shot.py` names: the quadruped demo's
 `waypoint`, where on its route the robot starts, and `warmup`, the simulated
-seconds it walks before the picture.
+seconds it walks before the picture; the greenhouse's `harvest`, the paths
+the harvester works, and `warmup`, the seconds it works first.
 
 **The camera** is the same in both, in the scene's coordinates, Z up and in
 meters: `focus`, x and y and then a height above the ground there; `yaw`, 0
@@ -102,8 +104,8 @@ will be, the viewport at the shot's size and camera. Navigate the viewport and
 press `P`: the terminal prints the camera. The log's
 `after the warmup the robot is at (x, y)` says where to aim. To move the robot
 instead, change `waypoint`, a meter apart down one alley and back up the next,
-or `warmup`. The greenhouse's opens the same way from `examples/greenhouse_demo`,
-with no robot in it.
+or `warmup`. The greenhouse's opens the same way from `examples/greenhouse_demo`;
+to move the harvester, change `warmup`.
 
 Then render the shot and look at it.
 

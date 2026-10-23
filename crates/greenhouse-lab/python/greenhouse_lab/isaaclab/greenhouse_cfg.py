@@ -9,7 +9,7 @@ hand-written, over the core's `GeneratedSceneCfg`.
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import ClassVar, Self
 
 from isaaclab.utils.configclass import configclass
 
@@ -154,6 +154,11 @@ class StemCfg:
     """Share of trusses turned to face the path. The rest face anywhere, into the crop
     as often as not, where a harvester has to skip them.
     """
+    flexible_below: float = 0.0
+    """Height above the floor, in meters, below which a truss bends: one whose node is
+    lower is exported as a rod a physics engine bends and a robot can cut, carrying
+    its fruit, rather than as a static mesh. 0 bends none.
+    """
 
 
 @configclass
@@ -297,9 +302,19 @@ class GreenhouseCfg(GeneratedSceneCfg):
 
         # in a scene cfg: Newton steps only the assets a scene declares
         greenhouse = AssetBaseCfg(prim_path="/World/Greenhouse", spawn=GREENHOUSE_CFG)
+
+    A truss whose node is below `StemCfg.flexible_below` is authored as a
+    deformable curve carrying its fruit, and bends under the coupled solver
+    `rods.make_physics_cfg_newton` builds for a scene that has any; `Shears`
+    cuts it. Under a backend that cannot step one it is spawned as a static
+    mesh instead. Each bent truss is about ten rigid bodies, so keep the height
+    to what a robot reaches, and the scene to the rows it works.
     """
 
     PARAMS: ClassVar[type] = greenhouse_lab.GreenhouseParams
+    PLANT: ClassVar[str] = "Plant"
+    """The plant prim `crates/greenhouse-lab/src/elements/stem.rs` names
+    `Plant_NNN`: a plant's bent trusses collide as one group."""
 
     # >>> generated: aggregate
     scene: SceneCfg = SceneCfg()
@@ -328,3 +343,19 @@ class GreenhouseCfg(GeneratedSceneCfg):
     to the spawned prim rather than baked into the USD, and takes no part in the key.
     """
     # <<< generated: aggregate
+
+    def without_rods(self) -> Self | None:
+        """The greenhouse with every truss rigid, or `None` when none bends as
+        it stands: `StemCfg.flexible_below` is 0.
+
+        A height promises no truss below it -- a young crop's lowest trusses
+        hang higher -- and the coupled solver refuses an entry that owns no
+        body, at reset, with its own error. Keep the height at 0 for such a
+        scene.
+        """
+        # ponytail: read off the cfg, as the scene itself is only generated
+        # inside the app, after the physics config was built.
+        stem = self.stem
+        if stem.flexible_below <= 0.0:
+            return None
+        return self.replace(stem=stem.replace(flexible_below=0.0))

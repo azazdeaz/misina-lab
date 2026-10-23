@@ -51,9 +51,9 @@ and it survives into the body labels below, so the two have to be changed
 together."""
 
 _ROD_BODY_SUFFIX = r"_edge_body_\d+"
-"""What Newton's rod importer appends to the curve's path for each capsule it
-builds. Cable bodies have no prim of their own, so this is the only way to name
-them."""
+"""What Newton's rod importer appends to the curve's path to label each body it
+builds, and what `spawn_rod` names the prim it authors for that body: the one
+Isaac Lab moves with the body, and everything under it with it."""
 
 ROD_SUBSTEPS = 1
 """Substeps the rods take inside each physics substep.
@@ -140,11 +140,6 @@ time for them."""
 _tuning: CallbackHandle | None = None
 """The registration `tune_rods` made, while it stands."""
 
-PARKING_CLEARANCE = 1.0
-"""How far apart, in meters, the two static shapes a parked row names have to
-be beyond their bounding spheres: wider than any contact gap, so the broad
-phase drops the row on their boxes every step."""
-
 _slots: ContactSlots | None = None
 """The rows `reserve_contact_slots` added to the model built last."""
 
@@ -159,8 +154,9 @@ class ContactSlots:
     the two faces of the cut, with no row between them, and the piece would
     fall through the stub. So the list gets one more row per rod joint while
     it can still grow -- the model finalized, nothing yet holding a pointer
-    into it -- parked on a pair of static shapes too far apart to ever meet,
-    and `Shears` writes the joint's own pair into the row when the joint goes.
+    into it -- parked on a pair of static shapes, which the broad phase never
+    tests, and `Shears` writes the joint's own pair into the row when the
+    joint goes.
 
     A coupled solver's entry clones the list and compacts it to the shapes it
     sees, keeping the order, so the rows are the last `count` of every copy.
@@ -186,31 +182,27 @@ class ContactSlots:
 
 
 def _parking(model) -> np.ndarray:
-    """A pair of static shapes `PARKING_CLEARANCE` clear of each other's
-    bounding spheres, in the list's (low, high) order: the two furthest apart
-    along the axis the static scene is widest on, the ground left out."""
+    """Two static shapes that collide, in the list's (low, high) order, the
+    ground left out.
+
+    Every broad phase drops a pair of two static shapes before testing it,
+    wherever they are, so a row parked on one is never a contact. They have
+    to collide: a coupled solver's entry compacts its copy of the list to
+    the shapes it collides, and a row naming another would drop out of it.
+    """
     from newton import GeoType, ShapeFlags
 
-    kind = model.shape_type.numpy()
-    radius = model.shape_collision_radius.numpy()
     static = (
         (model.shape_body.numpy() < 0)
         & (model.shape_flags.numpy() & int(ShapeFlags.COLLIDE_SHAPES) != 0)
-        & ~np.isin(kind, [int(GeoType.PLANE), int(GeoType.HFIELD)])
+        & ~np.isin(model.shape_type.numpy(), [int(GeoType.PLANE), int(GeoType.HFIELD)])
     )
-    shapes = np.flatnonzero(static)
-    position = model.shape_transform.numpy()[shapes, :3]
-    if len(shapes) >= 2:
-        axis = int(np.argmax(position.max(axis=0) - position.min(axis=0)))
-        low, high = np.argmin(position[:, axis]), np.argmax(position[:, axis])
-        apart = position[high, axis] - position[low, axis]
-        a, b = int(shapes[low]), int(shapes[high])
-        if apart > radius[a] + radius[b] + PARKING_CLEARANCE:
-            return np.array(sorted((a, b)), dtype=np.int32)
-    raise ValueError(
-        "no two static shapes far enough apart to park a contact row on: a scene with rods"
-        f" needs two, {PARKING_CLEARANCE} m clear of each other"
-    )
+    shapes = np.flatnonzero(static)[:2]
+    if len(shapes) < 2:
+        raise ValueError(
+            "no two static shapes to park a contact row on: a scene with rods needs two"
+        )
+    return shapes.astype(np.int32)
 
 
 def reserve_contact_slots(model) -> ContactSlots:
@@ -258,8 +250,10 @@ def tune_rods(
     importer has filled it, before it is finalized -- and Isaac Lab dispatches
     `MODEL_INIT` in exactly that window.
 
-    Also registers `reserve_contact_slots` on `PHYSICS_READY`, so a cut can
-    make the two faces of a cut meet; see `ContactSlots`.
+    First seats every collider authored under a segment's prim on the
+    segment's body, with `carry_riders`, so it takes the plant's group with
+    the rod. Also registers `reserve_contact_slots` on `PHYSICS_READY`, so a
+    cut can make the two faces of a cut meet; see `ContactSlots`.
 
     Registers once. While the registration stands -- the manager drops it when
     the simulation stops -- a further call returns it unchanged, rather than
@@ -303,6 +297,8 @@ def tune_rods(
             for slot in (dof + 2, dof + 3):
                 builder.joint_target_kd[slot] = damping * builder.joint_target_ke[slot]
 
+        carry_riders(builder)
+
         # Groups: a plant's for its rods and wood, allotted as they turn up;
         # `SCENE_GROUP` for what stands under no plant; one of its own for
         # every other body. Group 0 is a site, which collides with nothing,
@@ -335,6 +331,58 @@ def tune_rods(
         PhysicsEvent.PHYSICS_READY,
     )
     return _tuning
+
+
+def carry_riders(builder) -> int:
+    """Seat every collider authored under a rod segment's prim on the body that
+    drives the prim, in that body's frame, and let it pass through the rest of
+    its own rod. Returns how many were seated.
+
+    The importer reads a collision prim as a static shape unless a rigid-body
+    prim stands over it, and a segment's prim is not one: the rod importer
+    builds the body and labels it with the prim's path, which is all that
+    ties the two. So a collider under one -- round something hanging off the
+    rod -- would stand where it was authored while the prim moved on with the
+    body. Seated on the body it moves with the segment and falls with a cut
+    piece.
+
+    Its own rod lets it through. It was authored to clear the rod's rest
+    shape by little, and a pair resting that close to a neighbouring segment
+    would shove the rod about; what it meets is the rest of the scene.
+
+    Call it on a builder the importer has filled and nothing has finalized.
+    `tune_rods` does, before it sets the collision groups, so a seated shape
+    takes its plant's group with the body it sits on.
+    """
+    import warp as wp
+    from newton import ShapeFlags
+
+    def collides(shape: int) -> bool:
+        return bool(builder.shape_flags[shape] & ShapeFlags.COLLIDE_SHAPES)
+
+    body_at = {label: body for body, label in enumerate(builder.body_label)}
+    rods: dict[str, list[int]] = {}
+    for label, body in body_at.items():
+        if found := re.fullmatch(rf"(.*){_ROD_BODY_SUFFIX}", label):
+            rods.setdefault(found[1], []).append(body)
+
+    seated = 0
+    # The importer's visual shapes stay where they are: nothing steps them.
+    for shape in [each for each in builder.body_shapes[-1] if collides(each)]:
+        found = re.match(rf"((.*){_ROD_BODY_SUFFIX})/", builder.shape_label[shape])
+        if found is None or (body := body_at.get(found[1])) is None:
+            continue
+        for other in [each for rod in rods[found[2]] for each in builder.body_shapes[rod]]:
+            if collides(other):
+                builder.add_shape_collision_filter_pair(shape, other)
+        # A static shape's transform is in the world; a body's is in its own.
+        world = builder.shape_transform[shape]
+        builder.shape_transform[shape] = wp.transform_inverse(builder.body_q[body]) * world
+        builder.shape_body[shape] = body
+        builder.body_shapes[-1].remove(shape)
+        builder.body_shapes[body].append(shape)
+        seated += 1
+    return seated
 
 
 def steps_rods(physics: PhysicsCfg | None) -> bool:

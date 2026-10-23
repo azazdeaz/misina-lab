@@ -12,13 +12,14 @@ to compute, so the video plays in simulated time.
 import argparse
 import dataclasses
 import pathlib
-import subprocess
 
 import numpy as np
 
 import isaaclab.sim as sim_utils
 from isaaclab.app import launch_simulation
 
+from misina_lab.isaaclab.film import CAMERA, Film, sensor
+from misina_lab.isaaclab.shots import place
 from vinery_lab.isaaclab import ShootCfg
 
 import main as demo
@@ -60,8 +61,6 @@ VINEYARD_CFG = dataclasses.replace(demo.VINEYARD_CFG, shoot=ShootCfg(stray=0.35)
 """The demo's vineyard with a third of its shoots strayed out of the canopy,
 so the frame is seen pushing through them all the way down the row."""
 
-CAMERA = "/World/VideoCamera"
-
 
 def main():
     parser = argparse.ArgumentParser(description="Records the straddler demo's video, headless.")
@@ -73,26 +72,10 @@ def main():
     # its renderer needs Kit's, which a camera made after launch cannot ask for.
     launcher = {"headless": True, "enable_cameras": True, "require_kit": True, "visualizer": []}
     with launch_simulation(sim_cfg, launcher):
-        # Imported once Kit is up: they bring `pxr`, and Kit's copy has to win.
-        from isaaclab.sensors import Camera, CameraCfg
-        from isaaclab_physx.renderers import IsaacRtxRendererCfg
-        from pxr import Gf, UsdGeom
-
         sim = sim_utils.SimulationContext(sim_cfg)
         machine = Straddler.for_vineyard(vineyard)
         robot = demo.design_scene(vineyard, machine)
-        camera = Camera(
-            CameraCfg(
-                prim_path=CAMERA,
-                update_period=0.0,
-                width=SIZE[0],
-                height=SIZE[1],
-                data_types=["rgb"],
-                spawn=sim_utils.PinholeCameraCfg(focal_length=LENS, clipping_range=(0.05, 200.0)),
-                # The robot is in env_0's render partition, which cameras outside env_0 cannot see.
-                renderer_cfg=IsaacRtxRendererCfg(enable_scene_partitioning=False),
-            )
-        )
+        camera = sensor(SIZE, LENS)
         driver, route = demo.start(sim, robot, machine, vineyard, ROW)
         steps = demo.run_simulator(sim, robot, driver, render=False)
         for _ in range(round(SETTLE / SIM_DT)):
@@ -104,41 +87,21 @@ def main():
         # `base_link`'s origin is the ground under the wheels.
         at = robot.data.root_pos_w.torch[0].cpu().numpy().astype(float)
         eye, target = at + EYE[0] * ahead + [0.0, 0.0, EYE[1]], at + LOOK * ahead
-        # Placed on the prim: under Newton, `Camera.set_world_poses` moves a
-        # Newton site the renderer never sees. USD's look-at is the view
-        # matrix, world to camera, so the prim takes its inverse.
-        view = Gf.Matrix4d().SetLookAt(Gf.Vec3d(*eye), Gf.Vec3d(*target), Gf.Vec3d(0, 0, 1))
-        xform = UsdGeom.Xformable(sim_utils.get_current_stage().GetPrimAtPath(CAMERA))
-        xform.ClearXformOpOrder()
-        xform.AddTransformOp().Set(view.GetInverse())
+        place(sim_utils.get_current_stage().GetPrimAtPath(CAMERA), eye, target)
 
-        w, h = SIZE
-        ffmpeg = subprocess.Popen(
-            # Near-lossless and quick to write: `record.sh` encodes the video
-            # to upload from this.
-            [
-                *f"ffmpeg -y -loglevel error -f rawvideo -pix_fmt rgb24 -s {w}x{h} -r {FPS}".split(),
-                *"-i - -c:v libx264 -preset fast -crf 10 -pix_fmt yuv420p".split(),
-                str(out),
-            ],
-            stdin=subprocess.PIPE,
-        )
-        every, frames = round(1 / (FPS * SIM_DT)), 0
+        film, every = Film(out, SIZE, FPS), round(1 / (FPS * SIM_DT))
         try:
             for step, _ in enumerate(steps):
                 if step % every:
                     continue
                 sim.render()
                 camera.update(SIM_DT, force_recompute=True)
-                rgb = camera.data.output["rgb"].torch[0, ..., :3].cpu().numpy()
-                ffmpeg.stdin.write(rgb.tobytes())
-                frames += 1
-                if frames >= LENGTH * FPS:
+                film.add(camera.data.output["rgb"].torch[0, ..., :3].cpu().numpy())
+                if film.frames >= LENGTH * FPS:
                     break
         finally:
-            ffmpeg.stdin.close()
-            ffmpeg.wait()
-        print(f"[INFO]: {frames} frames, {frames / FPS:.1f} s, written to {out}")
+            film.close()
+        print(f"[INFO]: {film.frames} frames, {film.frames / FPS:.1f} s, written to {out}")
 
 
 if __name__ == "__main__":

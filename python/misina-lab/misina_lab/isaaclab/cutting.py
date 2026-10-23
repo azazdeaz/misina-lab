@@ -52,11 +52,16 @@ A cut closer than this to a joint is made at the joint instead. A body
 shortened to nothing has no mass left, and the solver divides by it.
 """
 
-STEM = "Stem"
-"""The prim each rod segment's tube is drawn as, below the segment's own.
+PARKED = np.array([0.0, 0.0, 100.0, 0.0, 0.0, 0.0, 1.0])
+"""Where a collider of something a cut hid is moved to, in its body's frame:
+far enough up that it meets nothing, and above rather than below, since a
+plane's contact with a shape under it only deepens."""
 
-The generator picks it, and `Shears` takes another name for a generator that
-drew its tubes differently."""
+STEM = "Stem"
+"""The prim each rod segment's tube is drawn as, below the segment's own:
+`STEM` in `crates/misina-lab/src/scene/mod.rs`, where `spawn_rod` draws every
+tube under it. `Shears` takes another name for a scene whose tubes were drawn
+some other way."""
 
 
 class Shears:
@@ -97,11 +102,24 @@ class Shears:
         self.bodies = np.array(sorted(self._root_joint.keys() | self._tip_joint.keys()), dtype=int)
         """Every rod body, by model index. The arrays below are in this order."""
         self._index = {int(body): i for i, body in enumerate(self.bodies)}
-        shape_body = model.shape_body.numpy()
-        shapes = np.flatnonzero(np.isin(shape_body, self.bodies))
-        # One capsule per body, which the rod importer builds on the body's own
-        # z axis. Its span along that axis is what a cut moves.
-        self._shape = shapes[np.argsort(shape_body[shapes])]
+        self.labels = list(model.body_label)
+        """Every body's label, by model index. A rod body's is the prim path
+        of its segment -- see `physics` -- which is how a prim under one is
+        traced back to the body that carries it."""
+        self._shape_labels = list(model.shape_label)
+
+        # The capsule the rod importer builds on each body's own z axis,
+        # labelled after the body. Its span along that axis is what a cut
+        # moves. A body may carry other shapes too, seated by
+        # `rods.carry_riders`.
+        capsule = {label: shape for shape, label in enumerate(self._shape_labels)}
+        self._shape = np.array(
+            [
+                capsule[self.labels[body].replace("_edge_body_", "_edge_capsule_")]
+                for body in self.bodies
+            ],
+            dtype=int,
+        )
         placed = model.shape_transform.numpy()[self._shape]
         if not np.allclose(placed[:, [0, 1, 3, 4, 5]], 0.0):
             raise ValueError("a rod capsule is off its body's z axis; a cut would move it wrong")
@@ -115,11 +133,6 @@ class Shears:
         # How far each capsule's collider stops short of its span at the end
         # nearer the wood and at the far end: a radius at a cut face.
         self._pull = np.zeros((len(self.bodies), 2))
-
-        self.labels = list(model.body_label)
-        """Every body's label, by model index. A rod body's is the prim path
-        of its segment -- see `physics` -- which is how a prim under one is
-        traced back to the body that carries it."""
 
         # Every copy of the shape arrays a solver steps from: the model's, and
         # the coupled solver's entries' own. See the module docstring.
@@ -277,6 +290,12 @@ class Shears:
                 origin = UsdGeom.Xformable(child).GetLocalTransformation().ExtractTranslation()
                 if origin[2] > end:
                     UsdGeom.Imageable(child).MakeInvisible()
+                    # Its colliders are seated on this body and would stay
+                    # past the cut: parked up where nothing is.
+                    under = child.GetPath().pathString + "/"
+                    for shape, label in enumerate(self._shape_labels):
+                        if label.startswith(under):
+                            self.place(shape, PARKED)
 
         from newton import ModelFlags
 

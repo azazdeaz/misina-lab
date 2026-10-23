@@ -44,6 +44,8 @@
 //! Except where it does not: a [`cable`] is a flexible organ, which a solver
 //! that understands one turns into bodies of its own. It replaces the mesh
 //! rather than standing in for it, so it is geometry and collider at once.
+//! What the organ is drawn with, and whatever hangs off it, rides a prim per
+//! segment, which the solver drives; see [`spawn_rod`].
 
 pub mod doc;
 pub mod export;
@@ -56,6 +58,7 @@ use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 
 use crate::Generator;
+use crate::geometry::mesh::{MeshData, cylinder_mesh};
 
 /// The mesh library, the scene root named after `G` in `G`'s namespace, and
 /// [`mark_rebuilt_parents`].
@@ -245,20 +248,160 @@ pub struct Cable(pub doc::Cable);
 /// `skin` is the [`Surface`] of the mesh this curve stands in for, so a
 /// flexible organ and a rigid one of the same kind draw alike.
 ///
+/// `loads` is the mass hanging from each point, in kilograms, or empty for an
+/// organ that carries nothing; see [`doc::Cable::loads`].
+///
 /// No transform of its own — the points are already where the organ put them,
 /// and the first segment between them is what gets held.
-pub fn cable(points: Vec<[f32; 3]>, widths: Vec<f32>, skin: Surface) -> impl Bundle {
+pub fn cable(
+    points: Vec<[f32; 3]>,
+    widths: Vec<f32>,
+    loads: Vec<f32>,
+    skin: Surface,
+) -> impl Bundle {
     assert_eq!(points.len(), widths.len(), "one width per point");
+    assert!(
+        loads.is_empty() || loads.len() == points.len(),
+        "one load per point, or none"
+    );
     (
         UsdType("BasisCurves"),
         Cable(doc::Cable {
             points,
             widths,
+            loads,
             display_color: skin.color,
             roughness: skin.roughness,
             reflectance: skin.reflectance,
         }),
     )
+}
+
+/// The prim each segment's tube takes, under the segment's own: one name for
+/// every element, as [`CABLE`] is. `Shears` in `misina_lab/isaaclab/cutting.py`
+/// finds a tube by it, to redraw it when a cut shortens its segment.
+pub const STEM: &str = "Stem";
+
+/// The prim name Newton gives the rigid body it builds for segment `index` of
+/// a cable.
+///
+/// A **sibling** of the curve rather than a child: the label is the curve's own
+/// prim path with this suffix. Authoring the prim ourselves is the whole of how
+/// anything rides a rod — the importer adopts a prim already sitting at the
+/// path, keeps its children, and drives its transform from then on.
+///
+/// Get the name wrong and nothing fails loudly: the importer defines its own
+/// prim beside ours, and whatever hangs on ours stays at the rest shape.
+pub fn segment_name(index: usize) -> String {
+    format!("{CABLE}_edge_body_{index}")
+}
+
+/// The rest frame of every segment `points` becomes, in the organ's own frame:
+/// origin at the segment's midpoint, local +Z along it.
+///
+/// That is Newton's frame for the capsule body, so a prim authored here starts
+/// exactly where the solver will go on keeping it.
+pub fn segment_frames(points: &[[f32; 3]]) -> Vec<Transform> {
+    points
+        .windows(2)
+        .map(|pair| {
+            let (from, to) = (Vec3::from(pair[0]), Vec3::from(pair[1]));
+            Transform {
+                translation: (from + to) * 0.5,
+                rotation: Quat::from_rotation_arc(Vec3::Z, (to - from).normalize()),
+                scale: Vec3::ONE,
+            }
+        })
+        .collect()
+}
+
+/// One tube per segment of a cable through `points`, `widths` across at them,
+/// each in that segment's own frame — what a flexible organ is drawn with, in
+/// place of its curve.
+///
+/// Each tube is centered on the segment midpoint to match [`segment_frames`],
+/// and overruns both of its ends by its own radius there: the tubes are
+/// butt-jointed and turn by up to about 45° at a joint, where flush ends would
+/// leave a wedge of daylight.
+pub fn segment_tubes(points: &[[f32; 3]], widths: &[f32], sides: usize) -> Vec<MeshData> {
+    points
+        .windows(2)
+        .zip(widths.windows(2))
+        .map(|(pair, widths)| {
+            let (from, to) = (Vec3::from(pair[0]), Vec3::from(pair[1]));
+            let length = (to - from).length();
+            let (base, top) = (widths[0] / 2.0, widths[1] / 2.0);
+            let mut tube = cylinder_mesh(base, top, length + base + top, sides);
+            for point in &mut tube.points {
+                point[2] -= length / 2.0 + base;
+            }
+            tube
+        })
+        .collect()
+}
+
+/// Which segment of a cable whose points sit at `stations` carries whatever
+/// sits at station `s`: the one it falls in, the first before the cable starts
+/// and the last past its end.
+///
+/// Segment 0 is the held one, so what lands there rides the wood.
+pub fn segment_of(stations: &[f32], s: f32) -> usize {
+    stations
+        .iter()
+        .rposition(|station| *station <= s)
+        .unwrap_or(0)
+        .min(stations.len() - 2)
+}
+
+/// `placement` expressed in `frame`, so that a prim under `frame` still lands
+/// where `placement` put it. A frame is a rotation and a translation only,
+/// which is what makes the inverse this short.
+pub fn rebase(frame: &Transform, placement: &Transform) -> Transform {
+    let turn = frame.rotation.inverse();
+    Transform {
+        translation: turn * (placement.translation - frame.translation),
+        rotation: turn * placement.rotation,
+        scale: placement.scale,
+    }
+}
+
+/// A rod under `organ`: its `cable`, and a prim per segment at that segment's
+/// rest frame in `frames` (see [`segment_frames`]), each holding its tube from
+/// `tubes` as [`STEM`]. Returns the segment prims, one per frame, for whatever
+/// else rides them; place a rider with [`rebase`].
+///
+/// Every segment gets its prim, carrying something or not, so an index into
+/// `frames` is an index into what comes back. The tube rides its segment
+/// rather than the segment prim carrying the mesh itself, because the solver
+/// drives that prim and a prim holding a reference can have no children.
+pub fn spawn_rod(
+    organ: &mut EntityCommands,
+    cable: impl Bundle,
+    frames: &[Transform],
+    tubes: &[Geometry],
+) -> Vec<Entity> {
+    assert_eq!(frames.len(), tubes.len(), "one tube per segment");
+    organ.with_child((Name::new(CABLE), cable));
+    let mut segments = Vec::with_capacity(frames.len());
+    organ.with_children(|organ| {
+        segments.extend(
+            frames
+                .iter()
+                .zip(tubes)
+                .enumerate()
+                .map(|(index, (frame, tube))| {
+                    organ
+                        .spawn((
+                            Name::new(segment_name(index)),
+                            *frame,
+                            Visibility::default(),
+                        ))
+                        .with_child((Name::new(STEM), tube.clone()))
+                        .id()
+                }),
+        );
+    });
+    segments
 }
 
 /// One entry of the mesh library: the geometry built for a single
@@ -667,5 +810,30 @@ mod tests {
         }
         let names: Vec<&str> = prototypes.iter().map(|(n, _)| n.as_str()).collect();
         assert_eq!(names, ["Plant_0", "Plant_1", "Plant_2", "Plant_3"]);
+    }
+
+    /// A segment's frame sits at its midpoint with +Z along it, a station maps
+    /// to the segment it falls in, and a rider rebased into its segment's
+    /// frame lands where it was placed.
+    #[test]
+    fn a_rider_rebased_onto_its_segment_stays_where_it_was_placed() {
+        let points = [[0.0; 3], [0.0, 0.0, 0.1], [0.1, 0.0, 0.2], [0.2, 0.0, 0.2]];
+        let frames = segment_frames(&points);
+        assert_eq!(frames.len(), 3);
+        for (frame, pair) in frames.iter().zip(points.windows(2)) {
+            let (from, to) = (Vec3::from(pair[0]), Vec3::from(pair[1]));
+            assert!(frame.translation.distance((from + to) / 2.0) < 1e-6);
+            assert!((frame.rotation * Vec3::Z).distance((to - from).normalize()) < 1e-6);
+        }
+
+        let stations = [0.0, 0.1, 0.24, 0.34];
+        let segments = [-0.1, 0.05, 0.1, 0.3, 0.34, 0.5].map(|s| segment_of(&stations, s));
+        assert_eq!(segments, [0, 0, 1, 2, 2, 2]);
+
+        let placement =
+            Transform::from_xyz(0.12, 0.03, 0.21).with_rotation(Quat::from_rotation_x(0.4));
+        let hung = frames[2] * rebase(&frames[2], &placement);
+        assert!(hung.translation.distance(placement.translation) < 1e-6);
+        assert!((hung.rotation * Vec3::Y).distance(placement.rotation * Vec3::Y) < 1e-6);
     }
 }

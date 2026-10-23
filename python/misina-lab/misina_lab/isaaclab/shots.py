@@ -44,6 +44,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     from isaaclab.sensors import Camera
+    from pxr import Usd
 
     from ..usd import Ground
     from .spawn import GeneratedSceneCfg
@@ -131,6 +132,19 @@ def pose(eye: np.ndarray, target: np.ndarray, fov: float, ground: Ground | None)
     )
 
 
+def place(prim: Usd.Prim, eye: np.ndarray, target: np.ndarray) -> None:
+    """Stands the camera `prim` at `eye`, looking at `target`, z up."""
+    from pxr import Gf, UsdGeom
+
+    # On the prim: under Newton, `Camera.set_world_poses` moves a Newton site
+    # the renderer never sees. USD's look-at is the view matrix, world to
+    # camera, so the prim takes its inverse.
+    view = Gf.Matrix4d().SetLookAt(Gf.Vec3d(*eye), Gf.Vec3d(*target), Gf.Vec3d(0, 0, 1))
+    xform = UsdGeom.Xformable(prim)
+    xform.ClearXformOpOrder()
+    xform.AddTransformOp().Set(view.GetInverse())
+
+
 def lens(fov: float, size: list[int], aperture: float = APERTURE) -> float:
     """The focal length that fits `fov` degrees into the height of a picture
     `size` wide and high: a camera's vertical aperture follows the picture's
@@ -177,16 +191,7 @@ def finish(
     if camera is None:
         _frame(sim, shot, ground)
         return
-    from pxr import Gf, UsdGeom
-
-    # Placed on the prim: under Newton, `Camera.set_world_poses` moves a
-    # Newton site the renderer never sees. USD's look-at is the view matrix,
-    # world to camera, so the prim takes its inverse.
-    eye, target = aim(shot["camera"], ground)
-    view = Gf.Matrix4d().SetLookAt(Gf.Vec3d(*eye), Gf.Vec3d(*target), Gf.Vec3d(0, 0, 1))
-    xform = UsdGeom.Xformable(sim_utils.get_current_stage().GetPrimAtPath(CAMERA))
-    xform.ClearXformOpOrder()
-    xform.AddTransformOp().Set(view.GetInverse())
+    place(sim_utils.get_current_stage().GetPrimAtPath(CAMERA), *aim(shot["camera"], ground))
     _take(sim, camera, out)
     print(f"[INFO]: saved {out}", flush=True)
 
