@@ -17,7 +17,6 @@ to compute, so the video plays in simulated time.
 import argparse
 import dataclasses
 import pathlib
-import subprocess
 
 import numpy as np
 
@@ -25,6 +24,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.app import launch_simulation
 
 import harvest as demo
+from misina_lab.isaaclab.film import Film, Rig, sensor
 
 SIZE = (1920, 1080)
 """The frames, in pixels. `record.sh` scales them down to the video's size."""
@@ -119,93 +119,6 @@ before it cuts to the next rather than easing there. It cuts from one take
 to the next too: the arm moves on to the next truss past where the last
 take's camera stands."""
 
-CAMERA = "/World/VideoCamera"
-
-
-class Rig:
-    """The camera, easing from one shot to the next: eye, aim, focal length
-    and aperture in one array, on a smoothstep over `EASE` seconds."""
-
-    def __init__(self, stage):
-        from pxr import UsdGeom
-
-        self.prim = stage.GetPrimAtPath(CAMERA)
-        self.camera = UsdGeom.Camera(self.prim)
-        self.pose = self.start = self.goal = None
-        self.eased = 1.0
-
-    def aim(self, goal: np.ndarray, cut: bool = False) -> None:
-        """Move towards `goal` by a frame, starting a new ease if it is a new
-        goal -- or cutting to it, if it is `CUT` away or `cut` says so -- and
-        place the camera there."""
-        from pxr import Gf, UsdGeom
-
-        if cut or self.goal is None or np.linalg.norm(goal[:3] - self.goal[:3]) > CUT:
-            self.pose = self.start = self.goal = goal
-        elif not np.allclose(goal, self.goal):
-            self.start, self.goal, self.eased = self.pose, goal, 0.0
-        self.eased = min(self.eased + 1 / (EASE * FPS), 1.0)
-        s = self.eased * self.eased * (3 - 2 * self.eased)
-        self.pose = self.start + s * (self.goal - self.start)
-        eye, target, (lens, f_stop) = self.pose[:3], self.pose[3:6], self.pose[6:]
-        # Placed on the prim: under Newton, `Camera.set_world_poses` moves a
-        # Newton site the renderer never sees. USD's look-at is the view
-        # matrix, world to camera, so the prim takes its inverse.
-        view = Gf.Matrix4d().SetLookAt(Gf.Vec3d(*eye), Gf.Vec3d(*target), Gf.Vec3d(0, 0, 1))
-        xform = UsdGeom.Xformable(self.prim)
-        xform.ClearXformOpOrder()
-        xform.AddTransformOp().Set(view.GetInverse())
-        self.camera.GetFocalLengthAttr().Set(float(lens))
-        self.camera.GetFStopAttr().Set(float(f_stop))
-        self.camera.GetFocusDistanceAttr().Set(float(np.linalg.norm(target - eye)))
-
-
-class Film:
-    """Frames piped to ffmpeg as they come, and captions timed against
-    them, written out as SubRip when the film is done."""
-
-    def __init__(self, path: pathlib.Path):
-        self.path = path
-        self.frames = 0
-        self.captions: list[tuple[int, int, str]] = []
-        w, h = SIZE
-        self.ffmpeg = subprocess.Popen(
-            # Near-lossless and quick to write: `record.sh` encodes the video
-            # to upload from this.
-            [
-                *f"ffmpeg -y -loglevel error -f rawvideo -pix_fmt rgb24 -s {w}x{h} -r {FPS}".split(),
-                *"-i - -c:v libx264 -preset fast -crf 10 -pix_fmt yuv420p".split(),
-                str(path),
-            ],
-            stdin=subprocess.PIPE,
-        )
-
-    def add(self, rgb: np.ndarray, caption: str | None) -> None:
-        """Append a frame, under `caption`."""
-        if caption and not (self.captions and self.captions[-1][2] == caption):
-            self.captions.append((self.frames, self.frames, caption))
-            print(f"[INFO]: caption {caption!r} at {self.frames / FPS:.1f} s")
-        if caption:
-            first, _, text = self.captions[-1]
-            self.captions[-1] = (first, self.frames + 1, text)
-        self.ffmpeg.stdin.write(rgb.tobytes())
-        self.frames += 1
-
-    def close(self) -> None:
-        self.ffmpeg.stdin.close()
-        self.ffmpeg.wait()
-
-        def stamp(frame: int) -> str:
-            s, ms = divmod(round(1000 * frame / FPS), 1000)
-            return f"{s // 3600:02}:{s // 60 % 60:02}:{s % 60:02},{ms:03}"
-
-        self.path.with_suffix(".srt").write_text(
-            "".join(
-                f"{i}\n{stamp(first)} --> {stamp(last)}\n{text}\n\n"
-                for i, (first, last, text) in enumerate(self.captions, 1)
-            )
-        )
-
 
 def framing(shot: Shot, point: np.ndarray, side: np.ndarray) -> np.ndarray:
     """The camera's pose for `shot` of `point`, `side` the horizontal direction
@@ -224,29 +137,14 @@ def main():
     # its renderer needs Kit's, which a camera made after launch cannot ask for.
     launcher = {"headless": True, "enable_cameras": True, "require_kit": True, "visualizer": []}
     with launch_simulation(sim_cfg, launcher):
-        # Imported once Kit is up: they bring `pxr`, and Kit's copy has to win.
-        from isaaclab.sensors import Camera, CameraCfg
-        from isaaclab_physx.renderers import IsaacRtxRendererCfg
-
         sim = sim_utils.SimulationContext(sim_cfg)
         machine = demo.make_machine()
         robot = demo.design_scene(machine)
-        camera = Camera(
-            CameraCfg(
-                prim_path=CAMERA,
-                update_period=0.0,
-                width=SIZE[0],
-                height=SIZE[1],
-                data_types=["rgb"],
-                spawn=sim_utils.PinholeCameraCfg(clipping_range=(0.02, 200.0)),
-                # The robot is in env_0's render partition, which cameras outside env_0 cannot see.
-                renderer_cfg=IsaacRtxRendererCfg(enable_scene_partitioning=False),
-            )
-        )
+        camera = sensor(SIZE)
         stage = sim_utils.get_current_stage()
         y = demo.path_ys(stage, demo.GREENHOUSE_PATH)[PATHS[0]]
         entrance, left = np.array([0.0, y, 0.0]), np.array([0.0, 1.0, 0.0])
-        rig, film = Rig(stage), Film(out)
+        rig, film = Rig(stage, FPS, EASE, CUT), Film(out, SIZE, FPS)
         # The takes' captions, by the prim of the truss each films.
         captions: dict[str, str] = {}
         # Frames due, counted a fraction a physics step: an eighth, at the

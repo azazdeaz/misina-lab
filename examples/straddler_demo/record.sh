@@ -12,7 +12,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 out=$(realpath -m "${1:-$here/../../target/video/straddler.mp4}")
 mkdir -p "$(dirname "$out")"
 raw=$(mktemp --suffix .mp4)
-trap 'rm -f "$raw"' EXIT
+trap 'rm -f "$raw" "${raw%.mp4}.srt"' EXIT
 
 cd "$here"
 uv run video.py "$raw"
