@@ -87,7 +87,11 @@ which a solver that understands one turns into bodies of its own
 standing in for it, so it is geometry and collider at once. What the organ
 is drawn with, and whatever hangs off it, rides a prim per segment that the
 importer adopts as that segment's body (`spawn_rod`). What hangs off it
-without being simulated, fruit say, weighs on it as the cable's `loads`.
+without being simulated, fruit say, weighs on it as the cable's `loads`. A
+collider authored under a segment's prim is imported static all the same,
+since the prim is no rigid body; `rods.carry_riders`, which the rod tuning
+runs, seats it on the segment's body
+([isaac-lab.md](isaac-lab.md#rods)).
 
 ## Custom attributes
 

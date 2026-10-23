@@ -24,6 +24,15 @@ Scene document format 10.
 
 ### Added
 
+- **greenhouse-lab**: Every fruit has a collider: a sphere round its body, a
+  capsule on an elongated one, as `Fruit_nn/Collision`; the mesh moved under
+  the fruit's prim as `Fruit_nn/Skin`. On a bent truss it rides the
+  segment's body.
+- **misina-lab**: `rods.carry_riders` seats a collider authored under a rod
+  segment's prim on that segment's body, which the importer had left static,
+  and lets it through its own rod; `tune_rods` calls it. `Shears` finds a
+  body's rod capsule by its label, so a body may carry other shapes, and
+  parks the colliders of whatever a cut hides.
 - **greenhouse-lab**: Trusses bend. One whose node on its stem is below
   `StemCfg.flexible_below` is a rod a solver bends and `Shears` cuts, its
   peduncle and first rachis the rod and everything else riding the segment
@@ -76,6 +85,14 @@ Scene document format 10.
 
 ### Changed
 
+- **greenhouse-lab**: Trusses are modelled closer to life. The rachis is a
+  chain of internodes that zigzags, kinking away from each pedicel, and
+  hangs nearer vertical toward its tip; the peduncle bends over a longer
+  arc. A pedicel is sized to its fruit, arches up and over and comes down
+  onto the fruit vertically, with the knuckle just under its tip, where the
+  fruit hangs a little off vertical. The sepals are half the fruit's
+  diameter long, lift off the shoulders to spread, and are folded and
+  twisted. Every representative truss draws its own kinks.
 - **misina-lab**: A rod carries loads: `Cable.loads` is the mass hanging from
   each point, which the builder adds to the rod's own, and `cable()` takes
   it after the widths, empty for a rod that carries nothing.

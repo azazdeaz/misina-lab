@@ -51,9 +51,9 @@ and it survives into the body labels below, so the two have to be changed
 together."""
 
 _ROD_BODY_SUFFIX = r"_edge_body_\d+"
-"""What Newton's rod importer appends to the curve's path for each capsule it
-builds. Cable bodies have no prim of their own, so this is the only way to name
-them."""
+"""What Newton's rod importer appends to the curve's path to label each body it
+builds, and what `spawn_rod` names the prim it authors for that body: the one
+Isaac Lab moves with the body, and everything under it with it."""
 
 ROD_SUBSTEPS = 1
 """Substeps the rods take inside each physics substep.
@@ -250,8 +250,10 @@ def tune_rods(
     importer has filled it, before it is finalized -- and Isaac Lab dispatches
     `MODEL_INIT` in exactly that window.
 
-    Also registers `reserve_contact_slots` on `PHYSICS_READY`, so a cut can
-    make the two faces of a cut meet; see `ContactSlots`.
+    First seats every collider authored under a segment's prim on the
+    segment's body, with `carry_riders`, so it takes the plant's group with
+    the rod. Also registers `reserve_contact_slots` on `PHYSICS_READY`, so a
+    cut can make the two faces of a cut meet; see `ContactSlots`.
 
     Registers once. While the registration stands -- the manager drops it when
     the simulation stops -- a further call returns it unchanged, rather than
@@ -295,6 +297,8 @@ def tune_rods(
             for slot in (dof + 2, dof + 3):
                 builder.joint_target_kd[slot] = damping * builder.joint_target_ke[slot]
 
+        carry_riders(builder)
+
         # Groups: a plant's for its rods and wood, allotted as they turn up;
         # `SCENE_GROUP` for what stands under no plant; one of its own for
         # every other body. Group 0 is a site, which collides with nothing,
@@ -327,6 +331,58 @@ def tune_rods(
         PhysicsEvent.PHYSICS_READY,
     )
     return _tuning
+
+
+def carry_riders(builder) -> int:
+    """Seat every collider authored under a rod segment's prim on the body that
+    drives the prim, in that body's frame, and let it pass through the rest of
+    its own rod. Returns how many were seated.
+
+    The importer reads a collision prim as a static shape unless a rigid-body
+    prim stands over it, and a segment's prim is not one: the rod importer
+    builds the body and labels it with the prim's path, which is all that
+    ties the two. So a collider under one -- round something hanging off the
+    rod -- would stand where it was authored while the prim moved on with the
+    body. Seated on the body it moves with the segment and falls with a cut
+    piece.
+
+    Its own rod lets it through. It was authored to clear the rod's rest
+    shape by little, and a pair resting that close to a neighbouring segment
+    would shove the rod about; what it meets is the rest of the scene.
+
+    Call it on a builder the importer has filled and nothing has finalized.
+    `tune_rods` does, before it sets the collision groups, so a seated shape
+    takes its plant's group with the body it sits on.
+    """
+    import warp as wp
+    from newton import ShapeFlags
+
+    def collides(shape: int) -> bool:
+        return bool(builder.shape_flags[shape] & ShapeFlags.COLLIDE_SHAPES)
+
+    body_at = {label: body for body, label in enumerate(builder.body_label)}
+    rods: dict[str, list[int]] = {}
+    for label, body in body_at.items():
+        if found := re.fullmatch(rf"(.*){_ROD_BODY_SUFFIX}", label):
+            rods.setdefault(found[1], []).append(body)
+
+    seated = 0
+    # The importer's visual shapes stay where they are: nothing steps them.
+    for shape in [each for each in builder.body_shapes[-1] if collides(each)]:
+        found = re.match(rf"((.*){_ROD_BODY_SUFFIX})/", builder.shape_label[shape])
+        if found is None or (body := body_at.get(found[1])) is None:
+            continue
+        for other in [each for rod in rods[found[2]] for each in builder.body_shapes[rod]]:
+            if collides(other):
+                builder.add_shape_collision_filter_pair(shape, other)
+        # A static shape's transform is in the world; a body's is in its own.
+        world = builder.shape_transform[shape]
+        builder.shape_transform[shape] = wp.transform_inverse(builder.body_q[body]) * world
+        builder.shape_body[shape] = body
+        builder.body_shapes[-1].remove(shape)
+        builder.body_shapes[body].append(shape)
+        seated += 1
+    return seated
 
 
 def steps_rods(physics: PhysicsCfg | None) -> bool:

@@ -101,7 +101,10 @@ flowchart LR
 The rendered organ follows. The tube drawn along a segment is scaled along
 its axis to the capsule's new span, and anything hanging off the shortened
 segment past the cut, a leaf, is hidden, since a prim cannot move to the
-piece that carries on without it. The piece of body i past the cut now
+piece that carries on without it; a collider of its own, seated on the body
+by `rods.carry_riders`, is parked far above it, where it meets nothing. The
+body's own capsule is found by the label the rod importer gives it, so the
+seated shapes never pass for it. The piece of body i past the cut now
 belongs to body i+1, along body i+1's own axis: on a rod bent at the joint
 the piece lands a little out of line, about a centimetre for a full-length
 piece at ten degrees.

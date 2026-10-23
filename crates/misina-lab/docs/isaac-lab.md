@@ -88,7 +88,12 @@ meets its own plant, the scene and the robot and passes through every other
 plant. Without the grouping the model holds a candidate pair for every two
 segments in the scene. The tuning numbers were measured on metre-long rods
 tapering from a centimetre across; `rods.py` says what each one does and
-what went wrong at other values.
+what went wrong at other values. The same hook first seats every collider
+authored under a segment's prim on the segment's body, `carry_riders`: the
+importer reads one as static, since the prim is no rigid body, and left so
+it would stand where it was authored while the segment moved on. Seated, it
+moves and falls with the segment, takes the plant's group, and passes
+through its own rod, which it was authored to clear by little.
 
 `Shears` cuts a rod anywhere along it while the simulation runs, and the
 piece lands on the stub it was cut from. How, given that Newton allows no
