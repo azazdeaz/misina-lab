@@ -321,12 +321,9 @@ mod tests {
     /// meshes of one element landing on it is a jitter stream wired to a
     /// constant seed, which every other check here would pass.
     ///
-    /// Two layers are exceptions, both deliberate. A blade is shaded off the
-    /// drawing it was cut from rather than off which mesh it came out as, so a
-    /// budget spent on curls of one drawing shares that drawing's green — see
-    /// [`leaf::surface`]. And every tube of a cane is the shade of the shoot
-    /// mesh it stands in for, so that layer holds one shade per shoot
-    /// representative rather than one per tube.
+    /// One layer is an exception, deliberately: every tube of a cane is the
+    /// shade of the shoot mesh it stands in for, so that layer holds one
+    /// shade per shoot representative rather than one per tube.
     #[test]
     fn every_part_is_tinted_and_no_layer_repeats_a_shade() {
         let doc = scene();
@@ -355,9 +352,7 @@ mod tests {
                     part.display_color.map(|c| c.to_bits())
                 })
                 .collect();
-            let expected = if *layer == leaf::PART {
-                names.len().min(leaf::SHAPES)
-            } else if *layer == shoot::CANE {
+            let expected = if *layer == shoot::CANE {
                 representatives
             } else {
                 names.len()

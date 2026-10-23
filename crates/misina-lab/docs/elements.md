@@ -63,21 +63,32 @@ generator. The dividing line is identity: nothing there corresponds to a
 thing that exists in the scene, so nothing there gets a mesh-library prefix
 or a stage set.
 
-### Drawn shapes
+### Outlines
 
-Some shapes are cheaper to draw than to generate. A leaf blade is one, so a
-generator keeps one traced SVG outline per shape and `geometry::outline`
-turns it into a filled mesh. A file holds one closed shape, standing up the
-page and hanging by the point it attaches at, the bottom of the drawing; its
-own scale is normalized away and every transform in it is resolved on load.
-Outlines are pulled in with `include_str!` rather than read at run time,
-because the crate also ships as a Python extension module inside a wheel,
-where an assets directory is not there to read.
+A flat organ is an outline filled with triangles, and `geometry::outline`
+is the fill: a closed ring in one frame, the attachment on the origin and
+the shape running along +X, whatever drew the ring.
 
-Some are cheaper to describe: a grass blade is a length, a width and a taper,
-and `geometry::shapes` builds those as outlines in the same frame a drawing
-is read into. A traced file replaces a `shapes::` call at the one place it is
-made.
+Some shapes are cheaper to describe than to draw: a grass blade is a length,
+a width and a taper, and `geometry::shapes` builds those as outlines. A
+lobed, toothed margin is built from curves with the same module's pieces,
+`cubic`, `serrate`, `simplify` and `untangle`: a generator places the lobe
+tips from the organ's veins and strings the pieces into its own ring, so one
+builder cuts the organ at any stage of its growth, and a budget of meshes
+buys a different margin on every one.
+
+An organ that folds keeps its folds in the fill: `creased_mesh` takes lines
+across the ring, such as its veins, and keeps them as lines of edges, so a
+later bend creases the sheet on an edge rather than rounding it over the
+width of the triangles it would cross.
+
+Some are cheaper to draw: `Outline::from_svg` reads one traced in a vector
+editor. A file holds one closed shape, standing up the page and hanging by
+the point it attaches at, the bottom of the drawing; its own scale is
+normalized away and every transform in it is resolved on load. Pull a file
+in with `include_str!` rather than reading it at run time, because the crate
+also ships as a Python extension module inside a wheel, where an assets
+directory is not there to read.
 
 ## The pipeline
 

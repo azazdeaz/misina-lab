@@ -8,9 +8,13 @@
 
 pub use misina_lab::palette::{COLOR_STREAM, mix, shade, srgb};
 
-/// A mature blade, seen from above. Grapevine leaves are a deep, slightly
-/// blue-shifted green; the yellower flush of a young one is not modelled.
+/// A grown blade, seen from above. Grapevine leaves are a deep, slightly
+/// blue-shifted green.
 pub const LEAF: u32 = 0x3E6B2A;
+
+/// A blade just unfolded at a shoot's tip: the yellow-green flush of a young
+/// leaf, which darkens to [`LEAF`] as it grows.
+pub const YOUNG_LEAF: u32 = 0x96AC4A;
 
 /// This season's growth — the green, unlignified shoot. Lighter and yellower
 /// than a blade, which is what separates a stem from the canopy hanging off it

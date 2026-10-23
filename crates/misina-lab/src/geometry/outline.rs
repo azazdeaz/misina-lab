@@ -44,8 +44,6 @@
 //! for — so a library of outlines can be drawn independently and still come
 //! out as a set of consistently sized things.
 
-use std::collections::HashSet;
-
 use anyhow::{Context, Result, bail};
 use spade::{
     AngleLimit, ConstrainedDelaunayTriangulation, Point2, RefinementParameters, Triangulation,
@@ -148,6 +146,21 @@ fn ring_area(ring: &[Point2<f64>]) -> f64 {
         })
         .sum::<f64>()
         / 2.0
+}
+
+/// Whether `point` is inside the ring, by how many of its edges a ray from
+/// it along +X crosses.
+fn encloses(ring: &[Point2<f64>], point: Point2<f64>) -> bool {
+    let n = ring.len();
+    (0..n)
+        .filter(|&i| {
+            let (a, b) = (ring[i], ring[(i + 1) % n]);
+            (a.y > point.y) != (b.y > point.y)
+                && point.x < a.x + (point.y - a.y) * (b.x - a.x) / (b.y - a.y)
+        })
+        .count()
+        % 2
+        == 1
 }
 
 // ─── Reading SVG ────────────────────────────────────────────────────
@@ -292,6 +305,24 @@ type Cdt = ConstrainedDelaunayTriangulation<Point2<f64>>;
 /// Faces come out counter-clockwise seen from +Z, which under USD's default
 /// right-handed orientation puts the front of the shape up.
 pub fn outline_mesh(outline: &Outline, max_triangle_area: f64) -> Result<MeshData> {
+    creased_mesh(outline, &[], max_triangle_area)
+}
+
+/// Fills an outline as [`outline_mesh`] does, with every crease kept as a
+/// line of edges through the fill.
+///
+/// A crease is an open polyline across the ring. It is split into pieces no
+/// longer than the side of a triangle at `max_triangle_area`, and every piece
+/// becomes an edge of the mesh: a later pass can fold the sheet sharply along
+/// it, on an edge, and bend it along its length, where a fold that falls
+/// across triangles comes out rounded over their width. A crease is kept
+/// wherever it lies inside the ring, and left out where it runs outside it,
+/// across a notch in it or across another crease; creases may share points.
+pub fn creased_mesh(
+    outline: &Outline,
+    creases: &[Vec<Point2<f64>>],
+    max_triangle_area: f64,
+) -> Result<MeshData> {
     let n = outline.points.len();
     let edges: Vec<[usize; 2]> = (0..n).map(|i| [i, (i + 1) % n]).collect();
 
@@ -305,17 +336,57 @@ pub fn outline_mesh(outline: &Outline, max_triangle_area: f64) -> Result<MeshDat
         bail!("the outline crosses itself, at {crossings} of its edges");
     }
 
+    // A crease's points go in before the refinement, so the fill is refined
+    // around them, and its edges after it: spade tells inside from outside by
+    // counting the constraint edges it crosses, which an open crease would
+    // throw off.
+    let side = 1.5 * max_triangle_area.sqrt();
+    let mut lines = Vec::new();
+    for crease in creases {
+        let mut line = Vec::new();
+        for (i, &to) in crease.iter().enumerate() {
+            let from = crease[i.saturating_sub(1)];
+            let pieces = ((to.x - from.x).hypot(to.y - from.y) / side)
+                .ceil()
+                .max(1.0) as usize;
+            // Each piece's far end, landing on the crease's own points
+            // exactly so two pieces share theirs.
+            for k in 1..=pieces {
+                let t = k as f64 / pieces as f64;
+                let at = if k == pieces {
+                    to
+                } else {
+                    Point2::new(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t)
+                };
+                if encloses(&outline.points, at) {
+                    line.push(
+                        cdt.insert(at)
+                            .context("a crease could not be triangulated")?,
+                    );
+                } else if !line.is_empty() {
+                    lines.push(std::mem::take(&mut line));
+                }
+            }
+        }
+        lines.push(line);
+    }
+
     // `exclude_outer_faces` is what `triangle -p` does: refine only what the
-    // constraint ring encloses, and report everything outside it so it can be
-    // dropped. Without it the fill would be the ring's convex hull, webbing
-    // over every notch.
-    let refinement = cdt.refine(
+    // constraint ring encloses. Without it the outside would be refined too,
+    // into points nothing uses.
+    cdt.refine(
         RefinementParameters::new()
             .with_angle_limit(AngleLimit::from_deg(ANGLE_LIMIT_DEG))
             .with_max_allowed_area(max_triangle_area)
             .exclude_outer_faces(true),
     );
-    let outside: HashSet<_> = refinement.excluded_faces.into_iter().collect();
+    for line in &lines {
+        for pair in line.windows(2) {
+            if pair[0] != pair[1] && cdt.can_add_constraint(pair[0], pair[1]) {
+                cdt.add_constraint(pair[0], pair[1]);
+            }
+        }
+    }
 
     // `vertices()` walks the triangulation's vertex storage in order, so a
     // handle's `index()` is its position in this list. That identity is what
@@ -325,9 +396,16 @@ pub fn outline_mesh(outline: &Outline, max_triangle_area: f64) -> Result<MeshDat
         .map(|v| [v.position().x as f32, v.position().y as f32, 0.0])
         .collect();
 
+    // Inside the ring or out by where a face's middle falls: no face straddles
+    // a constraint edge, and the ring is made of them. Without this the fill
+    // would be the ring's convex hull, webbing over every notch.
     let face_vertex_indices: Vec<i32> = cdt
         .inner_faces()
-        .filter(|face| !outside.contains(&face.fix()))
+        .filter(|face| {
+            let [a, b, c] = face.positions();
+            let middle = Point2::new((a.x + b.x + c.x) / 3.0, (a.y + b.y + c.y) / 3.0);
+            encloses(&outline.points, middle)
+        })
         .flat_map(|face| face.vertices().map(|v| v.fix().index() as i32))
         .collect();
 
@@ -593,6 +671,73 @@ mod tests {
         for (i, v) in cdt.vertices().enumerate() {
             assert_eq!(v.fix().index(), i);
         }
+    }
+
+    /// A crease comes out as a line of edges from end to end, split about as
+    /// finely as the fill is, and the fill still covers what the ring does.
+    #[test]
+    fn a_crease_is_a_line_of_edges_through_the_fill() {
+        let square = Outline {
+            points: [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]
+                .map(|(x, y)| Point2::new(x, y))
+                .to_vec(),
+        };
+        let (from, to) = (Point2::new(0.5, 0.5), Point2::new(3.5, 3.0));
+        let max = square.area() / 64.0;
+        let mesh = creased_mesh(&square, &[vec![from, to]], max).unwrap();
+
+        // The vertices on the crease, in order along it.
+        let (dx, dy) = (to.x - from.x, to.y - from.y);
+        let mut on: Vec<(f64, i32)> = mesh
+            .points
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| {
+                let (px, py) = (p[0] as f64 - from.x, p[1] as f64 - from.y);
+                let t = (px * dx + py * dy) / (dx * dx + dy * dy);
+                let off = (px * dy - py * dx).abs() / dx.hypot(dy);
+                ((-1e-6..=1.0 + 1e-6).contains(&t) && off < 1e-5).then_some((t, i as i32))
+            })
+            .collect();
+        on.sort_by(|a, b| a.0.total_cmp(&b.0));
+        assert!(on.len() > 4, "split along its length: {on:?}");
+        assert!(on[0].0.abs() < 1e-6 && (on[on.len() - 1].0 - 1.0).abs() < 1e-6);
+
+        let edges: Vec<[i32; 2]> = mesh
+            .face_vertex_indices
+            .chunks(3)
+            .flat_map(|f| [[f[0], f[1]], [f[1], f[2]], [f[2], f[0]]])
+            .collect();
+        let length = dx.hypot(dy);
+        for pair in on.windows(2) {
+            let (a, b) = (pair[0].1, pair[1].1);
+            assert!(
+                edges.contains(&[a, b]) || edges.contains(&[b, a]),
+                "{a} to {b} is an edge of the fill"
+            );
+            assert!((pair[1].0 - pair[0].0) * length <= 1.5 * max.sqrt() + 1e-9);
+        }
+
+        let area: f32 = faces(&mesh)
+            .map(|face| face_normal(&mesh, face).length() / 2.0)
+            .sum();
+        assert!((area - 16.0).abs() < 1e-3, "covers the ring, got {area}");
+
+        // One that runs out of the ring is cut where it leaves.
+        let out = vec![Point2::new(2.0, 2.3), Point2::new(6.0, 2.3)];
+        let cut = creased_mesh(&square, &[out], max).unwrap();
+        assert!(
+            cut.points.iter().all(|p| (0.0..=4.0).contains(&p[0])),
+            "nothing of it outside: {:?}",
+            cut.points
+        );
+        let area: f32 = faces(&cut)
+            .map(|face| face_normal(&cut, face).length() / 2.0)
+            .sum();
+        assert!(
+            (area - 16.0).abs() < 1e-3,
+            "and the fill is whole, got {area}"
+        );
     }
 
     /// A ring that crosses itself is a mistake in the drawing. It has to come

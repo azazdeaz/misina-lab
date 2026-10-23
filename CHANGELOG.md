@@ -24,6 +24,13 @@ Scene document format 9.
 
 ### Added
 
+- **misina-lab**: `geometry::outline::creased_mesh` fills an outline with
+  lines across it kept as edges, split as finely as the fill, so a bend
+  can fold the sheet sharply on them; the parts of a line outside the ring
+  are left out.
+- **misina-lab**: `geometry::shapes` gains `cubic`, `serrate`, `simplify`
+  and `untangle`, the pieces a lobed, toothed margin is built from, so a
+  generator strings its own ring from an organ's veins.
 - **misina-lab**: `ColliderView` draws every collider of the running Newton
   model in Kit's viewport, translucent, and follows the ones moved or resized
   while it runs. Kit draws only a PhysX scene's colliders.
@@ -63,6 +70,37 @@ Scene document format 9.
 
 ### Changed
 
+- **vinery-lab**: Leaves are built from their veins rather than traced: five
+  main veins from the petiole's junction, a lobe at the end of each, sinuses
+  between them and teeth the whole way round, cut to a margin of its own for
+  every blade mesh the budget keeps, where five drawn outlines were curled a
+  few ways each. A leaf's shape now follows its growth: the young leaves near
+  a shoot's tip are narrower and coarser toothed, with little blade yet at
+  their base, folded up along their veins and a lighter yellow-green, where
+  they were a grown blade scaled down. A leaf now takes about ten nodes
+  below the tip to reach full size, 0.7 m at the default spacing where it
+  took 0.25 m, so the leaves of a default shoot are all still filling out
+  and the canopy's blades run a little smaller. New: `LeafCfg.lobing`, how
+  deeply a grown blade is cut, which each leaf draws about;
+  `LeafCfg.detail` now meshes the margin as well as the middle, so coarser
+  drops the teeth first.
+- **vinery-lab** (**cfg**): A leaf bends along its veins, which its mesh
+  keeps as edges so it creases on them. The young leaves near a shoot's tip
+  are folded on the midrib as they lay in the bud, opening out by the time
+  they are half grown, where they drooped across it. A grown blade hangs off
+  a petiole held up and out, bent down off it at the junction by new
+  `LeafCfg.blade_angle`, and arches down off it, where the whole leaf
+  drooped from the shoot; `ShootCfg.leaf_droop` is still the blade's pitch.
+  The blade stands up between its main veins. And no leaf is symmetric: one
+  half is the larger and the midrib curves away from it, the next leaf up
+  the shoot leaning the other way about three times in four, as far as new
+  `LeafCfg.asymmetry` lets it. `LeafCfg.curl` now arches, pleats and
+  ruffles a grown blade and no longer troughs it across its midrib; new
+  `LeafCfg.fold` folds it into a V. A full-grown leaf's area is new
+  `LeafCfg.area`, 150 cm² as before. Every leaf prim carries its blade's
+  area as placed, in m², and its maturity, as `vinery_lab:area` and
+  `vinery_lab:maturity`. A blade is about a sixth more triangles at the same
+  `detail`.
 - **misina-lab**: A rod tapers as its organ is drawn. The builder authors a
   cable's `widths` again as its `physics:thicknesses`, so each segment's
   capsule, mass and stiffness follow the taper, and the scene document's
