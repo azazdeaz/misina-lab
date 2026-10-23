@@ -1,12 +1,9 @@
-//! Outlines built in code rather than traced.
+//! Outlines built in code.
 //!
-//! The counterpart of a drawing under `assets/`: the same closed ring, in the
-//! same frame [`outline`](super::outline) reads a drawing into — attachment on
-//! the origin, the shape running along +X, width across Y — but described by
-//! a length, a width and a profile. A simple entire shape is cheaper to write
-//! than to draw, and a grass blade is one. A margin worth drawing goes through
-//! [`Outline::from_svg`] instead, and a call site here is what a traced file
-//! replaces.
+//! Closed rings for [`outline`](super::outline) to fill, all in one frame:
+//! attachment on the origin, the shape running along +X, width across Y. A
+//! simple entire shape is described by a length, a width and a profile, and a
+//! grass blade is one.
 //!
 //! Every ring is symmetric about the X axis and closes across its base at
 //! `x = 0`, which is the attachment: the flat cut where a blade leaves its

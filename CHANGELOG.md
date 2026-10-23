@@ -101,6 +101,9 @@ Scene document format 9.
   area as placed, in m², and its maturity, as `vinery_lab:area` and
   `vinery_lab:maturity`. A blade is about a sixth more triangles at the same
   `detail`.
+- **misina-lab**: `Outline::from_svg` is gone, and with it the `usvg`
+  dependency: an outline is a ring built in code, which `geometry::outline`
+  fills. A generator that traced its shapes in SVG builds the ring itself.
 - **misina-lab**: A rod tapers as its organ is drawn. The builder authors a
   cable's `widths` again as its `physics:thicknesses`, so each segment's
   capsule, mass and stiffness follow the taper, and the scene document's

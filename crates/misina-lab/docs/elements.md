@@ -49,8 +49,8 @@ whatever was missed.
 ## What an element is built from
 
 The geometry kernels know nothing about what they are shaping. `strand`
-skins a polyline of radii into a tube, `outline` fills a shape traced in
-SVG, `shapes` builds outlines in code and folds them, `scatter` spreads
+skins a polyline of radii into a tube, `outline` fills a closed ring,
+`shapes` builds outlines in code and folds them, `scatter` spreads
 points over a band of ground, and `mesh` holds the type they all produce.
 `palette` turns a hex colour linear, jitters it per mesh and pairs it with a
 `Response`, how a surface answers light. `terrain` is the one element this
@@ -69,26 +69,17 @@ A flat organ is an outline filled with triangles, and `geometry::outline`
 is the fill: a closed ring in one frame, the attachment on the origin and
 the shape running along +X, whatever drew the ring.
 
-Some shapes are cheaper to describe than to draw: a grass blade is a length,
-a width and a taper, and `geometry::shapes` builds those as outlines. A
-lobed, toothed margin is built from curves with the same module's pieces,
-`cubic`, `serrate`, `simplify` and `untangle`: a generator places the lobe
-tips from the organ's veins and strings the pieces into its own ring, so one
-builder cuts the organ at any stage of its growth, and a budget of meshes
-buys a different margin on every one.
+A grass blade is a length, a width and a taper, and `geometry::shapes`
+builds those as outlines. A lobed, toothed margin is built from curves with
+the same module's pieces, `cubic`, `serrate`, `simplify` and `untangle`: a
+generator places the lobe tips from the organ's veins and strings the pieces
+into its own ring, so one builder cuts the organ at any stage of its growth,
+and a budget of meshes buys a different margin on every one.
 
 An organ that folds keeps its folds in the fill: `creased_mesh` takes lines
 across the ring, such as its veins, and keeps them as lines of edges, so a
 later bend creases the sheet on an edge rather than rounding it over the
 width of the triangles it would cross.
-
-Some are cheaper to draw: `Outline::from_svg` reads one traced in a vector
-editor. A file holds one closed shape, standing up the page and hanging by
-the point it attaches at, the bottom of the drawing; its own scale is
-normalized away and every transform in it is resolved on load. Pull a file
-in with `include_str!` rather than reading it at run time, because the crate
-also ships as a Python extension module inside a wheel, where an assets
-directory is not there to read.
 
 ## The pipeline
 
