@@ -163,6 +163,16 @@ with launch_simulation(sim_cfg, shots.launcher(args.out)):
     shots.finish(sim, shot, None, camera, args.out)
 ```
 
+## A video of the scene
+
+`misina_lab.isaaclab.film` films the running simulation in the same
+renderer, for a script that samples the camera every so many physics steps,
+so the video plays in simulated time however long the steps take to compute.
+`sensor` makes the camera; `Rig` moves it from shot to shot, easing on a smoothstep, and cuts
+instead when the move is long enough to fly through the scene; `Film` pipes
+the frames to ffmpeg and writes their captions beside the video as SubRip.
+The module's docstring has the loop a script runs.
+
 ## Where it lives
 
 - [`misina_lab/isaaclab/spawn.py`](../../../python/misina-lab/misina_lab/isaaclab/spawn.py): `GeneratedSceneCfg`, `spawn_generated`, `resolve_usd_path`, `to_params`, and the cache key
@@ -170,4 +180,5 @@ with launch_simulation(sim_cfg, shots.launcher(args.out)):
 - [`misina_lab/isaaclab/cutting.py`](../../../python/misina-lab/misina_lab/isaaclab/cutting.py): `Shears.colliders` and `Shears.place` for a collider that moves; the cut itself is [cutting.md](cutting.md)
 - [`misina_lab/isaaclab/colliders.py`](../../../python/misina-lab/misina_lab/isaaclab/colliders.py): `ColliderView`
 - [`misina_lab/isaaclab/shots.py`](../../../python/misina-lab/misina_lab/isaaclab/shots.py): the shot file, `sensor` and `finish`
+- [`misina_lab/isaaclab/film.py`](../../../python/misina-lab/misina_lab/isaaclab/film.py): `sensor`, `Rig` and `Film`
 - [`src/scene/mod.rs`](../src/scene/mod.rs): `cable` and `spawn_rod`, what the Rust side authors

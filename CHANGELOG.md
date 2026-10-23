@@ -24,6 +24,10 @@ Scene document format 10.
 
 ### Added
 
+- **misina-lab**: `misina_lab.isaaclab.film` films a video of the running
+  simulation in Isaac Sim: `Rig` eases a camera from shot to shot and cuts
+  the long moves, and `Film` pipes the frames to ffmpeg and writes their
+  captions as SubRip. Every demo's video is filmed through it.
 - **greenhouse-lab**: Every fruit has a collider: a sphere round its body, a
   capsule on an elongated one, as `Fruit_nn/Collision`; the mesh moved under
   the fruit's prim as `Fruit_nn/Skin`. On a bent truss it rides the

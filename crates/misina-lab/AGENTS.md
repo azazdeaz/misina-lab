@@ -52,6 +52,7 @@ Pure Python over `usd-core`, in [`../../python/misina-lab`](../../python/misina-
 | [misina_lab/isaaclab/cutting.py](../../python/misina-lab/misina_lab/isaaclab/cutting.py) | `Shears`: cuts a rod anywhere along it while the simulation runs, and moves a collider in its body's frame |
 | [misina_lab/isaaclab/colliders.py](../../python/misina-lab/misina_lab/isaaclab/colliders.py) | `ColliderView`: every collider of the running Newton model, drawn in Kit's viewport |
 | [misina_lab/isaaclab/shots.py](../../python/misina-lab/misina_lab/isaaclab/shots.py) | a still of the scene from a shot file, its camera placed as a viewer storyboard places it, or Kit's viewport opened on it with `P` printing the camera |
+| [misina_lab/isaaclab/film.py](../../python/misina-lab/misina_lab/isaaclab/film.py) | a video of the running simulation: `Rig`, the camera easing from shot to shot, and `Film`, the frames piped to ffmpeg and their captions written as SubRip |
 
 Only `misina_lab.isaaclab` imports Isaac Lab; plain `import misina_lab`
 works without it.

@@ -155,10 +155,10 @@ way. `VINERY_LAB_SHOT=still.png` instead saves the window as the storyboard
 ends, and quits. See `crates/misina-lab/src/tour.rs`, and
 [the skill](.claude/skills/readme-video/SKILL.md) for changing the video.
 
-The pruning and straddler demos' videos are filmed in Isaac Sim instead,
-headless: each demo's `record.sh` runs its `video.py`, which samples an RTX
-camera on the simulation's clock. All three scripts encode what they record
-with `docs/video/encode.sh`. See
+The pruning, greenhouse and straddler demos' videos are filmed in Isaac Sim
+instead, headless: each demo's `record.sh` runs its `video.py`, which samples
+an RTX camera on the simulation's clock through `misina_lab.isaaclab.film`.
+All four scripts encode what they record with `docs/video/encode.sh`. See
 [the pruning video's skill](.claude/skills/pruning-video/SKILL.md) for
 changing that one. `docs/video/publish.sh` uploads any of the videos to the
 branch's pull request and puts the link GitHub gives it in its README. github.com plays only video
