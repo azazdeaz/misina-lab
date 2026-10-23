@@ -32,7 +32,7 @@ from isaaclab_newton.physics import (  # noqa: E402
     VBDSolverCfg,
 )
 from isaaclab_physx.physics import PhysxCfg  # noqa: E402
-from newton import JointType  # noqa: E402
+from newton import JointType, ShapeFlags  # noqa: E402
 
 VINEYARD = "/World/Vineyard"
 ROBOT = "/World/envs/env_0/Robot"
@@ -169,11 +169,14 @@ def builder(monkeypatch) -> object:
     instead, and nothing about that fails loudly.
 
     Bodies 0 and 1 are the rod's, carrying shapes 0 and 1; bodies 2 and 3 stand
-    for the robot, carrying shapes 2 and 3; shapes 4 to 7 are the static scene,
+    for the robot, carrying shapes 2 and 3; shapes 4 to 8 are the static scene,
     which is body -1 because a static shape has no body: the ground, a post,
-    the trunk of the rod's vine and the trunk of another. The other two joints
-    are there to be walked past.
+    the trunk of the rod's vine, the trunk of another, and a collider authored
+    under the rod's second segment, 20 cm past the segment's body along x. The
+    other two joints are there to be walked past.
     """
+    import warp as wp
+
     builder = types.SimpleNamespace(
         joint_type=[JointType.D6, JointType.ROD, JointType.REVOLUTE],
         joint_qd_start=[0, 6, 10],
@@ -188,7 +191,15 @@ def builder(monkeypatch) -> object:
             f"{ROBOT}/base",
             f"{ROBOT}/arm",
         ],
-        body_shapes={-1: [4, 5, 6, 7], 0: [0], 1: [1], 2: [2], 3: [3]},
+        body_shapes={-1: [4, 5, 6, 7, 8], 0: [0], 1: [1], 2: [2], 3: [3]},
+        # The rod's second body a metre up, turned a quarter turn about z.
+        body_q=[wp.transform_identity()]
+        + [
+            wp.transform(
+                (1.0, 0.0, 1.0), wp.quat_from_axis_angle(wp.vec3(0.0, 0.0, 1.0), 1.5707964)
+            )
+        ]
+        + [wp.transform_identity()] * 2,
         shape_label=[
             f"{VINE_0}/Shoot_00_0/{physics.CABLE}_edge_capsule_0",
             f"{VINE_0}/Shoot_00_0/{physics.CABLE}_edge_capsule_1",
@@ -198,8 +209,17 @@ def builder(monkeypatch) -> object:
             f"{VINEYARD}/Planting/Row_00/Pole_000/Collision",
             f"{VINE_0}/Collision",
             f"{VINEYARD}/Planting/Row_00/{physics.VINE}_001/Collision",
+            f"{VINE_0}/Shoot_00_0/{physics.CABLE}_edge_body_1/Leaf_03/Collision",
         ],
-        shape_collision_group=[1] * 8,
+        shape_body=[0, 1, 2, 3, -1, -1, -1, -1, -1],
+        shape_transform=[wp.transform_identity()] * 8
+        + [wp.transform((1.2, 0.0, 1.0), wp.quat_identity())],
+        shape_flags=[int(ShapeFlags.COLLIDE_SHAPES)] * 9,
+        shape_collision_group=[1] * 9,
+        shape_collision_filter_pairs=[],
+    )
+    builder.add_shape_collision_filter_pair = lambda a, b: (
+        builder.shape_collision_filter_pairs.append((min(a, b), max(a, b)))
     )
     # The simulation the builder is fetched from, by its physics config.
     sim = types.SimpleNamespace(
@@ -258,9 +278,26 @@ def test_a_vine_and_its_wood_share_a_group_and_the_rest_meets_every_rod(builder)
     vine, other, scene = physics.VINE_GROUPS, physics.VINE_GROUPS + 1, physics.SCENE_GROUP
     groups = builder.shape_collision_group
     assert groups[:2] == [vine, vine]
-    assert groups[4:] == [scene, scene, vine, other]
+    assert groups[4:8] == [scene, scene, vine, other]
     assert all(group < 0 and group != scene for group in groups[2:4])
     assert groups[2] != groups[3]
+
+
+def test_a_collider_under_a_segment_rides_the_segments_body_and_passes_its_rod(builder):
+    """The importer left it static where it was authored. Seated, it sits on
+    the segment's body in that body's frame, takes the vine's group with the
+    rod, and is filtered against the rod's own capsules, which it was
+    authored to clear by little."""
+    physics.tune_shoots()
+    NewtonManager.dispatch_event(PhysicsEvent.MODEL_INIT)
+
+    assert builder.shape_body[8] == 1
+    assert builder.body_shapes[1] == [1, 8] and 8 not in builder.body_shapes[-1]
+    # 20 cm along x in the world is 20 cm along -y to a body turned a quarter
+    # turn about z.
+    assert list(builder.shape_transform[8])[:3] == pytest.approx([0.0, -0.2, 0.0], abs=1e-6)
+    assert builder.shape_collision_filter_pairs == [(0, 8), (1, 8)]
+    assert builder.shape_collision_group[8] == physics.VINE_GROUPS
 
 
 def test_the_groups_pair_what_they_are_meant_to():

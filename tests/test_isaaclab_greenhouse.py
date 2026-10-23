@@ -24,6 +24,7 @@ except ImportError:
 
 from newton import ModelBuilder  # noqa: E402
 
+from misina_lab.isaaclab import rods  # noqa: E402
 from misina_lab.usd.build import build_usd  # noqa: E402
 
 BELOW = 1.8
@@ -74,3 +75,23 @@ def test_a_bent_truss_is_a_rod_held_at_the_stem_carrying_its_fruit(tmp_path):
         masses = [mass for _, mass in sorted(chain)]
         assert masses[0] == 0.0 and min(masses[1:]) > 0.0, truss
         assert 0.0 < sum(masses) - loads[truss] < 0.02, f"{truss}: {masses} for {loads[truss]} kg"
+
+    # Every fruit's collider is imported static. Seated, one under a segment
+    # rides that segment's body and one on a rigid truss stays where it is,
+    # and a rod body's mass is as it was: the fruit weigh as the loads.
+    fruit = {
+        shape: label
+        for shape, label in enumerate(builder.shape_label)
+        if re.search(r"/Fruit_\d+/Collision$", label)
+    }
+    assert fruit and all(builder.shape_body[shape] == -1 for shape in fruit)
+    was = list(builder.body_mass)
+    riding = [shape for shape, label in fruit.items() if "_edge_body_" in label]
+    assert rods.carry_riders(builder) == len(riding) > 0
+    assert list(builder.body_mass) == was
+    for shape, label in fruit.items():
+        body = builder.shape_body[shape]
+        if shape in riding:
+            assert builder.body_label[body] == label.rsplit("/", 2)[0], label
+        else:
+            assert body == -1, label
