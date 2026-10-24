@@ -57,7 +57,7 @@ needed.
 
 ## Harvesting
 
-https://github.com/user-attachments/assets/1c498746-754b-422e-ab37-57b7c7bb456f
+https://github.com/user-attachments/assets/2c8ad012-5383-44d5-90c9-e546da7c861e
 
 The robot has the layout of eternal.ag's Harvester and most robots of its
 kind: a trolley as wide as the heating pipes are spaced, a lift on it, a
