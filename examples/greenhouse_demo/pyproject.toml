@@ -8,6 +8,8 @@ dependencies = [
     "greenhouse-lab",
     "huggingface-hub>=1.16",
     "isaaclab[isaacsim,all]==3.0.0",
+    # The extra follows torch's CUDA: cu13 for the torch 2.11 Isaac Lab pins.
+    "nvidia-curobo[cu13]",
 ]
 
 [dependency-groups]
@@ -42,3 +44,6 @@ greenhouse-lab = { path = "../../crates/greenhouse-lab", editable = true }
 # What greenhouse-lab is built on; a workspace source inside the path above does
 # not reach a project outside that workspace, so it is named here too.
 misina-lab = { path = "../../python/misina-lab", editable = true }
+# cuRobo is not on PyPI; the names there are someone else's. From v0.8 it is
+# plain Python, its kernels compiled on first use.
+nvidia-curobo = { git = "https://github.com/NVlabs/curobo", tag = "v0.8.0" }
