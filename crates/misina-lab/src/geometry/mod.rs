@@ -3,10 +3,9 @@
 //! - [`mesh`] — the kernels' own mesh type, the bridge to Bevy's, and the
 //!   primitives built directly in it.
 //! - [`strand`] — skins a polyline of radii into a tube. Knows no botany.
-//! - [`outline`] — reads a shape traced in SVG and fills it with triangles.
-//!   Knows no botany either.
-//! - [`shapes`] — outlines built in code, in the frame a traced one is read
-//!   into, for shapes cheaper to describe than to draw.
+//! - [`outline`] — a closed ring and the triangles that fill it. Knows no
+//!   botany either.
+//! - [`shapes`] — outlines built in code, in the frame a ring is placed in.
 //! - [`scatter`] — points spread over a band of ground, for everything placed
 //!   within a zone rather than along a line.
 

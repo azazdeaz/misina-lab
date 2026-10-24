@@ -4,6 +4,8 @@
 //! fragment (see `crates/misina-lab/docs/elements.md`). The modules here own
 //! none of that on their own account; they are what elements are *built from*:
 //!
+//! - [`blade`] — the outline of one grapevine leaf, built from its veins, at
+//!   any stage of its growth.
 //! - [`color`] — the vineyard's colours, and the per-mesh jitter applied to
 //!   them. Hands elements the linear RGB their geometry carries.
 //! - [`material`] — the other half of the palette: how each surface responds to
@@ -26,6 +28,7 @@
 //! a thing that exists in a vineyard, so nothing here gets a mesh library or a
 //! line in [`elements::plugin`](super::plugin).
 
+pub mod blade;
 pub mod color;
 pub mod material;
 pub mod parcel;

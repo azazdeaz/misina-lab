@@ -1,25 +1,28 @@
-//! Outlines built in code rather than traced.
+//! Outlines built in code.
 //!
-//! The counterpart of a drawing under `assets/`: the same closed ring, in the
-//! same frame [`outline`](super::outline) reads a drawing into — attachment on
-//! the origin, the shape running along +X, width across Y — but described by
-//! a length, a width and a profile. A simple entire shape is cheaper to write
-//! than to draw, and a grass blade is one. A margin worth drawing goes through
-//! [`Outline::from_svg`] instead, and a call site here is what a traced file
-//! replaces.
+//! Closed rings for [`outline`](super::outline) to fill, all in one frame:
+//! attachment on the origin, the shape running along +X, width across Y. A
+//! simple entire shape is described by a length, a width and a profile, and a
+//! grass blade is one.
 //!
 //! Every ring is symmetric about the X axis and closes across its base at
 //! `x = 0`, which is the attachment: the flat cut where a blade leaves its
 //! sheath or a leaf its petiole.
 //!
+//! A margin worth more than a profile, lobed and toothed, is built from
+//! curves instead: [`cubic`] samples a Bézier edge, [`serrate`] cuts teeth
+//! along it, [`simplify`] drops the points a tolerance can do without and
+//! [`untangle`] cuts out the loops a jittered margin folds into. A generator
+//! strings those into its own ring; the frame is the same.
+//!
 //! Also here: [`bent`], which fills a ring and folds it the way a leaf folds,
 //! and the two rotations that take a shape out of this frame — [`standing`]
 //! and [`lying`] — so every element places its foliage the same way.
 
-use std::f64::consts::FRAC_PI_2;
+use std::f64::consts::{FRAC_PI_2, PI};
 
 use anyhow::Result;
-use bevy::math::Quat;
+use bevy::math::{DVec2, Quat};
 use spade::Point2;
 
 use super::mesh::{MeshData, bend};
@@ -95,6 +98,102 @@ fn ring(length: f64, width: f64, stations: usize, half: impl Fn(usize, f64) -> f
     }
     points.push(Point2::new(0.0, w(0)));
     Outline { points }
+}
+
+// ─── Margins built from curves ──────────────────────────────────────
+
+/// Appends `points` samples of a cubic Bézier, from its first point to just
+/// short of its last, so curves strung end to end share no point.
+pub fn cubic(out: &mut Vec<DVec2>, [a, b, c, d]: [DVec2; 4], points: usize) {
+    out.extend((0..points).map(|i| {
+        let t = i as f64 / points as f64;
+        let s = 1.0 - t;
+        a * (s * s * s) + b * (3.0 * s * s * t) + c * (3.0 * s * t * t) + d * (t * t * t)
+    }));
+}
+
+/// Small sawtooth teeth along a polyline, on its left (+Y for a line running
+/// +X): `depth` deep and `spacing` depths apart, leaning toward its end (or
+/// its start) and fading out at both ends. A line too short for two teeth is
+/// left alone.
+pub fn serrate(edge: &mut [DVec2], depth: f64, spacing: f64, toward_end: bool) {
+    let mut arcs = vec![0.0];
+    for pair in edge.windows(2) {
+        arcs.push(arcs[arcs.len() - 1] + pair[0].distance(pair[1]));
+    }
+    let length = arcs[arcs.len() - 1];
+    if depth <= 0.0 || length < 2.0 * spacing * depth {
+        return;
+    }
+    let teeth = (length / (spacing * depth)).floor();
+    let rise = if toward_end { 0.75 } else { 0.25 };
+    let outward: Vec<DVec2> = (0..edge.len())
+        .map(|i| {
+            let along = edge[(i + 1).min(edge.len() - 1)] - edge[i.saturating_sub(1)];
+            along.normalize_or_zero().perp()
+        })
+        .collect();
+    for (i, point) in edge.iter_mut().enumerate() {
+        let f = (arcs[i] / length * teeth).fract();
+        let saw = if f < rise {
+            f / rise
+        } else {
+            (1.0 - f) / (1.0 - rise)
+        };
+        *point += outward[i] * (depth * saw * (PI * arcs[i] / length).sin());
+    }
+}
+
+/// Drops every point of a polyline that strays less than `tolerance` from the
+/// chord between the points kept either side of it (Douglas–Peucker). Both
+/// ends are kept.
+pub fn simplify(line: &mut Vec<DVec2>, tolerance: f64) {
+    if line.len() < 3 {
+        return;
+    }
+    let last = line.len() - 1;
+    let mut keep = vec![false; line.len()];
+    (keep[0], keep[last]) = (true, true);
+    let mut spans = vec![(0, last)];
+    while let Some((a, b)) = spans.pop() {
+        let chord = (line[b] - line[a]).normalize_or(DVec2::X);
+        let off = |i: &usize| chord.perp_dot(line[*i] - line[a]).abs();
+        let far = (a + 1..b).max_by(|i, j| off(i).total_cmp(&off(j)));
+        if let Some(far) = far.filter(|i| off(i) > tolerance) {
+            keep[far] = true;
+            spans.extend([(a, far), (far, b)]);
+        }
+    }
+    let mut kept = keep.into_iter();
+    line.retain(|_| kept.next().unwrap());
+}
+
+/// Cuts every loop out of a polyline where it crosses itself, keeping the
+/// crossing point. A ragged jitter can fold a notch's walls over each other,
+/// and a ring that crosses itself cannot be filled.
+pub fn untangle(points: &mut Vec<DVec2>) {
+    let mut i = 0;
+    while i + 3 < points.len() {
+        let (a, b) = (points[i], points[i + 1]);
+        let hit = (i + 2..points.len() - 1)
+            .find_map(|j| crossing(a, b, points[j], points[j + 1]).map(|at| (j, at)));
+        match hit {
+            Some((j, at)) => drop(points.splice(i + 1..=j, [at])),
+            None => i += 1,
+        }
+    }
+}
+
+/// Where segments `a`–`b` and `c`–`d` cross, if they do.
+fn crossing(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> Option<DVec2> {
+    let (r, s) = (b - a, d - c);
+    let den = r.perp_dot(s);
+    if den.abs() < 1e-15 {
+        return None;
+    }
+    let t = (c - a).perp_dot(s) / den;
+    let u = (c - a).perp_dot(r) / den;
+    ((1e-9..1.0 - 1e-9).contains(&t) && (1e-9..1.0 - 1e-9).contains(&u)).then(|| a + r * t)
 }
 
 // ─── Filling and placing ────────────────────────────────────────────

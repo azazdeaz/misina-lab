@@ -409,37 +409,66 @@ class ShootParams:
 class LeafParams:
     """One blade of the canopy.
 
-    The blade shapes are drawn rather than generated, one SVG outline each embedded
-    at build time, so the first five of `variations` go on giving every drawing a
-    mesh of its own and the rest buys curls of them. Size is not a parameter: every
-    blade is built at the same area, one full-grown leaf of about 150 cm², and a
-    leaf's size comes from the scale it is placed at. Where leaves hang, and how big
-    each one ends up, is the shoot's.
+    A blade is built from its veins, five lobes with a toothed margin, cut fresh for
+    every mesh the budget keeps; `lobing` sets how deeply. Every blade is built at
+    `area`, a full-grown leaf's, and a leaf's size comes from the scale it is placed
+    at. Where leaves hang, how big each one ends up and how far it has grown is the
+    shoot's; a leaf still growing near a shoot's tip is cut narrower, open at its
+    base, folded and lighter green than it will be.
     """
 
-    variations: int
-    """How many distinct blade meshes the scene may hold. A budget, not a count, with a
-    floor under it: the five drawn shapes each get a mesh first, and what the rest
-    buys is curls of them.
-    """
-    detail: int
-    """How finely the inside of a blade is subdivided, as the number of triangles its
-    area is cut into. The drawn margin costs about 180 on its own whatever this is
-    set to.
+    lobing: float
+    """How deeply a full-grown blade lobes: 0 is an entire, heart-shaped leaf, 1 is cut
+    deep into five lobes. Each leaf draws a little more or less.
     """
     curl: float
-    """How far a blade bends out of the flat shape it was drawn as: a trough down the
-    midrib, a droop along it and a ruffled margin, all scaled together. The middle of
-    a spread, with every leaf drawing its own share of it, and some curling the other
-    way. Zero leaves the drawing flat.
+    """How far a grown blade bends out of the flat shape it was cut as: its veins
+    arching down off the petiole's top, the blade standing up a little between them,
+    and its margin ruffled, all scaled together. The middle of a spread, with every
+    leaf drawing its own share of it, and some cupping instead, their lobes lifting.
+    Zero leaves a grown blade flat but for its fold.
+    """
+    fold: float
+    """How far a grown blade folds up along its midrib, in radians each side: 0 holds it
+    flat across, more folds it into a V and less bows it over the midrib. Cultivars
+    differ: most are flat, some fold.
+    """
+    asymmetry: float
+    """How lopsided a blade may be: 0 for halves that are mirror images but for small
+    differences, 1 for one half much the larger and the midrib curving away from it
+    toward the apex. Each leaf draws its own share, and leans the other way from the
+    leaf below it, as on a vine.
+    """
+    blade_angle: float
+    """How far a grown blade bends down off its petiole where they meet, in radians. A
+    leaf just unfolded holds its blade in line with the stalk.
+    """
+    area: float
+    """The area of a full-grown leaf's blade and petiole, in m². A *Vitis vinifera*
+    leaf runs 100 to 200 cm², by cultivar and vigour.
+    """
+    variations: int
+    """How many distinct blade meshes the scene may hold. A budget, not a count: the
+    leaves are clustered by growth stage, lobing, curl and lean, and this is how many
+    representatives the clustering may keep.
+    """
+    detail: int
+    """How finely a blade is meshed, as the number of triangles its area is cut into.
+    The margin follows it: coarser drops the teeth first, then rounds off the
+    sinuses, and keeps the lobes.
     """
 
     def __init__(
         self,
         *,
+        lobing: float = 0.5,
+        curl: float = 1.0,
+        fold: float = 0.15,
+        asymmetry: float = 0.5,
+        blade_angle: float = 0.8,
+        area: float = 0.015,
         variations: int = 40,
         detail: int = 120,
-        curl: float = 1.0,
     ) -> None: ...
     def __repr__(self) -> str: ...
 

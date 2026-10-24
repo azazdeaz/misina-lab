@@ -37,9 +37,6 @@ curvo = "0.1.91"
 # API takes and returns nalgebra types.
 nalgebra = "0.35"
 spade = "2.15.1"
-# Only the geometry front-end is wanted: default features pull in text
-# shaping and a system font database, and an outline has no text in it.
-usvg = { version = "0.48.1", default-features = false }
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]

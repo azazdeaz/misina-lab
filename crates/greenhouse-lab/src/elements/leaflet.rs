@@ -35,6 +35,7 @@ use std::f64::consts::PI;
 
 use bevy::math::DVec2;
 use misina_lab::geometry::outline::Outline;
+use misina_lab::geometry::shapes::{cubic, serrate, simplify, untangle};
 use misina_lab::rng::Rng;
 use spade::Point2;
 
@@ -335,93 +336,10 @@ fn lerp(a: f64, b: f64, t: f64) -> f64 {
 
 /// Appends a cubic Bézier, short of its last point, with small teeth along
 /// it `serration` deep.
-fn edge(out: &mut Vec<DVec2>, [a, b, c, d]: [DVec2; 4], serration: f64, toward_end: bool) {
+fn edge(out: &mut Vec<DVec2>, curve: [DVec2; 4], serration: f64, toward_end: bool) {
     let start = out.len();
-    out.extend((0..EDGE_POINTS).map(|i| {
-        let t = i as f64 / EDGE_POINTS as f64;
-        let s = 1.0 - t;
-        a * (s * s * s) + b * (3.0 * s * s * t) + c * (3.0 * s * t * t) + d * (t * t * t)
-    }));
-    serrate(&mut out[start..], serration, toward_end);
-}
-
-/// Drops every point of a polyline that strays less than `tolerance` from the
-/// chord between the points kept either side of it (Douglas–Peucker). Both
-/// ends are kept.
-fn simplify(line: &mut Vec<DVec2>, tolerance: f64) {
-    let last = line.len() - 1;
-    let mut keep = vec![false; line.len()];
-    (keep[0], keep[last]) = (true, true);
-    let mut spans = vec![(0, last)];
-    while let Some((a, b)) = spans.pop() {
-        let chord = (line[b] - line[a]).normalize_or(DVec2::X);
-        let off = |i: &usize| chord.perp_dot(line[*i] - line[a]).abs();
-        let far = (a + 1..b).max_by(|i, j| off(i).total_cmp(&off(j)));
-        if let Some(far) = far.filter(|i| off(i) > tolerance) {
-            keep[far] = true;
-            spans.extend([(a, far), (far, b)]);
-        }
-    }
-    let mut kept = keep.into_iter();
-    line.retain(|_| kept.next().unwrap());
-}
-
-/// Cuts every loop out of a polyline where it crosses itself, keeping the
-/// crossing point. A ragged jitter can fold a slit's walls over each other.
-fn untangle(points: &mut Vec<DVec2>) {
-    let mut i = 0;
-    while i + 3 < points.len() {
-        let (a, b) = (points[i], points[i + 1]);
-        let hit = (i + 2..points.len() - 1)
-            .find_map(|j| crossing(a, b, points[j], points[j + 1]).map(|at| (j, at)));
-        match hit {
-            Some((j, at)) => drop(points.splice(i + 1..=j, [at])),
-            None => i += 1,
-        }
-    }
-}
-
-/// Where segments `a`–`b` and `c`–`d` cross, if they do.
-fn crossing(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> Option<DVec2> {
-    let (r, s) = (b - a, d - c);
-    let den = r.perp_dot(s);
-    if den.abs() < 1e-15 {
-        return None;
-    }
-    let t = (c - a).perp_dot(s) / den;
-    let u = (c - a).perp_dot(r) / den;
-    ((1e-9..1.0 - 1e-9).contains(&t) && (1e-9..1.0 - 1e-9).contains(&u)).then(|| a + r * t)
-}
-
-/// Small sawtooth teeth along a polyline on the +Y side, `depth` deep and
-/// [`TOOTH_SPACING`] depths apart, leaning toward its end (or its start) and
-/// fading out at both ends.
-fn serrate(edge: &mut [DVec2], depth: f64, toward_end: bool) {
-    let mut arcs = vec![0.0];
-    for pair in edge.windows(2) {
-        arcs.push(arcs[arcs.len() - 1] + pair[0].distance(pair[1]));
-    }
-    let length = arcs[arcs.len() - 1];
-    if depth <= 0.0 || length < 2.0 * TOOTH_SPACING * depth {
-        return;
-    }
-    let teeth = (length / (TOOTH_SPACING * depth)).floor();
-    let rise = if toward_end { 0.75 } else { 0.25 };
-    let outward: Vec<DVec2> = (0..edge.len())
-        .map(|i| {
-            let along = edge[(i + 1).min(edge.len() - 1)] - edge[i.saturating_sub(1)];
-            along.normalize_or_zero().perp()
-        })
-        .collect();
-    for (i, point) in edge.iter_mut().enumerate() {
-        let f = (arcs[i] / length * teeth).fract();
-        let saw = if f < rise {
-            f / rise
-        } else {
-            (1.0 - f) / (1.0 - rise)
-        };
-        *point += outward[i] * (depth * saw * (PI * arcs[i] / length).sin());
-    }
+    cubic(out, curve, EDGE_POINTS);
+    serrate(&mut out[start..], serration, TOOTH_SPACING, toward_end);
 }
 
 #[cfg(test)]

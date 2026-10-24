@@ -251,6 +251,12 @@ const LEAF_ROLL: f64 = 0.35;
 /// Spread of the droop about [`ShootConfig::leaf_droop`], as a fraction.
 const LEAF_DROOP_JITTER: f64 = 0.3;
 
+/// How often a leaf leans the way of its rank — see
+/// [`leaf::LeafParams::asymmetry`]. Successive leaves up a grapevine shoot
+/// are mirror images in which half is the larger about three times in four,
+/// which each leaf following its rank this often comes to.
+const RANK_LEAN: f64 = 0.85;
+
 /// How much a leaf's size varies about what its age asks for, as a fraction.
 const LEAF_VIGOUR: f64 = 0.12;
 
@@ -258,14 +264,18 @@ const LEAF_VIGOUR: f64 = 0.12;
 const TIP_SCALE: f64 = 0.15;
 
 /// How far below the growing point a shoot's leaves are still expanding, in
-/// meters.
+/// meters: about ten nodes at the default spacing, since a shoot unfolds a
+/// leaf every couple of days and a leaf takes about a month to reach full
+/// size. A default shoot is no longer than this, so every leaf on it is
+/// still filling out and only a vigorous one carries grown leaves at its
+/// base.
 ///
 /// A *length* rather than a number of nodes, and that is the point: a shoot
-/// extends at a roughly steady rate and a leaf takes about a month to reach
-/// full size, so the growing tip is the same span of shoot whatever
-/// [`ShootConfig::internode`] is set to. Counting nodes instead would make the
-/// canopy's age gradient change every time its density did.
-const EXPANDING_REACH: f64 = 0.25;
+/// extends at a roughly steady rate, so the growing tip is the same span of
+/// shoot whatever [`ShootConfig::internode`] is set to. Counting nodes
+/// instead would make the canopy's age gradient change every time its
+/// density did.
+const EXPANDING_REACH: f64 = 0.7;
 
 // ─── Bud constants ──────────────────────────────────────────────────
 
@@ -497,6 +507,10 @@ pub struct ShootParams {
     /// Rides on each leaf's own maturity, so the mature blades down the shoot
     /// hang at about this and the small ones at the tip stand nearly straight
     /// out — which is what a petiole holding a tenth of the weight does.
+    ///
+    /// The blade's, not the petiole's: a grown blade bends down off its
+    /// petiole by [`leaf::LeafParams::blade_angle`], and the petiole is held
+    /// up by as much more than this.
     #[reflect(@Slider { min: 0.0, max: 1.2, step: 0.05 })]
     pub leaf_droop: f32,
     /// Vertices around the tube.
@@ -1124,15 +1138,26 @@ pub(crate) fn build(
         let bearing = rng.unit() * TAU;
 
         for node in nodes {
-            // Six draws per node: the bearing's wander, the droop, the twist
-            // about the blade's own long axis, its vigour, then which blade it
-            // drew and how far that blade curls.
+            // Eight draws per node: the bearing's wander, the droop, the twist
+            // about the blade's own long axis, its vigour, then how deeply its
+            // blade is cut, how far it curls, how far it leans and whether it
+            // leans the way of its rank.
             let turn = rng.range(-LEAF_SPREAD, LEAF_SPREAD);
             let sag = rng.range(1.0 - LEAF_DROOP_JITTER, 1.0 + LEAF_DROOP_JITTER);
             let roll = rng.range(-LEAF_ROLL, LEAF_ROLL);
             let vigour = rng.range(1.0 - LEAF_VIGOUR, 1.0 + LEAF_VIGOUR);
-            let outline = (rng.unit() * leaf::OUTLINES.len() as f64) as usize;
+            let shape = rng.unit();
             let curl = rng.unit();
+            let lean = rng.unit();
+            let with_rank = rng.unit() < RANK_LEAN;
+            let rank = if node.index % 2 == 0 { 1.0 } else { -1.0 };
+            let blade = leaf::LeafConfig::new(
+                &leaf_params,
+                node.maturity,
+                shape,
+                curl,
+                if with_rank { lean * rank } else { -lean * rank },
+            );
 
             // Wrapped, because the rank angle runs past a full turn by the
             // fourth node.
@@ -1143,15 +1168,19 @@ pub(crate) fn build(
                 None => placed(
                     node.position,
                     bearing,
-                    // A leaf is drawn flat along +X with its face toward +Z,
-                    // so the tilt is the whole of its posture: X twists the
-                    // blade about its own long axis, Y pitches its tip down.
+                    // A leaf is drawn along +X with its face toward +Z, so the
+                    // tilt is the whole of its posture: X twists it about its
+                    // petiole, Y pitches the petiole down. The blade bends
+                    // down off the petiole by its kink, so the petiole is
+                    // raised by as much to hang the blade at the droop.
                     Vec2::new(
                         roll as f32,
-                        (config.leaf_droop as f64 * node.maturity as f64 * sag) as f32,
+                        (config.leaf_droop as f64 * node.maturity as f64 * sag) as f32
+                            - blade.kink(),
                     ),
-                    // `leaf::AREA` is the same for every blade, so a scale is
-                    // a size in meters whichever one this node drew.
+                    // Every blade is built at a full-grown leaf's area, so a
+                    // scale is a share of that size whatever stage this
+                    // node's is cut at.
                     node.maturity * vigour as f32,
                 ),
             };
@@ -1186,7 +1215,7 @@ pub(crate) fn build(
                         Name::new(format!("Leaf_{:02}", node.index)),
                         placement,
                         Visibility::default(),
-                        leaf::LeafConfig::new(&leaf_params, outline, curl),
+                        blade,
                         Order(leaf_order),
                     ));
                 }
@@ -1717,29 +1746,71 @@ mod tests {
         }
     }
 
-    /// What the whole fixed-[`AREA`](leaf::AREA) contract was for: a leaf that
-    /// has finished growing is placed at about 1.0, so a scale is a size in
-    /// meters and nothing downstream has to know which blade it drew.
+    /// What building every blade at one full-grown area was for: a leaf that
+    /// has finished growing is placed at exactly 1.0, so a scale is a share
+    /// of that size and nothing downstream has to know what its blade was
+    /// cut to. A default shoot is shorter than the growing span, so this
+    /// takes a long one.
     #[test]
     fn a_mature_leaf_is_placed_at_about_full_size() {
         assert_eq!(leaf_scale(EXPANDING_REACH), 1.0, "past the growing tip");
         assert_eq!(leaf_scale(0.0), TIP_SCALE, "and at the very tip");
 
-        let (axis, nodes) = nodes(&config(), 1);
+        let (axis, nodes) = nodes(&config_with(|p| p.length = 2.0), 1);
         let mature: Vec<f32> = nodes
             .iter()
-            .filter(|n| (axis.length() - n.station as f64) > EXPANDING_REACH * 1.5)
+            .filter(|n| (axis.length() - n.station as f64) > EXPANDING_REACH)
             .map(|n| n.maturity)
             .collect();
 
         assert!(
             mature.len() > 3,
-            "most of a shoot is mature, got {mature:?}"
+            "the base of a long shoot is mature, got {mature:?}"
         );
         assert!(
             mature.iter().all(|m| (m - 1.0).abs() < 1e-6),
             "a grown leaf is exactly full size before its vigour, got {mature:?}"
         );
+    }
+
+    /// Up a shoot, a leaf leans the other way from the leaf below it about
+    /// three times in four, and a grown one holds its petiole up so its blade
+    /// can hang off the end.
+    #[test]
+    fn leaves_lean_in_turn_and_hold_their_petioles_up() {
+        let mut app = testing::grown(VineyardParams::default());
+        let leaves = organs::<leaf::LeafConfig>(app.world_mut());
+        let index = |name: &str| name.trim_start_matches("Leaf_").parse::<usize>().unwrap();
+
+        let (mut turned, mut pairs) = (0, 0);
+        for pair in leaves.windows(2) {
+            // Consecutive leaves of one shoot are consecutive nodes.
+            if index(&pair[1].name) == index(&pair[0].name) + 1 {
+                pairs += 1;
+                turned += (pair[0].config.asymmetry * pair[1].config.asymmetry < 0.0) as usize;
+            }
+        }
+        let share = turned as f64 / pairs as f64;
+        assert!(
+            pairs > 500,
+            "the fixture hung shoots of leaves, got {pairs} pairs"
+        );
+        assert!(
+            (0.65..0.85).contains(&share),
+            "successive leaves are mirror images {share:.2} of the time"
+        );
+
+        for leaf in leaves.iter().filter(|l| l.config.maturity == 1.0) {
+            if leaf.path.contains("_edge_body_") {
+                continue; // a stray's posture lies over with its cane
+            }
+            let petiole = leaf.transform.rotation * Vec3::X;
+            assert!(
+                petiole.z > 0.2,
+                "{}: a grown leaf's petiole points up, got {petiole:?}",
+                leaf.path
+            );
+        }
     }
 
     /// Age reads off position: a shoot lays its leaves down in order and keeps
@@ -1932,9 +2003,14 @@ mod tests {
         let mut app = testing::grown(VineyardParams {
             shoot: ShootParams {
                 stray: 1.0,
-                // Droop is the one part of a leaf's posture that turns its
-                // long axis off the stem, so the check below has it flat.
+                // The droop and the blade's bend off its petiole are the
+                // parts of a leaf's posture that turn its long axis off the
+                // stem, so the check below has both flat.
                 leaf_droop: 0.0,
+                ..default()
+            },
+            leaf: leaf::LeafParams {
+                blade_angle: 0.0,
                 ..default()
             },
             ..default()

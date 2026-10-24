@@ -35,9 +35,10 @@ healthy ones still earns a mesh, provided the metric puts it far away.
   that build identically.
 - **Categorical fields get a step.** A young plant and a mature one are
   different plants, not different sizes, so the metric puts them further
-  apart than any two of one kind can be. A leaf's outline is the same: five
-  drawings are five shapes, not five nearby numbers, so any budget of five
-  or more keeps all five. And two configs that build no mesh at all should
+  apart than any two of one kind can be. A leaf cut from one of five
+  drawings is the same: five drawings are five shapes, not five nearby
+  numbers, so any budget of five or more keeps all five. And two configs
+  that build no mesh at all should
   be *zero* apart, so the budget is not spent on things that cost nothing.
 
 ## The budget
