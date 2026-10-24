@@ -8,10 +8,11 @@ drops to the floor; nothing catches it.
 
 What is due and where to cut it come from the scene's own ground truth, not
 from a camera. A truss is due once its least ripe fruit is turning, as the
-generator stages them, and is cut at its `Cut` frame. For each, the trolley
-runs to a station behind the cut on the rail and the lift, the arm moves to a
-stand-off and closes in on a straight line, and once it holds still with the
-mouth within `TOLERANCE` of the cut, `Shears` cuts the truss there.
+generator stages them, and is cut at its `Cut` frame. For each, the arm folds
+and the trolley runs to a station behind the cut on the rail and the lift.
+cuRobo plans the arm from there, around the simulation's own colliders (see
+`planner`), to a stand-off and in on a straight line, and once it holds still
+with the mouth within `TOLERANCE` of the cut, `Shears` cuts the truss there.
 
     uv run harvest.py                        # in Kit's window, running on once done
     HEADLESS=1 uv run harvest.py --viz kit   # without one, printing the tally
@@ -36,7 +37,7 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
 from greenhouse_lab.isaaclab import GreenhouseCfg, LayoutCfg, StemCfg
 from harvester import AISLE, ARM_HOME, HAND, LIFT, RAIL, Harvester, arm_joints, harvester_cfg
-from kinematics import solve
+from kinematics import frames
 from misina_lab.isaaclab import rods
 
 BELOW = 1.8
@@ -67,21 +68,20 @@ STAGES = ("set", "expanding", "mature_green", "breaker", "turning", "pink", "lig
 DUE = STAGES.index("turning")
 
 STANDOFF = 0.12
-"""How far short of the cut, along the approach, the planned move ends."""
+"""How far short of the cut, back along the cutter, the straight line in starts."""
 BACK = 0.3
-"""How far behind the cut, along the approach, the arm's base is stationed."""
+"""How far behind the cut, down the rail, the arm's base is stationed."""
 RISE = 0.15
 """How far above the shoulder the cut is held, where the lift reaches."""
-HOP = 0.5
-"""How far the trolley may run with the arm out, in meters. A longer run
-folds the arm where the trolley stands first and reaches out again at the
-end, so the arm never sweeps the crop wall."""
-STEPS = np.array([0.02, 0.02, 0.01, *[0.04] * 6])
-"""How far each joint's target may move per control tick on a planned move,
-every joint pacing itself to arrive with the slowest: 1 m/s across and down
-a path, 0.5 m/s up, and 2 rad/s on the arm, under the UR5e's 3.14."""
-CLOSE_IN = 0.008
-"""How far the mouth moves per control tick on the straight line: 0.4 m/s."""
+TILTS = np.radians([0.0, 20.0, -20.0])
+"""How far off level the cutter may come in. Square to the peduncle, it has
+the peduncle across the V. Level, it is square to a standing stem too, which
+then crosses the V's plane at the mouth and nowhere nearer the head; tilted,
+the stem crosses toward the head, and 20 degrees keeps it off its corner."""
+STEPS = np.array([0.02, 0.02, 0.01])
+"""How far each trolley joint's target may move per control tick on a run,
+every joint pacing itself to arrive with the slowest: 1 m/s across and down a
+path, 0.5 m/s up."""
 ARRIVED = 0.05
 """How close every joint has to be to its goal, in radians or meters."""
 STILL = 0.002
@@ -90,9 +90,6 @@ count as settled: a tenth of a radian a second."""
 TOLERANCE = 0.015
 """How close the mouth has to hold to the cut for the truss to be cut, in
 meters."""
-REACH_TOLERANCE = (0.005, 0.05)
-"""How close the solver has to get a pose, in meters and radians, for it to
-count as reached."""
 PATIENCE = 300
 """Control ticks a stage may wait on the robot before its job is given up
 on: 6 s."""
@@ -100,15 +97,6 @@ FALL = 3.0
 """Seconds the last truss is given to fall before the tally."""
 FELL = 0.2
 """How far, in meters, every body of a cut truss has dropped once it fell."""
-
-SEEDS = (
-    (0.0, -1.2, 1.6, -0.4, 1.57, 0.0),
-    (np.pi, -1.2, 1.6, -0.4, 1.57, 0.0),
-    (0.0, -1.9, -1.6, 0.4, -1.57, 0.0),
-    (np.pi, -1.9, -1.6, 0.4, -1.57, 0.0),
-)
-"""Arm postures the solver restarts from when the one the arm is in folds it
-away from a cut: reaching out to either side, elbow up or down."""
 
 # A rod body's label ends in its segment's prim; segment 0 is the held one.
 SEGMENT = re.compile(r"(.*)/Cable_edge_body_(\d+)$")
@@ -227,55 +215,38 @@ def plan(trusses: list[Truss], ys: list[float], paths: list[int], pitch: float) 
     return jobs
 
 
-def squared(truss: Truss) -> np.ndarray:
-    """The mouth's frame at the cut: +X along the peduncle, so it lies across
-    the V, and +Z the approach, level and square to the peduncle, from down
-    the row -- or from the path, where the peduncle runs along the row."""
-    tangent = truss.cut[:3, 0] / np.linalg.norm(truss.cut[:3, 0])
-    approach = np.cross([0.0, 0.0, 1.0], tangent)
-    approach /= np.linalg.norm(approach)
-    if approach @ (truss.side + [0.5, 0.0, 0.0]) < 0:
-        approach = -approach
-    pose = np.eye(4)
-    pose[:3, 0] = tangent
-    pose[:3, 1] = np.cross(approach, tangent)
-    pose[:3, 2] = approach
-    pose[:3, 3] = truss.cut[:3, 3]
-    return pose
+def approaches(truss: Truss, base: np.ndarray) -> list[np.ndarray]:
+    """The mouth's poses that cut `truss`: at its `Cut`, +X along the
+    peduncle either way, so it lies across the V, and +Z the way the cutter
+    comes in, square to the peduncle and within `TILTS` of level. It comes in
+    along the row away from `base`, where the arm stands, so the arm reaches
+    past the near side of the cut, not round its far side."""
+    along = truss.cut[:3, 0] / np.linalg.norm(truss.cut[:3, 0])
+    heading = np.cross([0.0, 0.0, 1.0], along)
+    heading /= np.linalg.norm(heading)
+    if heading @ (truss.cut[:3, 3] - base) < 0:
+        heading = -heading
+    up = np.cross(along, heading)
+    poses = []
+    for tilt in TILTS:
+        approach = np.cos(tilt) * heading + np.sin(tilt) * up
+        for x in (along, -along):
+            pose = np.eye(4)
+            pose[:3, 0], pose[:3, 1], pose[:3, 2] = x, np.cross(approach, x), approach
+            pose[:3, 3] = truss.cut[:3, 3]
+            poses.append(pose)
+    return poses
 
 
-def station(machine: Harvester, pose: np.ndarray, aisle: float) -> np.ndarray:
-    """Where the trolley stands for a cut at `pose`, in the robot's base
-    frame: across at `aisle`, the arm's base `BACK` behind the cut down the
-    rail, and the lift holding the cut `RISE` above the shoulder. The three
-    joints' positions."""
+def station(machine: Harvester, cut: np.ndarray, aisle: float) -> np.ndarray:
+    """Where the trolley stands for a cut at `cut`, a point in the robot's
+    base frame: across at `aisle`, the arm's base `BACK` behind the cut down
+    the rail, and the lift holding the cut `RISE` above the shoulder. The
+    three joints' positions."""
     chain = machine.chain
     shoulder = chain[2].xyz[2] + chain[3].xyz[2]
-    wanted = [aisle, pose[0, 3] - BACK * pose[0, 2], pose[2, 3] - RISE - shoulder]
+    wanted = [aisle, cut[0] - BACK, cut[2] - RISE - shoulder]
     return np.clip(wanted, *zip(*(joint.limits for joint in chain[:3]), strict=True))
-
-
-def held(chain, q) -> tuple:
-    """`chain` with the trolley's joints held where `q` has them."""
-    return tuple(
-        dataclasses.replace(joint, limits=(value, value)) if joint.prismatic else joint
-        for joint, value in zip(chain, q, strict=True)
-    )
-
-
-def reach(machine: Harvester, pose: np.ndarray, q: np.ndarray) -> tuple[np.ndarray, bool]:
-    """Joint positions for `pose`, in the robot's base frame, with the trolley
-    held where `q` has it: from the arm's own posture or, failing that, from
-    each of `SEEDS`. The closest try, and whether any reached it."""
-    chain = held(machine.chain, q)
-    best = None
-    for seed in (q[3:], *SEEDS):
-        result = solve(chain, machine.tool, pose, [*q[:3], *seed])
-        if result[1] <= REACH_TOLERANCE[0] and result[2] <= REACH_TOLERANCE[1]:
-            return result[0], True
-        if best is None or result[1] < best[1]:
-            best = result
-    return best[0], False
 
 
 @dataclasses.dataclass
@@ -283,6 +254,8 @@ class Tally:
     due: int = 0
     reachable: int = 0
     cut: int = 0
+    crowded: int = 0
+    """Reachable only by brushing a truss."""
     missed: int = 0
     fell: int = 0
     seconds: float = 0.0
@@ -291,6 +264,7 @@ class Tally:
         share = lambda part: f"{100 * part / self.due:.0f}%" if self.due else "n/a"  # noqa: E731
         return (
             f"{self.due} trusses due: {share(self.reachable)} reachable, "
+            f"{self.crowded} of them only by brushing a truss, "
             f"{share(self.cut)} cut, {share(self.fell)} fell, {self.missed} given up on, "
             f"{self.seconds / max(self.cut, 1):.1f} s per truss cut"
         )
@@ -300,121 +274,162 @@ class Harvest:
     """The jobs `plan` lists, done one at a time, a control tick at a time.
 
     `control` takes where the joints are and the mouth's world pose, and
-    returns every joint's target. A joint position is a planned move; a truss
-    is a planned move to its station and stand-off -- the arm folded first
-    when the rail has far to run -- a straight line in, holding still until
-    the mouth is at the cut, the cut, and the line back out. Poses are solved
-    in the robot's base frame, `base` in the world.
+    returns every joint's position and velocity targets. The trolley runs
+    only with the arm folded, and `planner` plans the fold from wherever the
+    arm is. A joint position is a run to it. A truss is a run to its station,
+    and then the cut `planner` plans from there: the move to a stand-off and
+    the straight line in, holding still until the mouth is at the cut, the
+    cut, and the line back out. The robot's base is at `base` in the world.
+
+    A cut is planned clear of everything first, but for the held segment and
+    the next, which the cutter closes on. Failing that, the arm may brush
+    the truss it cuts, and failing that any truss: the rods bend aside, as
+    the crop does round a picker's arm. The trolley, the rails and the floor
+    it never touches.
     """
 
-    def __init__(self, machine: Harvester, jobs: list, base: np.ndarray, q, shears, tally: Tally):
-        self.machine, self.base, self.shears, self.tally = machine, base, shears, tally
+    def __init__(
+        self, machine: Harvester, planner, jobs: list, base: np.ndarray, q, shears, tally: Tally
+    ):
+        self.machine, self.planner, self.base = machine, planner, base
+        self.shears, self.tally = shears, tally
         self.jobs = list(jobs)
         self.q = np.array(q, dtype=float)
         self.target = self.q.copy()
+        self.velocity = np.zeros_like(self.q)
         self.cut: list[Truss] = []
         """The trusses cut, in order."""
         self.time = 0.0
+        self.soft: set[int] = set()
+        """The rod bodies the arm may brush, those the last cut was planned through."""
         self._next()
 
     @property
     def done(self) -> bool:
         return self.stage == "done"
 
+    def platform(self) -> np.ndarray:
+        """The platform's pose in the world, the trolley where it is held: a
+        run overshoots its station by centimetres before it settles there."""
+        return self.base @ frames(self.machine.chain[:3], self.target[:3])[-1]
+
     def _next(self) -> None:
         """Start on the next job, or finish."""
-        self.ticks = 0
         while self.jobs:
             self.job = self.jobs.pop(0)
             if not isinstance(self.job, Truss):
-                self.stage, self.goals = "move", self._route(self.job)
-                return
-            if self.shears.loose[np.searchsorted(self.shears.bodies, self.job.bodies[1])]:
+                self.goal = self.job[:3]
+            elif self.shears.loose[np.searchsorted(self.shears.bodies, self.job.bodies[1])]:
                 continue
-            self.pose = np.linalg.inv(self.base) @ squared(self.job)
-            self.standoff = self.pose.copy()
-            self.standoff[:3, 3] -= STANDOFF * self.pose[:3, 2]
-            here = self.q.copy()
-            here[:3] = station(self.machine, self.pose, self.q[0])
-            goal, ok = reach(self.machine, self.standoff, here)
-            if not (ok and reach(self.machine, self.pose, goal)[1]):
-                print(f"[INFO]: {self.job.prim}: out of reach")
-                continue
-            self.tally.reachable += 1
-            self.stage, self.goals, self.started = "move", self._route(goal), self.time
-            self.line = self.standoff[:3, 3].copy()
+            else:
+                cut = np.linalg.inv(self.base) @ self.job.cut[:, 3]
+                self.goal = station(self.machine, cut, self.target[0])
+                self.started = self.time
+            self._fold()
             return
         self.job, self.stage = None, "done"
 
-    def _route(self, goal: np.ndarray) -> list[np.ndarray]:
-        """The joint positions a planned move to `goal` goes through: `goal`
-        alone for a hop, or for a longer run the arm folded where the trolley
-        stands, the trolley run with it folded, and `goal`."""
-        if np.abs(goal[:2] - self.target[:2]).max() <= HOP:
-            return [goal]
-        return [np.array([*self.target[:3], *ARM_HOME]), np.array([*goal[:3], *ARM_HOME]), goal]
+    def _fold(self) -> None:
+        """Fold the arm where the trolley stands, unless it is folded, to run."""
+        self.stage, self.ticks = "run", 0
+        if np.abs(self.q[3:] - ARM_HOME).max() < ARRIVED:
+            return
+        folding = self.planner.fold(self.q[3:], self.platform(), self.soft)
+        if folding is None:
+            # From a pose already touching what it may not brush, a fold
+            # finds no way; the arm folds on a straight line instead.
+            print(f"[INFO]: no clear way to fold from {np.round(self.q[3:], 2)}")
+            line = np.linspace(
+                self.q[3:], ARM_HOME, 1 + int(np.abs(ARM_HOME - self.q[3:]).max() / 0.04)
+            )
+            folding = (line, np.gradient(line, self.planner.dt, axis=0))
+        self._play("fold", folding)
 
-    def control(self, q: np.ndarray, mouth: np.ndarray) -> np.ndarray:
+    def _plan(self) -> None:
+        """Plan the cut of the truss the trolley stands for, or give it up."""
+        truss, platform = self.job, self.platform()
+        poses = approaches(truss, platform[:3, 3])
+        for soft in (set(truss.bodies[:2]), set(truss.bodies), set(self.shears.bodies)):
+            planned = self.planner.cut(self.q[3:], platform, poses, STANDOFF, soft)
+            if planned is not None:
+                break
+        if planned is None:
+            print(f"[INFO]: {truss.prim}: out of reach")
+            self._next()
+            return
+        self.tally.reachable += 1
+        self.tally.crowded += len(soft) > 2
+        self.planned, self.soft = planned, soft
+        self._play("approach", planned.approach)
+
+    def _play(self, stage: str, trajectory: tuple[np.ndarray, np.ndarray]) -> None:
+        self.stage, self.ticks, self.clock = stage, 0, 0.0
+        self.trajectory = trajectory
+
+    def control(self, q: np.ndarray, mouth: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Advance one tick, `q` every joint's position and `mouth` the mouth's
-        world pose. Returns every joint's target."""
+        world pose. Returns every joint's position and velocity targets."""
         moved = float(np.abs(q - self.q).max())
         self.q = np.array(q, dtype=float)
+        self.velocity[:] = 0.0
         if self.done:
-            return self.target
-        self.time += DECIMATION * SIM_DT
+            return self.target, self.velocity
+        tick = DECIMATION * SIM_DT
+        self.time += tick
         self.ticks += 1
-        if self.ticks > PATIENCE:
-            print(f"[INFO]: {getattr(self.job, 'prim', 'a move')}: gave up at {self.stage}")
+        settled = np.abs(self.target - self.q).max() < ARRIVED and moved < STILL
+        if self.ticks > PATIENCE and self.stage == "cut":
+            # Backed out along the line it came in on, clear of the crop.
+            print(f"[INFO]: {self.job.prim}: gave up at the cut")
+            self.tally.missed += 1
+            self._play("outward", self.planned.outward)
+        elif self.ticks > PATIENCE:
+            print(f"[INFO]: {getattr(self.job, 'prim', 'a run')}: gave up at {self.stage}")
             self.tally.missed += isinstance(self.job, Truss)
             self._next()
-            return self.target
-        if self.stage == "move":
-            gap = self.goals[0] - self.target
+        elif self.stage == "run":
+            gap = self.goal - self.target[:3]
             if np.abs(gap).any():
                 # Every joint paced to arrive with the slowest; patience
                 # counts only the wait for the robot to catch up.
-                self.target = self.target + gap / max(np.abs(gap / STEPS).max(), 1.0)
+                step = gap / max(np.abs(gap / STEPS).max(), 1.0)
+                self.target[:3] += step
+                self.velocity[:3] = step / tick
                 self.ticks = 0
-                return self.target
-            if np.abs(self.goals[0] - self.q).max() >= ARRIVED:
-                return self.target
-            self.goals.pop(0)
-            if self.goals:
-                return self.target
-            if not isinstance(self.job, Truss):
+            elif settled and isinstance(self.job, Truss):
+                self._plan()
+            elif settled:
                 self._next()
-                return self.target
-            self.stage, self.ticks = "approach", 0
-        if self.stage in ("approach", "retract"):
-            # The straight line, a step of the mouth at a time, each solved
-            # from where the arm is; the end of it held until the robot is
-            # there and still.
-            end = (self.pose if self.stage == "approach" else self.standoff)[:3, 3]
-            gap = end - self.line
-            distance = float(np.linalg.norm(gap))
-            if distance > 1e-6:
-                self.line = self.line + gap * min(CLOSE_IN / distance, 1.0)
-                pose = self.pose.copy()
-                pose[:3, 3] = self.line
-                chain = held(self.machine.chain, self.target)
-                start = [*self.target[:3], *self.q[3:]]
-                self.target, _, _ = solve(chain, self.machine.tool, pose, start, iterations=50)
-            elif np.abs(self.target - self.q).max() < ARRIVED and moved < STILL:
-                if self.stage == "retract":
-                    self._next()
-                    return self.target
-                self.stage, self.ticks = "cut", 0
-        if self.stage == "cut":
+        elif self.stage == "cut":
             # Held still with the mouth at the cut, the truss is cut at its
             # first joint, by the stem, which `Cut` sits within a centimetre of.
-            if np.linalg.norm(mouth[:3, 3] - self.job.cut[:3, 3]) <= TOLERANCE:
+            if moved < STILL and np.linalg.norm(mouth[:3, 3] - self.job.cut[:3, 3]) <= TOLERANCE:
                 self.shears.cut(self.job.bodies[1], 0.0)
                 print(f"[INFO]: {self.job.prim}: cut after {self.time - self.started:.1f} s")
                 self.cut.append(self.job)
                 self.tally.cut += 1
                 self.tally.seconds += self.time - self.started
-                self.stage, self.ticks = "retract", 0
-        return self.target
+                self._play("outward", self.planned.outward)
+        else:
+            # A planned stretch, played on the simulation's clock, its end
+            # held still until the robot is there and still.
+            positions, velocities = self.trajectory
+            self.clock += tick
+            at = self.clock / self.planner.dt
+            if at < len(positions) - 1:
+                i, share = int(at), at - int(at)
+                self.target[3:] = (1 - share) * positions[i] + share * positions[i + 1]
+                self.velocity[3:] = (1 - share) * velocities[i] + share * velocities[i + 1]
+                self.ticks = 0
+            else:
+                self.target[3:] = positions[-1]
+                if settled and self.stage == "approach":
+                    self._play("inward", self.planned.inward)
+                elif settled and self.stage == "outward":
+                    self._next()
+                elif settled:
+                    self.stage, self.ticks = {"fold": "run", "inward": "cut"}[self.stage], 0
+        return self.target, self.velocity
 
 
 def frame_of(position: np.ndarray, quat: np.ndarray) -> np.ndarray:
@@ -462,6 +477,7 @@ def run(
     from isaaclab_newton.physics import NewtonManager
 
     from misina_lab.isaaclab.cutting import Shears
+    from planner import Planner
 
     stage = sim_utils.get_current_stage()
     sim.reset()
@@ -487,11 +503,16 @@ def run(
         robot.data.root_quat_w.torch[0].cpu().numpy(),
     )
 
-    def hold(targets) -> None:
-        robot.actuators.target_command.set_position_index(
-            value=torch.tensor(targets, dtype=torch.float32, device=robot.device).unsqueeze(0),
-            joint_ids=joints,
-        )
+    def hold(targets, velocities) -> None:
+        command = robot.actuators.target_command
+        for set_index, value in (
+            (command.set_position_index, targets),
+            (command.set_velocity_index, velocities),
+        ):
+            set_index(
+                value=torch.tensor(value, dtype=torch.float32, device=robot.device).unsqueeze(0),
+                joint_ids=joints,
+            )
 
     def mouth() -> np.ndarray:
         hand_pose = frame_of(
@@ -501,17 +522,17 @@ def run(
         return hand_pose @ machine.tool
 
     # A drive with no target holds zero, so the arm is held home first.
-    hold([0.0, 0.0, 0.0, *ARM_HOME])
-    harvest = Harvest(
-        machine, jobs, base, robot.data.joint_pos.torch[0, joints].cpu().numpy(), shears, tally
-    )
+    hold([0.0, 0.0, 0.0, *ARM_HOME], np.zeros(len(joints)))
+    # Where the robot spawns: its joints read zero until the first step.
+    spawned = [0.0, 0.0, 0.0, *ARM_HOME]
+    harvest = Harvest(machine, Planner(machine, ROBOT_PATH), jobs, base, spawned, shears, tally)
     print(f"[INFO]: {len(trusses)} trusses bend, {tally.due} due on paths {paths}", flush=True)
     sim.set_camera_view(eye=[-3.5, -2.5, 2.8], target=[1.5, 0.0, 1.0])
     rest = NewtonManager.get_state_0().body_q.numpy()[:, 2].copy()
     step, after = 0, 0
     while sim.is_running():
         if step % DECIMATION == 0:
-            hold(harvest.control(robot.data.joint_pos.torch[0, joints].cpu().numpy(), mouth()))
+            hold(*harvest.control(robot.data.joint_pos.torch[0, joints].cpu().numpy(), mouth()))
         robot.write_data_to_sim()
         sim.step(render=render)
         robot.update(SIM_DT)

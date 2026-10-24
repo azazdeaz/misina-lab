@@ -15,6 +15,14 @@ The cutter is a head on the flange and two blades fixed open in a V in
 front of it. Only the head collides: a truss is cut by rule, with
 `Shears`, once the V's crotch is at its peduncle, and the blades let the
 piece fall rather than catch it.
+
+The robot collides with itself. Its colliders are the trolley's chassis and
+mast, Menagerie's capsules on the arm and the cutter's head; the platform has
+none, the arm's base standing flush on it. The arm's and the cutter's are
+each a `Shape`: `urdf` writes it for Isaac Sim's importer, and `curobo_cfg`
+hands cuRobo the spheres that cover it, so a pose cuRobo finds clear is clear
+in the simulation. The trolley's reach cuRobo with the rest of the world, from
+the simulation itself (see `planner`).
 """
 
 from __future__ import annotations
@@ -22,6 +30,7 @@ from __future__ import annotations
 import dataclasses
 import functools
 import hashlib
+import itertools
 import math
 import pathlib
 import tempfile
@@ -33,6 +42,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
 
+import kinematics
 from kinematics import Joint, rpy_of, transform
 
 ASSETS = "azazdeaz/misina-lab-sim-assets"
@@ -52,6 +62,8 @@ AISLE, RAIL, LIFT = "aisle", "rail", "lift"
 HAND = "wrist_3_link"
 """The body the cutter is fixed to, once the importer merges the fixed joint
 between them, and whose pose says where the mouth is."""
+CUTTER = "cutter"
+"""The cutter's link in the URDF, at the flange, +Z out between the blades."""
 
 ARM_HOME = (0.0, -math.pi / 2, math.pi / 2, -math.pi / 2, -math.pi / 2, 0.0)
 """Joint positions the arm rides folded to: the upper arm upright and the
@@ -77,12 +89,20 @@ ARMATURE = 0.1
 
 HEAD = 0.06
 """How far the cutter's head stands out of the flange, in meters."""
+HEAD_WIDTH = 0.05
+"""The head across, either way."""
 BLADE = 0.07
 """Length of a blade, out from the crotch of the V."""
 OPENING = 0.7
 """Angle between the blades, in radians."""
 MOUTH = 0.012
 """How far into the V from its crotch the mouth is: where a peduncle is cut."""
+BLADE_THICKNESS, BLADE_WIDTH = 0.003, 0.015
+"""A blade's plate: through it, and across from its inner, cutting edge."""
+
+GRAIN = 0.015
+"""The thinnest a box is cut into for its spheres, in meters: a blade is
+covered a blade's width across, not its thickness."""
 
 MATERIALS = {
     "chassis": "0.18 0.45 0.25 1",
@@ -90,6 +110,59 @@ MATERIALS = {
     "tire": "0.05 0.05 0.05 1",
 }
 """Colours, as URDF rgba: a green trolley, galvanized steel and rubber."""
+
+
+@dataclasses.dataclass(frozen=True)
+class Shape:
+    """A solid in its link's frame: a capsule or a cylinder along its z,
+    `size` its radius and half length, or a box, `size` its extents."""
+
+    kind: str
+    xyz: tuple[float, ...]
+    size: tuple[float, ...]
+    rpy: tuple[float, ...] = (0.0, 0.0, 0.0)
+
+    def geometry(self) -> str:
+        """The URDF geometry of a box or a cylinder."""
+        if self.kind == "box":
+            return f'<box size="{" ".join(str(float(v)) for v in self.size)}"/>'
+        return f'<cylinder radius="{self.size[0]}" length="{2 * self.size[1]}"/>'
+
+    def collision(self) -> str:
+        """As URDF `collision` elements. URDF has no capsule: one is written as
+        its cylinder and a sphere on each end, which make it up exactly."""
+        parts = [_tagged("collision", _origin(self.xyz, self.rpy), self.geometry())]
+        if self.kind == "capsule":
+            frame = transform(self.xyz, self.rpy)
+            ball = f'<sphere radius="{self.size[0]}"/>'
+            for end in (-self.size[1], self.size[1]):
+                centre = frame[:3, :3] @ (0.0, 0.0, end) + frame[:3, 3]
+                parts.append(_tagged("collision", _origin(centre, (0, 0, 0)), ball))
+        return "\n".join(parts)
+
+    def cover(self) -> list[tuple[np.ndarray, float]]:
+        """Spheres whose union holds the shape, each a centre in the link's
+        frame and a radius: along the axis of a capsule or a cylinder, at most
+        its radius apart, and at the middle of each cell of a box cut into
+        cells no thinner than `GRAIN`."""
+        frame = transform(self.xyz, self.rpy)
+        if self.kind == "box":
+            size = np.array(self.size, dtype=float)
+            counts = np.ceil(size / max(size.min(), GRAIN)).astype(int)
+            cell = size / counts
+            centres = [cell * (np.array(i) + 0.5) - size / 2 for i in np.ndindex(*counts)]
+            radius = float(np.linalg.norm(cell)) / 2
+        else:
+            radius, half = self.size
+            count = math.ceil(2 * half / radius) + 1
+            centres = [np.array([0.0, 0.0, z]) for z in np.linspace(-half, half, count)]
+            # A point midway between two centres is the farthest from either.
+            radius = math.hypot(radius, half / (count - 1)) if count > 1 else radius
+        return [(frame[:3, :3] @ centre + frame[:3, 3], radius) for centre in centres]
+
+
+CUTTER_HEAD = Shape("box", (0.0, 0.0, HEAD / 2), (HEAD_WIDTH, HEAD_WIDTH, HEAD))
+"""The cutter's head, standing out of the flange: the part of it that collides."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -154,6 +227,74 @@ def arm_joints() -> list[str]:
     return [joint.name for joint in _ur5e().joints]
 
 
+def arm_links() -> list[str]:
+    """The arm's moving links, from its base out."""
+    return list(_ur5e().bodies[1:])
+
+
+def spheres() -> dict[str, list[dict]]:
+    """The arm's and the cutter's shapes as the spheres cuRobo collides, by
+    link: each one's `Shape.cover`. The blades are covered too: the
+    simulation lets a cut truss fall through them, and the planner keeps them
+    off the crop all the same."""
+    shapes = {**_ur5e().shapes, CUTTER: (CUTTER_HEAD, *blades())}
+    return {
+        link: [
+            {"center": centre.tolist(), "radius": radius}
+            for shape in solids
+            for centre, radius in shape.cover()
+        ]
+        for link, solids in shapes.items()
+    }
+
+
+def curobo_cfg(machine: Harvester) -> dict:
+    """The arm as cuRobo's robot config: from the platform out to the cutter,
+    the tool it poses, colliding as `spheres`. Every pair of links is checked
+    against the other but a joint's two and the pairs whose spheres meet at
+    `ARM_HOME`: the last wrist spins the cutter about an axis the wrist before
+    it shares, so those two meet however the arm is posed."""
+    covers = spheres()
+    arm = _ur5e()
+    frames = kinematics.frames(machine.chain, [0.0, 0.0, 0.0, *ARM_HOME])
+    placed = dict(zip(arm.bodies[1:], frames[3:], strict=True))
+    placed[CUTTER] = placed[HAND] @ arm.flange
+
+    def balls(link: str) -> tuple[np.ndarray, np.ndarray]:
+        centres = np.array([ball["center"] for ball in covers[link]])
+        radii = np.array([ball["radius"] for ball in covers[link]])
+        return centres @ placed[link][:3, :3].T + placed[link][:3, 3], radii
+
+    chain = [*arm.bodies[1:], CUTTER]
+    ignore = {link: [after] for link, after in zip(chain, chain[1:])}
+    for a, b in itertools.combinations(covers, 2):
+        (ca, ra), (cb, rb) = balls(a), balls(b)
+        gaps = np.linalg.norm(ca[:, None] - cb[None], axis=-1) - ra[:, None] - rb[None]
+        if gaps.min() < 0 and b not in ignore.get(a, []):
+            ignore.setdefault(a, []).append(b)
+    return {
+        "kinematics": {
+            "urdf_path": write_urdf(machine),
+            "base_link": "platform",
+            "tool_frames": [CUTTER],
+            "collision_link_names": list(covers),
+            "collision_spheres": covers,
+            "self_collision_ignore": ignore,
+            "self_collision_buffer": {},
+            "cspace": {
+                "joint_names": arm_joints(),
+                "default_joint_position": list(ARM_HOME),
+                "cspace_distance_weight": [1.0] * len(ARM_HOME),
+                "null_space_weight": [1.0] * len(ARM_HOME),
+                # Every joint but the elbow turns two full turns; cut to one,
+                # the planner never reaches for a pose a turn away. The tenth
+                # of a radian more keeps a pose the arm overshoots in range.
+                "position_limit_clip": [math.pi + 0.1, math.pi + 0.1, 0.1] + [math.pi + 0.1] * 3,
+            },
+        }
+    }
+
+
 def harvester_cfg(machine: Harvester, prim_path: str, position) -> ArticulationCfg:
     """An articulation spawning `machine` with its base at `position`,
     converting its URDF on first use."""
@@ -161,11 +302,12 @@ def harvester_cfg(machine: Harvester, prim_path: str, position) -> ArticulationC
     return ArticulationCfg(
         prim_path=prim_path,
         spawn=sim_utils.UrdfFileCfg(
-            asset_path=_write_urdf(machine),
+            asset_path=write_urdf(machine),
             usd_dir=str(_CACHE),
             fix_base=True,
             joint_drive=None,  # the actuators below own the gains
             activate_contact_sensors=False,
+            self_collision=True,
         ),
         init_state=ArticulationCfg.InitialStateCfg(
             pos=tuple(position), joint_pos=dict(zip(arm_joints(), ARM_HOME, strict=True))
@@ -207,8 +349,10 @@ class _Arm:
     bodies: tuple[str, ...]
     """Menagerie's bodies from the base out, which name the links."""
     links: tuple[str, ...]
-    """Each body as a URDF link: Menagerie's meshes, colliding as cylinders
-    spanning its capsules."""
+    """Each body as a URDF link: Menagerie's meshes, colliding as its
+    capsules."""
+    shapes: dict[str, tuple[Shape, ...]]
+    """Each body's capsules, and the one cylinder on the last wrist."""
     flange: np.ndarray
     """The frame off the last wrist a tool bolts on, +Z out of the hand."""
     mount: tuple[float, float, float]
@@ -241,7 +385,7 @@ def _ur5e() -> _Arm:
         """An element's attributes, its default class's under them."""
         return {**classes[element.get("class", cls)][element.tag], **element.attrib}
 
-    joints, bodies, links = [], [], []
+    joints, bodies, links, shapes = [], [], [], {}
     for body, cls in _bodies(base, "main"):
         bodies.append(body.get("name"))
         if (joint := body.find("joint")) is not None:
@@ -259,21 +403,21 @@ def _ur5e() -> _Arm:
                     velocity=math.pi,
                 )
             )
-        parts = []
+        parts, solids = [], []
         for geom in body.findall("geom"):
             spec = attrs(geom, cls)
-            origin = _origin(*_placed(geom))
+            xyz, rpy = _placed(geom)
             if spec.get("type") == "mesh":
                 mesh = f'<mesh filename="{meshes / spec["mesh"]}.obj"/>'
                 material = spec["material"]
-                parts.append(_tagged("visual", origin, mesh, (material, colours[material])))
+                parts.append(
+                    _tagged("visual", _origin(xyz, rpy), mesh, (material, colours[material]))
+                )
             else:
-                # URDF has no capsule: one is written as the cylinder that
-                # spans it, its caps included.
-                radius, half = _numbers(spec["size"])
-                length = 2 * half + (2 * radius if spec["type"] == "capsule" else 0.0)
-                cylinder = f'<cylinder radius="{radius}" length="{length}"/>'
-                parts.append(_tagged("collision", origin, cylinder))
+                solids.append(Shape(spec["type"], xyz, _numbers(spec["size"]), rpy))
+        parts += [solid.collision() for solid in solids]
+        if solids:
+            shapes[body.get("name")] = tuple(solids)
         inertial = body.find("inertial")
         parts.append(
             _inertial(
@@ -286,7 +430,12 @@ def _ur5e() -> _Arm:
 
     site = mjcf.find(".//site[@name='attachment_site']")
     return _Arm(
-        tuple(joints), tuple(bodies), tuple(links), transform(*_placed(site)), _placed(base)[1]
+        tuple(joints),
+        tuple(bodies),
+        tuple(links),
+        shapes,
+        transform(*_placed(site)),
+        _placed(base)[1],
     )
 
 
@@ -342,7 +491,7 @@ _CACHE = pathlib.Path(tempfile.gettempdir()) / "greenhouse_demo"
 robots, and the URDF converter caches on the name too."""
 
 
-def _write_urdf(machine: Harvester) -> str:
+def write_urdf(machine: Harvester) -> str:
     """Build the URDF for one machine and return its path, writing it once."""
     text = urdf(machine)
     _CACHE.mkdir(parents=True, exist_ok=True)
@@ -358,7 +507,8 @@ def urdf(machine: Harvester) -> str:
     across it, the trolley down a path off the carriage, and the platform up
     the trolley's mast; the arm stands on the platform through a fixed joint
     the importer merges away, and the cutter on the last wrist through
-    another. Nothing but the arm and the cutter's head collides.
+    another. The trolley's chassis and mast collide, the arm and the
+    cutter's head; the platform, the wheels and the blades are drawn only.
     """
     m = machine
     aisle, rail, lift, *_ = m.chain
@@ -397,9 +547,9 @@ def urdf(machine: Harvester) -> str:
   </link>
 {_joint(rail, "carriage", "trolley")}
   <link name="trolley">
-{_box((0.0, 0.0, bottom + chassis / 2), (m.length, m.width, chassis), "chassis")}
+{_box((0.0, 0.0, bottom + chassis / 2), (m.length, m.width, chassis), "chassis", BOTH)}
 {wheels}
-{_box((rear, 0.0, m.deck + mast / 2), (0.12, 0.2, mast), "steel")}
+{_box((rear, 0.0, m.deck + mast / 2), (0.12, 0.2, mast), "steel", BOTH)}
 {_inertial(m.mass, _box_inertia(m.mass, m.length, m.width, chassis), (0, 0, bottom + chassis / 2))}
   </link>
 {_joint(lift, "trolley", "platform")}
@@ -416,39 +566,33 @@ def urdf(machine: Harvester) -> str:
 {joints}
   <joint name="cutter_mount" type="fixed">
     <parent link="{HAND}"/>
-    <child link="cutter"/>
+    <child link="{CUTTER}"/>
     {_origin(tuple(arm.flange[:3, 3]), rpy_of(arm.flange[:3, :3]))}
   </joint>
-  <link name="cutter">
-{_box((0.0, 0.0, HEAD / 2), (0.05, 0.05, HEAD), "steel", ("visual", "collision"))}
-{_blades()}
-{_inertial(0.4, _box_inertia(0.4, 0.05, 0.05, HEAD), (0, 0, HEAD / 2))}
+  <link name="{CUTTER}">
+{_tagged("visual", _origin(CUTTER_HEAD.xyz, CUTTER_HEAD.rpy), CUTTER_HEAD.geometry(), STEEL)}
+{CUTTER_HEAD.collision()}
+{chr(10).join(_tagged("visual", _origin(b.xyz, b.rpy), b.geometry(), STEEL) for b in blades())}
+{_inertial(0.4, _box_inertia(0.4, HEAD_WIDTH, HEAD_WIDTH, HEAD), (0, 0, HEAD / 2))}
   </link>
 </robot>
 """
 
 
-def _blades() -> str:
+def blades() -> tuple[Shape, Shape]:
     """The two blades, plates standing out of the head's face in the
     cutter's YZ plane, `OPENING` apart: the V a peduncle lying along X is
-    cut in. Drawn only."""
-    thickness, width = 0.003, 0.015
+    cut in."""
     plates = []
     for side in (-1, 1):
         angle = side * OPENING / 2
         # Out along the blade from the crotch, and back from its inner edge.
         along = np.array([0.0, -math.sin(angle), math.cos(angle)])
         back = np.array([0.0, math.cos(angle), math.sin(angle)]) * side
-        centre = np.array([0.0, 0.0, HEAD]) + along * BLADE / 2 + back * width / 2
-        plates.append(
-            _tagged(
-                "visual",
-                _origin(tuple(centre), (angle, 0.0, 0.0)),
-                f'<box size="{thickness} {width} {BLADE}"/>',
-                ("steel", MATERIALS["steel"]),
-            )
-        )
-    return "\n".join(plates)
+        centre = np.array([0.0, 0.0, HEAD]) + along * BLADE / 2 + back * BLADE_WIDTH / 2
+        size = (BLADE_THICKNESS, BLADE_WIDTH, BLADE)
+        plates.append(Shape("box", tuple(centre), size, (angle, 0.0, 0.0)))
+    return tuple(plates)
 
 
 def _joint(joint: Joint, parent: str, child: str) -> str:
@@ -468,6 +612,10 @@ def _origin(xyz, rpy) -> str:
         f'<origin xyz="{" ".join(str(float(v)) for v in xyz)}"'
         f' rpy="{" ".join(str(float(v)) for v in rpy)}"/>'
     )
+
+
+BOTH = ("visual", "collision")
+STEEL = ("steel", MATERIALS["steel"])
 
 
 def _box(xyz, size, material: str, tags: tuple[str, ...] = ("visual",)) -> str:

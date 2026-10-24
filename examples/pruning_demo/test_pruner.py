@@ -43,7 +43,7 @@ class FakeShears:
         self.poses = poses
         self.bodies = np.array(sorted(poses), dtype=int)
         self.loose = np.zeros(len(self.bodies), dtype=bool)
-        self.radius = np.full(len(self.bodies), 0.025)
+        self.radius = np.full(len(self.bodies), 0.03)
         self.labels = [f"/rod/{body}" for body in range(max(poses) + 1)] + ["/robot/blade_link"]
         self.canes = canes
         self.removed: set[str] = set()
@@ -213,26 +213,26 @@ def test_the_ground_truth_is_read_off_the_stage():
 
 
 @pytest.mark.parametrize(
-    ("z", "other", "cut"),
+    ("out", "other", "cut"),
     [
         (0.06, None, False),
         (0.01, None, False),
-        (0.06, (-0.005, 0.025), True),  # against the fixed blade too, nearer the pivot
-        (0.06, (-0.03, 0.008), False),  # in the open blade already, behind it shut
-        (0.06, (-0.025, 0.07), False),  # off the fixed blade, where the edge passes it first
+        (0.06, (0.025, HeldCane.RADIUS), True),  # against the fixed blade too, nearer the pivot
+        (0.06, (0.031, 0.03), False),  # in the open blade already, behind it shut
+        (0.06, (0.074, 0.025), False),  # off the fixed blade, where the edge passes it first
     ],
 )
-def test_each_held_cane_stands_its_slices_while_the_blade_closes_through_it(z, other, cut):
-    """A cane against the fixed blade, `z` out along it: the slices along
+def test_each_held_cane_stands_its_slices_while_the_blade_closes_through_it(out, other, cut):
+    """A cane against the fixed blade, `out` from the pivot: the slices along
     which the edge meets it follow the blade until the edge reaches the cane
     -- or stay put, if it is there already when the stroke starts -- and
     stand there while the blade closes on, and the others close with the
-    blade. The cane is cut as the edge reaches its axis. A second cane at
-    `other` is `cut` the same way, at its own tick, if it lies against the
-    fixed blade as well; not if the open blade was in it already, or if it
-    lies off the fixed blade. Opening, no slice turns back shut, each rides
-    the blade again once that is past it, and the stroke is ready for the
-    next."""
+    blade. The cane is cut as the edge reaches its axis. A second cane,
+    `other` as how far out and how far off the fixed edge, is `cut` the same
+    way, at its own tick, if it lies against the fixed blade as well; not if
+    the open blade was in it already, or if it lies off the fixed blade.
+    Opening, no slice turns back shut, each rides the blade again once that
+    is past it, and the stroke is ready for the next."""
     bumblebee = pytest.importorskip("bumblebee", reason="Isaac Lab is not installed")
     machine = bumblebee.Bumblebee()
     shear = machine.shear
@@ -242,7 +242,13 @@ def test_each_held_cane_stands_its_slices_while_the_blade_closes_through_it(z, o
         """The point (y, z) of the moving plate's plane, in world coordinates."""
         return (hand @ bumblebee.TOOL @ [shear.bypass, y, z, 1.0])[:3]
 
-    points = [(-HeldCane.RADIUS, z), *([other] if other else [])]
+    def off_the_edge(out: float, off: float) -> tuple[float, float]:
+        """The point `out` from the pivot and `off` the fixed edge into the
+        mouth, as `Shear.clearance` measures it, as (y, z)."""
+        angle = float(shear.edge_angle(out)) + math.asin(off / out)
+        return -out * math.sin(angle), out * math.cos(angle)
+
+    points = [off_the_edge(out, HeldCane.RADIUS), *([off_the_edge(*other)] if other else [])]
     canes = HeldCane(*(placed(*point) for point in points))
     stroke = pruner.Stroke(machine, canes)
 

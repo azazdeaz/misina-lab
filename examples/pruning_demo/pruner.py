@@ -393,9 +393,10 @@ class Stroke:
         # along the plate at the stop, a thin cane's axis being closer to it
         # than the blade gets before it counts as shut.
         shut = shear < SLACK
-        hits, at, on = self.shears.crossing(
-            *_placed(hand, *self.machine.blade(0.0 if shut else shear))
-        )
+        angle = 0.0 if shut else shear
+        hits, at, on = self.shears.crossing(*_placed(hand, *self.machine.blade(angle)))
+        covered, off = s.covers(on, angle)
+        hits, at, off = hits[covered], at[covered], off[covered]
         bodies = self.shears.bodies[hits]
         if self.inside is None:
             self.inside = bodies
@@ -405,8 +406,6 @@ class Stroke:
             # Until then, a cane counts only lying against the fixed blade:
             # one the moving blade still carries across the mouth can sink
             # into it past its own axis.
-            behind, out = (1 - on[:, 0]) * s.width, on[:, 1] * s.blade
-            off = behind * math.cos(shear) + out * math.sin(shear)
             due = ~np.isin(bodies, self.inside) & (off <= self.shears.radius[hits] + GRIP)
         # In body order, nearest the wood first along a rod: a rod through the
         # plate twice is cut where it is nearer the wood, and the other
@@ -426,10 +425,12 @@ class Stroke:
         s = self.machine.shear
         stand = np.full(s.slices, np.nan)
         hits, _, on = self.shears.crossing(*_placed(hand, *self.machine.wedge()))
-        for i, (a, b) in zip(hits, on, strict=True):
-            y, z, radius = s.reach * (a - 1), s.blade * b, self.shears.radius[i] + GRIP
+        for i, y, z in zip(hits, *s.in_wedge(on), strict=True):
+            radius = self.shears.radius[i] + GRIP
             out = math.hypot(y, z)
-            if -y > radius or out > s.blade or (pinch := s.pinch(y, z, radius)) < ahead:
+            if s.clearance(y, z) > radius or out > s.blade:
+                continue
+            if (pinch := s.pinch(y, z, radius)) < ahead:
                 continue
             # From first touch until it passes the axis, the edge meets the
             # cane within a radius of the axis's own distance out.
@@ -453,8 +454,8 @@ class Stroke:
         normal = np.cross(u, v)
         a, b = points @ u / (u @ u), points @ v / (v @ v)
         off = np.abs(points @ normal) / np.linalg.norm(normal)
-        # Out to the back of either plate, across the mouth.
-        w = s.width / s.reach
+        # Out to the back of either blade, across the mouth.
+        w = s.width / (s.reach + s.bow)
         return bool(((-w <= a) & (a <= 1 + w) & (0 <= b) & (b <= 1) & (off <= FOUL)).any())
 
 

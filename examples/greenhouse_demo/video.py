@@ -101,7 +101,7 @@ CLOSING = Shot(
 )
 """The same, lower: the trusses on the floor and the trolley driving out."""
 
-PACE = {"move": 1.0, "approach": 2.0, "cut": 2.0, "retract": 2.0, "drop": 3.0, "rest": 0.25}
+PACE = {"inward": 2.0, "cut": 2.0, "outward": 2.0, "drop": 3.0, "rest": 0.25}
 """How many times slower than the simulation the video plays: a take's
 stages by `Harvest.stage`, the truss dropping after its cut, and the cuts no
 take has. The rest plays at the simulation's own speed."""
@@ -165,7 +165,7 @@ def main():
                 elif (
                     truss
                     and truss.prim in captions
-                    and not (last is None and len(harvest.goals) > 1)
+                    and not (last is None and harvest.stage in ("fold", "run"))
                 ):
                     # The first take starts as the arm reaches out at the
                     # end of the drive in.
