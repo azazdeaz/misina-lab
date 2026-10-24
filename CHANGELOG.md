@@ -25,9 +25,10 @@ Scene document format 10.
 ### Added
 
 - **misina-lab**: `geometry::outline::creased_mesh` fills an outline with
-  lines across it kept as edges, split as finely as the fill, so a bend
-  can fold the sheet sharply on them; the parts of a line outside the ring
-  are left out.
+  lines across it kept as edges, spaced as finely as the fill however
+  finely they were traced, so a bend can fold the sheet sharply on them;
+  the parts of a line outside the ring are left out.
+  `geometry::outline::spacing` is how far apart a fill spaces its points.
 - **misina-lab**: `geometry::shapes` gains `cubic`, `serrate`, `simplify`
   and `untangle`, the pieces a lobed, toothed margin is built from, so a
   generator strings its own ring from an organ's veins.
@@ -108,8 +109,8 @@ Scene document format 10.
   took 0.25 m, so the leaves of a default shoot are all still filling out
   and the canopy's blades run a little smaller. New: `LeafCfg.lobing`, how
   deeply a grown blade is cut, which each leaf draws about;
-  `LeafCfg.detail` now meshes the margin as well as the middle, so coarser
-  drops the teeth first.
+  `LeafCfg.detail` now meshes the margin and the veins as well as the
+  middle, so coarser drops the teeth first.
 - **vinery-lab** (**cfg**): A leaf bends along its veins, which its mesh
   keeps as edges so it creases on them. The young leaves near a shoot's tip
   are folded on the midrib as they lay in the bud, opening out by the time

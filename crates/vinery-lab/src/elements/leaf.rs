@@ -69,7 +69,7 @@ use super::util::blade::{Blade, Veins};
 use super::util::{color, material, par_map};
 use super::{Grow, Rng};
 use misina_lab::geometry::mesh::{MeshData, bend};
-use misina_lab::geometry::outline::creased_mesh;
+use misina_lab::geometry::outline::{creased_mesh, spacing};
 use misina_lab::params::Slider;
 use misina_lab::quantize::{Metric, farthest_first};
 use misina_lab::scene::{Geometry, Library, Order, Surface, UsdAttributes, configs_changed};
@@ -301,9 +301,9 @@ pub struct LeafParams {
     /// tiling that alone costs about one triangle per point of the outline
     /// before this is consulted at all. What it buys past that is vertices
     /// across the *middle* of the blade, which has none of its own and is
-    /// what [`curl`] bends. The midrib and main veins are kept as edges,
-    /// which costs about a sixth more again, and the default lands a blade
-    /// at roughly 260 triangles.
+    /// what [`curl`] bends. The midrib and main veins are kept as edges as
+    /// fine as the rest, which costs about a tenth more again, and the
+    /// default lands a blade at roughly 250 triangles.
     ///
     /// It is also how fine the ruffle runs: no wave is shorter than
     /// [`RESOLVE`] triangles, so a coarse blade ruffles in long, gentle waves
@@ -521,7 +521,7 @@ fn curl(mesh: &mut MeshData, veins: &Veins, config: &LeafConfig) {
         TWIST * grown * config.asymmetry.abs() as f64 * if rng.unit() < 0.5 { -1.0 } else { 1.0 };
     // A heading, a wavenumber, a phase and a depth per wave, each as deep as
     // it is long so every one is as steep.
-    let side = 1.5 * (config.area as f64 / config.detail.max(1) as f64).sqrt();
+    let side = spacing(config.area as f64 / config.detail.max(1) as f64);
     let shortest = RUFFLE_WAVELENGTH.start.max(RESOLVE * side / midrib);
     let longest = RUFFLE_WAVELENGTH.end.max(shortest);
     let waves: Vec<[f64; 4]> = (0..RUFFLE_WAVES)
@@ -1064,24 +1064,32 @@ mod tests {
         assert_eq!(blades(&params())[0].points, blades(&params())[0].points);
     }
 
-    /// `detail` has to reach the middle of the blade and the margin both: a
-    /// finer blade costs more triangles, and keeps more of its teeth.
+    /// `detail` has to reach the middle of the blade, the margin and the
+    /// midrib alike: a finer blade costs more triangles, keeps more of its
+    /// teeth and has more points to bend its midrib at.
     #[test]
     fn more_detail_spends_more_triangles() {
-        let coarse = blades(&LeafParams {
-            detail: 8,
-            ..params()
-        });
-        let fine = blades(&LeafParams {
-            detail: 400,
-            ..params()
-        });
-        for (config, (c, f)) in configs(&params()).iter().zip(coarse.iter().zip(&fine)) {
+        // Triangles, and points on the midrib past the junction.
+        let spent = |config: LeafConfig| {
+            let (mesh, veins) = flat(&config).unwrap();
+            let midrib = mesh.points.iter().filter(|p| {
+                let across = veins.across(DVec2::new(p[0] as f64, p[1] as f64));
+                across.along > 0.0 && across.offset.abs() < 5e-6
+            });
+            (mesh.face_vertex_counts.len(), midrib.count())
+        };
+        for config in configs(&params()) {
+            let coarse = spent(LeafConfig {
+                detail: 8,
+                ..config
+            });
+            let fine = spent(LeafConfig {
+                detail: 400,
+                ..config
+            });
             assert!(
-                f.face_vertex_counts.len() > 2 * c.face_vertex_counts.len(),
-                "{config:?}: {} triangles at detail 400 vs {} at 8",
-                f.face_vertex_counts.len(),
-                c.face_vertex_counts.len()
+                fine.0 > 2 * coarse.0 && fine.1 > 2 * coarse.1,
+                "{config:?}: triangles and midrib points at detail 400, {fine:?}, vs at 8, {coarse:?}"
             );
         }
     }

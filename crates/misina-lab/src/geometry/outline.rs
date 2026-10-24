@@ -94,9 +94,45 @@ fn encloses(ring: &[Point2<f64>], point: Point2<f64>) -> bool {
         == 1
 }
 
+/// Points evenly along a polyline, as few as leave none further apart than
+/// `spacing`: its ends exactly, so lines that share one still do, and between
+/// them wherever the steps fall rather than on its own points.
+fn resample(line: &[Point2<f64>], spacing: f64) -> Vec<Point2<f64>> {
+    let (Some(&first), Some(&last)) = (line.first(), line.last()) else {
+        return Vec::new();
+    };
+    // How far along the line each of its points is.
+    let mut along = vec![0.0];
+    for pair in line.windows(2) {
+        let (a, b) = (pair[0], pair[1]);
+        along.push(along[along.len() - 1] + (b.x - a.x).hypot(b.y - a.y));
+    }
+    let length = along[along.len() - 1];
+    let pieces = (length / spacing).ceil().max(1.0) as usize;
+    let between = (1..pieces).map(|k| {
+        let s = length * k as f64 / pieces as f64;
+        // The first point at or past `s`: never the first, nor past the last.
+        let i = along.partition_point(|&a| a < s);
+        let t = (s - along[i - 1]) / (along[i] - along[i - 1]);
+        let (a, b) = (line[i - 1], line[i]);
+        Point2::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+    });
+    std::iter::once(first)
+        .chain(between)
+        .chain([last])
+        .collect()
+}
+
 // ─── Filling ────────────────────────────────────────────────────────
 
 type Cdt = ConstrainedDelaunayTriangulation<Point2<f64>>;
+
+/// The side of an equilateral triangle at `max_triangle_area`, rounded: about
+/// how far apart a fill spaces the points it adds, and at most how far apart
+/// [`creased_mesh`] spaces a crease's.
+pub fn spacing(max_triangle_area: f64) -> f64 {
+    1.5 * max_triangle_area.sqrt()
+}
 
 /// Fills an outline with triangles, flat on the XY plane at z = 0.
 ///
@@ -115,13 +151,16 @@ pub fn outline_mesh(outline: &Outline, max_triangle_area: f64) -> Result<MeshDat
 /// Fills an outline as [`outline_mesh`] does, with every crease kept as a
 /// line of edges through the fill.
 ///
-/// A crease is an open polyline across the ring. It is split into pieces no
-/// longer than the side of a triangle at `max_triangle_area`, and every piece
-/// becomes an edge of the mesh: a later pass can fold the sheet sharply along
-/// it, on an edge, and bend it along its length, where a fold that falls
-/// across triangles comes out rounded over their width. A crease is kept
-/// wherever it lies inside the ring, and left out where it runs outside it,
-/// across a notch in it or across another crease; creases may share points.
+/// A crease is an open polyline across the ring, traced as finely as its
+/// shape needs: it is cut into even pieces no longer than [`spacing`] at
+/// `max_triangle_area`, so it comes out as fine as the fill at any area, and
+/// every piece becomes an edge of the mesh. A later pass can fold the sheet
+/// sharply along it, on an edge, and bend it along its length, where a fold
+/// that falls across triangles comes out rounded over their width. Only a
+/// crease's ends are kept as given, so one that turns a corner is two
+/// creases, and creases may share their ends. A crease is kept wherever it
+/// lies inside the ring, and left out where it runs outside it, across a
+/// notch in it or across another crease.
 pub fn creased_mesh(
     outline: &Outline,
     creases: &[Vec<Point2<f64>>],
@@ -144,32 +183,17 @@ pub fn creased_mesh(
     // around them, and its edges after it: spade tells inside from outside by
     // counting the constraint edges it crosses, which an open crease would
     // throw off.
-    let side = 1.5 * max_triangle_area.sqrt();
     let mut lines = Vec::new();
     for crease in creases {
         let mut line = Vec::new();
-        for (i, &to) in crease.iter().enumerate() {
-            let from = crease[i.saturating_sub(1)];
-            let pieces = ((to.x - from.x).hypot(to.y - from.y) / side)
-                .ceil()
-                .max(1.0) as usize;
-            // Each piece's far end, landing on the crease's own points
-            // exactly so two pieces share theirs.
-            for k in 1..=pieces {
-                let t = k as f64 / pieces as f64;
-                let at = if k == pieces {
-                    to
-                } else {
-                    Point2::new(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t)
-                };
-                if encloses(&outline.points, at) {
-                    line.push(
-                        cdt.insert(at)
-                            .context("a crease could not be triangulated")?,
-                    );
-                } else if !line.is_empty() {
-                    lines.push(std::mem::take(&mut line));
-                }
+        for at in resample(crease, spacing(max_triangle_area)) {
+            if encloses(&outline.points, at) {
+                line.push(
+                    cdt.insert(at)
+                        .context("a crease could not be triangulated")?,
+                );
+            } else if !line.is_empty() {
+                lines.push(std::mem::take(&mut line));
             }
         }
         lines.push(line);
@@ -349,51 +373,66 @@ mod tests {
         }
     }
 
-    /// A crease comes out as a line of edges from end to end, split about as
-    /// finely as the fill is, and the fill still covers what the ring does.
+    /// A crease comes out as a line of edges from end to end, as finely
+    /// spaced as the fill however finely it was traced, and the fill still
+    /// covers what the ring does.
     #[test]
     fn a_crease_is_a_line_of_edges_through_the_fill() {
         let square = ring(&[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]);
-        let (from, to) = (Point2::new(0.5, 0.5), Point2::new(3.5, 3.0));
+        let (from, to) = (Point2::new(0.5f64, 0.5), Point2::new(3.5, 3.0));
         let max = square.area() / 64.0;
-        let mesh = creased_mesh(&square, &[vec![from, to]], max).unwrap();
-
-        // The vertices on the crease, in order along it.
         let (dx, dy) = (to.x - from.x, to.y - from.y);
-        let mut on: Vec<(f64, i32)> = mesh
-            .points
-            .iter()
-            .enumerate()
-            .filter_map(|(i, p)| {
-                let (px, py) = (p[0] as f64 - from.x, p[1] as f64 - from.y);
-                let t = (px * dx + py * dy) / (dx * dx + dy * dy);
-                let off = (px * dy - py * dx).abs() / dx.hypot(dy);
-                ((-1e-6..=1.0 + 1e-6).contains(&t) && off < 1e-5).then_some((t, i as i32))
-            })
-            .collect();
-        on.sort_by(|a, b| a.0.total_cmp(&b.0));
-        assert!(on.len() > 4, "split along its length: {on:?}");
-        assert!(on[0].0.abs() < 1e-6 && (on[on.len() - 1].0 - 1.0).abs() < 1e-6);
-
-        let edges: Vec<[i32; 2]> = mesh
-            .face_vertex_indices
-            .chunks(3)
-            .flat_map(|f| [[f[0], f[1]], [f[1], f[2]], [f[2], f[0]]])
-            .collect();
         let length = dx.hypot(dy);
-        for pair in on.windows(2) {
-            let (a, b) = (pair[0].1, pair[1].1);
-            assert!(
-                edges.contains(&[a, b]) || edges.contains(&[b, a]),
-                "{a} to {b} is an edge of the fill"
-            );
-            assert!((pair[1].0 - pair[0].0) * length <= 1.5 * max.sqrt() + 1e-9);
-        }
+        // By its ends, and by forty points along it.
+        let traced: Vec<_> = (0..=40)
+            .map(|i| Point2::new(from.x + dx * i as f64 / 40.0, from.y + dy * i as f64 / 40.0))
+            .collect();
+        for crease in [vec![from, to], traced] {
+            let at = format!("traced by {} points", crease.len());
+            let mesh = creased_mesh(&square, &[crease], max).unwrap();
 
-        let area: f32 = faces(&mesh)
-            .map(|face| face_normal(&mesh, face).length() / 2.0)
-            .sum();
-        assert!((area - 16.0).abs() < 1e-3, "covers the ring, got {area}");
+            // The vertices on the crease, in order along it.
+            let mut on: Vec<(f64, i32)> = mesh
+                .points
+                .iter()
+                .enumerate()
+                .filter_map(|(i, p)| {
+                    let (px, py) = (p[0] as f64 - from.x, p[1] as f64 - from.y);
+                    let t = (px * dx + py * dy) / (dx * dx + dy * dy);
+                    let off = (px * dy - py * dx).abs() / length;
+                    ((-1e-6..=1.0 + 1e-6).contains(&t) && off < 1e-5).then_some((t, i as i32))
+                })
+                .collect();
+            on.sort_by(|a, b| a.0.total_cmp(&b.0));
+            assert_eq!(
+                on.len(),
+                (length / spacing(max)).ceil() as usize + 1,
+                "{at}: as fine as the fill, {on:?}"
+            );
+            assert!(on[0].0.abs() < 1e-6 && (on[on.len() - 1].0 - 1.0).abs() < 1e-6);
+
+            let edges: Vec<[i32; 2]> = mesh
+                .face_vertex_indices
+                .chunks(3)
+                .flat_map(|f| [[f[0], f[1]], [f[1], f[2]], [f[2], f[0]]])
+                .collect();
+            for pair in on.windows(2) {
+                let (a, b) = (pair[0].1, pair[1].1);
+                assert!(
+                    edges.contains(&[a, b]) || edges.contains(&[b, a]),
+                    "{at}: {a} to {b} is an edge of the fill"
+                );
+                assert!((pair[1].0 - pair[0].0) * length <= spacing(max) + 1e-9);
+            }
+
+            let area: f32 = faces(&mesh)
+                .map(|face| face_normal(&mesh, face).length() / 2.0)
+                .sum();
+            assert!(
+                (area - 16.0).abs() < 1e-3,
+                "{at}: covers the ring, got {area}"
+            );
+        }
 
         // One that runs out of the ring is cut where it leaves.
         let out = vec![Point2::new(2.0, 2.3), Point2::new(6.0, 2.3)];

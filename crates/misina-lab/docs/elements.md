@@ -77,9 +77,10 @@ into its own ring, so one builder cuts the organ at any stage of its growth,
 and a budget of meshes buys a different margin on every one.
 
 An organ that folds keeps its folds in the fill: `creased_mesh` takes lines
-across the ring, such as its veins, and keeps them as lines of edges, so a
-later bend creases the sheet on an edge rather than rounding it over the
-width of the triangles it would cross.
+across the ring, such as its veins, and keeps them as lines of edges spaced
+as finely as the fill, however finely the lines were traced, so a later
+bend creases the sheet on an edge rather than rounding it over the width of
+the triangles it would cross.
 
 ## The pipeline
 

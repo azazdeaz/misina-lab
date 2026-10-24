@@ -117,7 +117,8 @@ const YOUNG_TEETH: f64 = 1.4;
 const YOUNG_PETIOLE: f64 = 0.6;
 const YOUNG_PETIOLAR_OPENING: f64 = 85.0;
 
-/// Points along each cubic edge, and around each sinus's bottom.
+/// Points along each cubic edge and the midrib, and around each sinus's
+/// bottom.
 const EDGE_POINTS: usize = 32;
 const SINUS_POINTS: usize = 8;
 
@@ -380,12 +381,15 @@ impl Veins {
         self.junction + arc(self.midrib, self.curvature).0
     }
 
-    /// The veins as lines for the fill to keep as edges: the midrib, sampled
-    /// along its arc, then the lateral veins, each running [`CREASE`] of the
-    /// way to its tip.
+    /// The veins as lines for the fill to keep as edges, which spaces its own
+    /// points along them: the midrib traced along its arc, then the lateral
+    /// veins, each running [`CREASE`] of the way to its tip.
     pub fn creases(&self) -> Vec<Vec<Point2<f64>>> {
-        let midrib = (0..=16)
-            .map(|i| self.junction + arc(CREASE * self.midrib * i as f64 / 16.0, self.curvature).0)
+        let midrib = (0..=EDGE_POINTS)
+            .map(|i| {
+                let s = CREASE * self.midrib * i as f64 / EDGE_POINTS as f64;
+                self.junction + arc(s, self.curvature).0
+            })
             .collect();
         let laterals = self
             .tips
