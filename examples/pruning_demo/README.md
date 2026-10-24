@@ -140,6 +140,18 @@ cut" apart from "made the cut", which a field trial cannot.
 
 ## How the shear cuts
 
+The shear's blades are a bypass pruner's. The moving one is the cutting
+blade, its edge convex and ground on its outer face; it closes past the
+fixed one, the hook, whose concave edge is the crook a cane is held in and
+whose claw reaches past the cutting blade's tip. The two edges are one
+curve when shut, so the open mouth spans the same angle at every distance
+out from the pivot. A cane coming in outside the hook's tip slides off its
+back, so the mouth's point a cane is brought to keeps clear of the tip: the
+centre of the widest circle between the straight lines from the pivot to
+the two tips. Each blade is drawn as a mesh `bumblebee.py` writes beside
+the URDF, and collides as convex pieces along it, the moving blade's being
+the slices below.
+
 A real bypass shear closes its moving blade past a fixed one, and the wood
 between them gives. A simulated cane does not give: a blade closing on it
 would squeeze it against the fixed blade until the solver shoved it out
@@ -152,7 +164,7 @@ end to end along it, a centimetre each, and each slice stops on its own:
 
 ```text
 pivot                                              tip
-  [ 0 ][ 1 ][ 2 ][ 3 ][ 4 ][ 5 ][ 6 ][ 7 ]   one box each
+  [ 0 ][ 1 ][ 2 ][ 3 ][ 4 ][ 5 ][ 6 ][ 7 ]   one convex piece each
                               ( cane )       5 and 6 stand at it,
                                              the rest close with the blade
 ```

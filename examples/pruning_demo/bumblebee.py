@@ -13,6 +13,10 @@ the robot from the Warthog's URDF, the fields of `Bumblebee` and the UR10's
 own URDF, and `Bumblebee.chain` is the same joints for `kinematics`, so the
 arm the solver poses is the arm the simulation steps.
 
+The shear's blades are a bypass pruner's: a cutting blade with a convex,
+ground edge swinging past a hook with a concave one, drawn as meshes `urdf`
+writes beside the URDF and colliding as convex pieces along them.
+
 The shear touches what it prunes. Its head and both blades collide with the
 canes, so a cane the shear comes in on is pushed aside or funnelled into the
 mouth, and the moving blade carries it across the mouth onto the fixed one.
@@ -191,29 +195,48 @@ FRAME_MASS = 20.0
 MATERIALS = {
     "steel": "0.55 0.57 0.60 1",
     "aluminium": "0.78 0.80 0.82 1",
+    "polished": "0.86 0.87 0.89 1",
+    "coated": "0.16 0.17 0.19 1",
 }
-"""Colours, as URDF rgba: galvanized steel and bare aluminium."""
+"""Colours, as URDF rgba: galvanized steel, bare aluminium, the cutting
+blade's polished steel and the hook's dark coat."""
 
 
 @dataclasses.dataclass(frozen=True)
 class Shear:
-    """A bypass shear: a fixed blade and one that swings past it.
+    """A bypass shear: a fixed blade, the hook, and a cutting blade that
+    swings past it.
 
-    Both blades are plates standing out of the hand along its +Z, in its YZ
-    plane, with their cutting edges meeting on its XZ plane when closed. The
-    moving one swings about the hand's X axis at the blades' base, so the
-    mouth -- the wedge between the two edges -- opens in the hand's -Y, and
-    closing it sweeps whatever lies across the blades.
+    Both blades stand out of the hand along its +Z, in its YZ plane, with
+    their cutting edges on one curve when shut: `edge`, bowed toward +Y.
+    The cutting blade lies back from it toward -Y, so its edge is convex,
+    and the hook toward +Y, so its edge is the concave crook a cane is held
+    in. The cutting blade swings about the hand's X axis at the blades'
+    base, so the mouth -- the curved wedge between the two edges -- opens in
+    the hand's -Y, and closing it sweeps whatever lies across the blades.
+    The edges being one curve turned about the pivot, the open mouth spans
+    the same angle at every distance out.
     """
 
     blade: float = 0.08
-    """Blade length, along the hand's +Z."""
+    """The cutting blade's length, from the pivot to its tip along the
+    hand's +Z."""
 
     width: float = 0.02
-    """Plate width, from the cutting edge back."""
+    """How wide either blade is at its root, from the cutting edge back. The
+    cutting blade narrows from there to its point, the hook rounds off into
+    its claw."""
 
     thickness: float = 0.004
     """Plate thickness, along the pivot."""
+
+    bow: float = 0.006
+    """How far the edges stand off the straight line from the pivot to the
+    cutting blade's tip, midway along it."""
+
+    claw: float = 0.008
+    """How far the hook reaches past the cutting blade's tip, its edge
+    curling on into the mouth: a cane slid out to the tip is caught there."""
 
     opening: float = 0.9
     """How far the moving blade swings open, in radians: about fifty
@@ -238,36 +261,90 @@ class Shear:
         plate's thickness of clearance between them, and half of one more."""
         return 1.5 * self.thickness
 
+    def edge(self, z):
+        """Where the edges lie across, in Y, `z` out along the blades in the
+        frame of either blade shut: a parabola through the pivot and the
+        cutting blade's tip. Past the tip it curls on toward -Y, as the
+        hook's claw."""
+        u = np.asarray(z) / self.blade
+        return 4 * self.bow * u * (1 - u)
+
+    def back(self, z):
+        """Where the cutting blade's back lies across, in Y, `z` out along
+        it in its own frame: straight from its root to its point."""
+        return -self.width * (1 - np.asarray(z) / self.blade)
+
+    def edge_angle(self, out):
+        """How far the edges are turned off the blades' axis toward the
+        mouth, `out` from the pivot, in radians: negative, since they bow
+        away from it."""
+        z = np.linspace(0.0, self.blade, 65)
+        y = self.edge(z)
+        return np.interp(out, np.hypot(y, z), np.arctan2(-y, z))
+
+    def clearance(self, y, z):
+        """How far the point (y, z) of the shear's frame lies off the fixed
+        blade's edge, into the mouth and across the line out from the pivot;
+        negative behind the edge."""
+        out = np.hypot(y, z)
+        return out * np.sin(np.arctan2(-y, z) - self.edge_angle(out))
+
     @property
     def mouth(self) -> tuple[float, float]:
         """Where a cane is brought to, as (y, z) in the shear's own frame:
-        the point of the open mouth furthest from both edges and from the
-        blades' tips, the centre of the widest circle the mouth holds, so a
-        cane that far off the planned point in any direction still lies
-        between the blades -- 2.4 cm at the default size."""
-        half = self.opening / 2
+        the centre of the widest circle between the straight lines from the
+        pivot to the hook's tip and to the open cutting blade's tip, and the
+        cutting blade's reach. A cane that far off the planned point in any
+        direction still comes in past the hook's tip, which a cane outside
+        it slides off, and lies within the blade's reach: 2.4 cm at the
+        default size. The bowed edges leave more room than that toward the
+        hook, and less toward the cutting blade, which carries a cane it
+        meets across onto the hook."""
+        tip = self.blade + self.claw
+        hook = math.atan2(-float(self.edge(tip)), tip)
+        half = (self.opening - hook) / 2
         d = self.blade / (1 + math.sin(half))
-        return -d * math.sin(half), d * math.cos(half)
+        return -d * math.sin(hook + half), d * math.cos(hook + half)
 
     @property
     def spans(self) -> np.ndarray:
         """Where each of the moving blade's `slices` lies along it, as (from,
-        to) out from the pivot, shape (slices, 2)."""
-        ends = np.linspace(0.0, self.blade, self.slices + 1)
+        to) out from the pivot, shape (slices, 2): each is the stretch of the
+        blade between two of `slices + 1` points evenly spaced along Z."""
+        z = np.linspace(0.0, self.blade, self.slices + 1)
+        ends = np.hypot(self.edge(z), z)
         return np.column_stack([ends[:-1], ends[1:]])
 
     @property
     def reach(self) -> float:
-        """How far across, in -Y, the mouth opens: where the moving edge's
-        plane is at full opening, a blade's length out from the pivot."""
+        """How far across, in -Y, the mouth opens: past the moving edge at
+        full opening, a blade's length out from the pivot."""
         return self.blade * math.tan(self.opening)
 
     def pinch(self, y: float, z: float, radius: float) -> float:
-        """The blade angle at which the moving edge's plane is `radius` from
-        the point (y, z) of the shear's frame, on the mouth's side of it:
-        where the moving blade touches a cane of that radius lying across
-        the mouth there, and shutting further would push it."""
-        return math.asin(min(1.0, radius / math.hypot(y, z))) - math.atan2(y, z)
+        """The blade angle at which the moving edge is `radius` from the
+        point (y, z) of the shear's frame, on the mouth's side of it: where
+        the moving blade touches a cane of that radius lying across the
+        mouth there, and shutting further would push it."""
+        out = math.hypot(y, z)
+        turned = math.atan2(-y, z) - float(self.edge_angle(out))
+        return math.asin(min(1.0, radius / out)) + turned
+
+    def covers(self, on: np.ndarray, angle: float) -> tuple[np.ndarray, np.ndarray]:
+        """Of the points at (a, b) on `Bumblebee.blade`'s rectangle, with the
+        blade at `angle`: which the moving blade covers, behind its edge and
+        short of its back; and how far each lies off the fixed blade's edge,
+        as `clearance` measures it."""
+        y = -self.width + on[:, 0] * (self.width + self.bow)
+        z = on[:, 1] * self.blade
+        out = np.hypot(y, z)
+        behind = np.arctan2(-y, z) - self.edge_angle(out)
+        return (behind >= 0) & (y >= self.back(z)), out * np.sin(behind + angle)
+
+    def in_wedge(self, on: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Where the points at (a, b) on `Bumblebee.wedge`'s rectangle lie,
+        as their y and z in the shear's frame."""
+        return -self.reach + on[:, 0] * (self.reach + self.bow), on[:, 1] * self.blade
 
 
 @dataclasses.dataclass(frozen=True)
@@ -363,26 +440,27 @@ class Bumblebee:
         return (slide, first, *UR10[1:])
 
     def blade(self, angle: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """The moving blade's plate with the shear at `angle`, in the `HAND`
-        frame, as the rectangle `Shears.crossing` takes: a corner and its two
-        edges, across the plate to its cutting edge and along it. The first
-        cane whose axis crosses it in a stroke is cut where it does."""
+        """The moving blade's plane with the shear at `angle`, in the `HAND`
+        frame, as the rectangle `Shears.crossing` takes round the blade: a
+        corner and its two edges, across from the blade's back past its
+        bowed edge, and along it. `Shear.covers` says which crossings the
+        blade itself covers; a cane whose axis it covers is cut there."""
         s = self.shear
         plate = TOOL @ transform(rpy=(angle, 0.0, 0.0))
         corner = plate @ np.array([s.bypass, -s.width, 0.0, 1.0])
-        across = plate[:3, :3] @ np.array([0.0, s.width, 0.0])
+        across = plate[:3, :3] @ np.array([0.0, s.width + s.bow, 0.0])
         up = plate[:3, :3] @ np.array([0.0, 0.0, s.blade])
         return corner[:3], across, up
 
     def wedge(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """The mouth at full opening, in the `HAND` frame, as the rectangle
-        `Shears.crossing` takes: in the moving plate's plane, `Shear.reach`
-        across to the fixed edge and the blades' length out. A cane crossing
-        it at (a, b) lies at y = reach (a - 1), z = blade b of the shear's
-        frame."""
+        `Shears.crossing` takes: in the moving plate's plane, from
+        `Shear.reach` across to the fixed edge's deepest point and the
+        blade's length out. `Shear.in_wedge` says where in the shear's frame
+        a crossing of it lies."""
         s = self.shear
         corner = TOOL @ np.array([s.bypass, -s.reach, 0.0, 1.0])
-        across = TOOL[:3, :3] @ np.array([0.0, s.reach, 0.0])
+        across = TOOL[:3, :3] @ np.array([0.0, s.reach + s.bow, 0.0])
         up = TOOL[:3, :3] @ np.array([0.0, 0.0, s.blade])
         return corner[:3], across, up
 
@@ -403,7 +481,8 @@ def bumblebee_cfg(machine: Bumblebee, prim_path: str) -> ArticulationCfg:
             asset_path=_write_urdf(machine),
             usd_dir=str(_CACHE),
             fix_base=False,
-            # Boxes and cylinders: a hull of each is the shape itself.
+            # Boxes, cylinders and the blades' convex pieces: a hull of each
+            # is the shape itself.
             collision_type="Convex Hull",
             joint_drive=None,  # the actuators below own the gains
             activate_contact_sensors=False,
@@ -646,10 +725,18 @@ def _arm(m: Bumblebee, joints: list[Joint]) -> str:
 
 
 def _shear(m: Bumblebee) -> str:
-    """The shear head on the flange, and its one moving blade. The fixed
-    plate lies back from the hand's XZ plane along +Y, the moving one along
-    -Y in its own frame, so their edges meet on that plane at zero."""
+    """The shear head on the flange, and its one moving blade. The hook lies
+    back from `Shear.edge` along +Y, the cutting blade along -Y in its own
+    frame, so their edges meet along it at zero."""
     s = m.shear
+
+    def hook(z):
+        # Its back rounds off from the root into the tip of the claw.
+        return s.edge(z), s.edge(z) + s.width * np.sqrt(1 - z / (s.blade + s.claw))
+
+    def cutting(z):
+        return s.edge(z), s.back(z)
+
     head = f"""
   <joint name="tool" type="fixed">
     <parent link="{HAND}"/>
@@ -658,7 +745,7 @@ def _shear(m: Bumblebee) -> str:
   </joint>
   <link name="shear_link">
 {_box((0.0, 0.0, -s.head / 2), (s.head, s.head, s.head), "steel")}
-{_plate(s, 0.0, 1, [(0.0, s.blade)])}
+{_blade(s, 0.0, hook, s.blade + s.claw, s.slices + 1, 0.0, "coated", "hook")}
     <inertial>
       <origin xyz="0 0 {-s.head / 2}"/>
       <mass value="0.5"/>
@@ -672,7 +759,7 @@ def _shear(m: Bumblebee) -> str:
     <limit lower="0" upper="{s.opening}" effort="10" velocity="6"/>
   </joint>
   <link name="{BLADE}">
-{_plate(s, s.bypass, -1, s.spans)}
+{_blade(s, s.bypass, cutting, s.blade, s.slices, 1.5 * s.thickness, "polished", "blade")}
     <inertial>
       <origin xyz="0 0 {s.blade / 2}"/>
       <mass value="0.05"/>
@@ -682,22 +769,88 @@ def _shear(m: Bumblebee) -> str:
     return head
 
 
-def _plate(s: Shear, x: float, side: int, spans) -> str:
-    """One blade: a plate `x` along the pivot with its cutting edge on the
-    link's XZ plane, lying back from it towards `side` (+1 or -1) in Y. Drawn
-    whole, and colliding as one box per `spans`, each (from, to) out along it."""
-    y = side * s.width / 2
-    return "\n".join(
-        [
-            _box((x, y, s.blade / 2), (s.thickness, s.width, s.blade), "steel", ("visual",)),
-            *(
-                _box(
-                    (x, y, (z0 + z1) / 2), (s.thickness, s.width, z1 - z0), "steel", ("collision",)
-                )
-                for z0, z1 in spans
-            ),
-        ]
+def _blade(
+    s: Shear, x: float, outline, length: float, pieces: int, bevel: float, material: str, name: str
+) -> str:
+    """One blade, centred `x` along the pivot and `length` out from it, its
+    `outline` giving its edge and its back across in Y at each Z. Drawn as a
+    mesh, its face toward +X ground back `bevel` from the edge to a sharp
+    one, if `bevel`; colliding as `pieces` convex prisms end to end along
+    it, each the blade between two points evenly spaced along Z, with the
+    chord of the edge for its edge. Each piece's mesh is about its own
+    middle, placed there by its origin, so its pose says where along the
+    blade it is."""
+    low, high = x - s.thickness / 2, x + s.thickness / 2
+
+    def sections(z, corners):
+        """A polygon across the blade at each of `z`, from `corners`: each an
+        x, and its y at each of `z`."""
+        return np.stack([np.column_stack([np.full_like(z, a), b, z]) for a, b in corners], axis=1)
+
+    z = np.linspace(0.0, length, 41)
+    edge, back = outline(z)
+    ground = edge - np.sign(edge - back) * np.minimum(bevel, np.abs(edge - back))
+    # The edge is a twentieth of the plate thick where it is ground, the
+    # plate's whole thickness where it is not.
+    land = low + s.thickness / 20 if bevel else high
+    drawn = sections(z, [(low, back), (low, edge), (land, edge), (high, ground), (high, back)])
+    mesh = '      <geometry><mesh filename="{}"/></geometry>'
+    parts = [_shaped(mesh.format(_stl(_loft(drawn), name)), ("visual",), material)]
+    z = np.linspace(0.0, length, pieces + 1)
+    edge, back = outline(z)
+    for i in range(pieces):
+        ends = slice(i, i + 2)
+        piece = sections(
+            z[ends], [(low, back[ends]), (low, edge[ends]), (high, edge[ends]), (high, back[ends])]
+        )
+        middle = piece.reshape(-1, 3).mean(axis=0)
+        origin = f'      <origin xyz="{middle[0]} {middle[1]} {middle[2]}"/>\n'
+        path = _stl(_loft(piece - middle), f"{name}_{i}")
+        parts.append(_shaped(origin + mesh.format(path), ("collision",), material))
+    return "\n".join(parts)
+
+
+def _loft(sections: np.ndarray) -> np.ndarray:
+    """The closed surface through `sections`, shape (stations, corners, 3):
+    a polygon across the blade at each station along it, the corners of one
+    matching those of the next. Returned as triangles, shape (n, 3, 3),
+    wound outward."""
+    s = sections
+    # Wound one way round each section, the side quads face outward.
+    widest = np.argmax(np.ptp(s[:, :, 1], axis=1))
+    x, y = s[widest, :, 0], s[widest, :, 1]
+    if np.dot(x, np.roll(y, -1)) - np.dot(np.roll(x, -1), y) < 0:
+        s = s[:, ::-1]
+    a, b = s[:-1], np.roll(s[:-1], -1, axis=1)
+    c, d = np.roll(s[1:], -1, axis=1), s[1:]
+    sides = np.concatenate([np.stack([a, b, c], 2), np.stack([a, c, d], 2)]).reshape(-1, 3, 3)
+    fan = np.arange(1, s.shape[1] - 1)
+    caps = (
+        [s[0, [0] * len(fan)], s[0, fan + 1], s[0, fan]],
+        [s[-1, [0] * len(fan)], s[-1, fan], s[-1, fan + 1]],
     )
+    return np.concatenate([sides, *(np.stack(cap, 1) for cap in caps)])
+
+
+def _stl(triangles: np.ndarray, name: str) -> str:
+    """`triangles`, shape (n, 3, 3), written once as a binary STL file in
+    `_CACHE` named for its contents, leaving out the degenerate ones; its
+    path."""
+    a, b, c = triangles[:, 0], triangles[:, 1], triangles[:, 2]
+    normal = np.cross(b - a, c - a)
+    length = np.linalg.norm(normal, axis=1)
+    keep = length > 1e-12
+    record = np.zeros(
+        keep.sum(), dtype=[("normal", "<f4", 3), ("corners", "<f4", (3, 3)), ("attribute", "<u2")]
+    )
+    record["normal"] = normal[keep] / length[keep, None]
+    record["corners"] = triangles[keep]
+    data = bytes(80) + np.uint32(len(record)).tobytes() + record.tobytes()
+    path = _CACHE / f"{name}_{hashlib.sha256(data).hexdigest()[:16]}.stl"
+    if not path.exists():
+        _CACHE.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    return str(path)
 
 
 def _joint(joint: Joint, parent: str, child: str) -> str:
