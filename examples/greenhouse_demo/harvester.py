@@ -1,8 +1,8 @@
-"""A pipe-rail truss harvester: a trolley, a lift, a UR5e and a shear.
+"""A pipe-rail truss harvester: a trolley, a lift, a UR5e, a shear and a crate.
 
 The layout of eternal.ag's Harvester and most robots of its kind: a trolley
-the width of a path's heating pipes, a lift on it, a cobot arm on the lift
-and a cutter in the arm's hand. Here the trolley does not roll. It rides
+the width of a path's heating pipes, a lift on it, a cobot arm and a Euro
+crate on the lift and a cutter in the arm's hand. Here the trolley does not roll. It rides
 three prismatic joints off a base fixed in the main path: `AISLE` across the
 row heads to a path, `RAIL` down it and `LIFT` up. The trolley and the lift
 are primitives, every dimension a field of `Harvester`; the arm
@@ -20,13 +20,14 @@ shear opens. Its head, both blades, the jaw and the finger collide, and
 time.
 
 The robot collides with itself. Its colliders are the trolley's chassis and
-mast, Menagerie's capsules on the arm and the shear; the platform has none,
-the arm's base standing flush on it. The arm's are each a `Shape`, and so is
-the box round each part of the shear: `urdf` writes the arm's for Isaac Sim's
-importer, the shear's own pieces going with `shear.urdf`, and `curobo_cfg`
-hands cuRobo the spheres that cover each, so a pose cuRobo finds clear is
-clear in the simulation. The trolley's reach cuRobo with the rest of the
-world, from the simulation itself (see `planner`).
+mast, the crate's boxes, Menagerie's capsules on the arm and the shear; the
+platform's deck has none, the arm's base standing flush on it. The arm's are
+each a `Shape`, and so is the box round each part of the shear: `urdf`
+writes the arm's for Isaac Sim's importer, the shear's own pieces going with
+`shear.urdf`, and `curobo_cfg` hands cuRobo the spheres that cover each, so
+a pose cuRobo finds clear is clear in the simulation. The trolley's and the
+crate's reach cuRobo with the rest of the world, from the simulation itself
+(see `planner`).
 """
 
 from __future__ import annotations
@@ -117,8 +118,10 @@ MATERIALS = {
     "chassis": "0.18 0.45 0.25 1",
     "steel": shear.MATERIALS["steel"],
     "tire": "0.05 0.05 0.05 1",
+    "crate": "0.04 0.42 0.36 1",
 }
-"""Colours, as URDF rgba: a green trolley, galvanized steel and rubber."""
+"""Colours, as URDF rgba: a green trolley, galvanized steel, rubber and a
+teal crate."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -171,6 +174,126 @@ class Shape:
 
 
 @dataclasses.dataclass(frozen=True)
+class Crate:
+    """A solid-walled Euro stacking crate, in meters and kilograms, its frame
+    in the middle of its underside, +X along it. By default a shallow
+    600 x 400 x 120 one, a truss lying in it in one layer: 570 x 370 inside
+    at the rim, as Auer's EG 64/12 is, and 1.26 kg. Its walls lean in toward
+    the floor by `draft`, as Bito's 220 mm tall XL 64220 narrows from
+    568 x 368 inside at the top to 559 x 359 at the floor. Datasheets give
+    neither the wall's thickness nor the ribs': those
+    are typical of moulded polypropylene.
+
+    A rim runs round the top, and ribs run down each wall's outside from it
+    to the floor, standing `rib` out of the wall to the crate's outer faces.
+    The floor's edge is a foot, set in to stand inside the rim of a crate
+    below. It collides as five boxes, `boxes`: the floor, and each wall from
+    its inside out to the outer faces, leaning as the wall does."""
+
+    length: float = 0.6
+    """Outside, at the rim."""
+    width: float = 0.4
+    height: float = 0.12
+    wall: float = 0.004
+    """The wall's own thickness, without the ribs."""
+    rib: float = 0.011
+    """How far the rim and the ribs stand out of the wall: with it, the 15 mm
+    the inside is set in from the outside at the rim."""
+    floor: float = 0.012
+    """The floor's thickness, the foot's height."""
+    draft: float = math.radians(1.3)
+    """How far each wall leans in from the rim down to the floor."""
+    rim: float = 0.025
+    """The rim's height."""
+    mass: float = 1.26
+
+    def _in(self, z: float) -> float:
+        """How far the outer faces are set in from the rim's at height `z`."""
+        return math.tan(self.draft) * (self.height - z)
+
+    def mesh(self) -> np.ndarray:
+        """The crate as triangles, shape (n, 3, 3): its body swept round from
+        the foot up the outside and down the inside to the floor, and a rib
+        every 10 cm or so along each wall."""
+        skin, h = self.rib + self.wall, self.height
+        # How far in from the rim's outer edge, and how high, round the
+        # body's section; the foot clears a crate below's rim by 2 mm.
+        section = [
+            (skin + 0.002, 0.0),
+            (skin + 0.002, self.floor),
+            (self.rib + self._in(self.floor), self.floor),
+            (self.rib + self._in(h - self.rim), h - self.rim),
+            (self._in(h - self.rim), h - self.rim),
+            (0.0, h),
+            (skin, h),
+            (skin + self._in(self.floor), self.floor),
+        ]
+        x, y = self.length / 2, self.width / 2
+        rings = [
+            [(x - d, y - d, z), (d - x, y - d, z), (d - x, d - y, z), (x - d, d - y, z)]
+            for d, z in section
+        ]
+        parts = [shear._loft(np.array(rings))]
+        # A rib's section: 8 mm across, from the outer faces halfway into the
+        # wall. The end ribs stand 4 cm in from the corners.
+        outline = [(-0.004, 0.0), (0.004, 0.0), (0.004, skin - self.wall / 2)]
+        outline.append((-0.004, outline[-1][1]))
+        for long, across, swap in (
+            (self.length, self.width, False),
+            (self.width, self.length, True),
+        ):
+            count = round((long - 0.08) / 0.1) + 1
+            for along in np.linspace(0.04 - long / 2, long / 2 - 0.04, count):
+                for side in (-1, 1):
+                    rib = np.array(
+                        [
+                            [
+                                (along + a, side * (across / 2 - self._in(z) - b), z)
+                                for a, b in outline
+                            ]
+                            for z in (self.floor, h - self.rim)
+                        ]
+                    )
+                    parts.append(shear._loft(rib[..., [1, 0, 2]] if swap else rib))
+        return np.concatenate(parts)
+
+    def boxes(self) -> list[Shape]:
+        """Its colliders: the floor under its foot's footprint, and each wall
+        from the floor to the rim, as thick as the inside is set in from the
+        outer faces, as long as the rim and leaning as the wall does."""
+        skin, h = self.rib + self.wall, self.height
+        foot = skin + 0.002
+        middle = (self.floor + h) / 2
+        across = self.width / 2 - self._in(middle) - skin / 2
+        along = self.length / 2 - self._in(middle) - skin / 2
+        # A box leaning by the draft is this much thinner square to itself.
+        thick, tall = skin * math.cos(self.draft), (h - self.floor) / math.cos(self.draft)
+        boxes = [
+            Shape(
+                "box",
+                (0.0, 0.0, self.floor / 2),
+                (self.length - 2 * foot, self.width - 2 * foot, self.floor),
+            )
+        ]
+        for side in (-1, 1):
+            boxes += [
+                Shape(
+                    "box",
+                    (0.0, side * across, middle),
+                    (self.length, thick, tall),
+                    (-side * self.draft, 0.0, 0.0),
+                ),
+                Shape(
+                    "box",
+                    (side * along, 0.0, middle),
+                    (thick, self.width, tall),
+                    (0.0, side * self.draft, 0.0),
+                ),
+            ]
+        return boxes
+
+
+@dataclasses.dataclass(frozen=True)
 class Harvester:
     """One machine, in meters and kilograms."""
 
@@ -208,10 +331,22 @@ class Harvester:
     the hook, not to the middle of the mouth (see `AIM`), and the open blade
     reaching 2 cm past it keeps out of the truss's fruit."""
 
+    crate: Crate = Crate()
+    """The crate riding the platform behind the arm at `crate_frame`, under
+    the folded shear. Its length along the rail would put its near end
+    where the arm reaches back to cut."""
+
     @property
     def width(self) -> float:
         """The trolley across, over its wheels."""
         return self.gauge + 0.14
+
+    @property
+    def crate_frame(self) -> np.ndarray:
+        """The crate's frame in the platform's: turned across it, its back a
+        centimetre off the mast's face."""
+        x = -self.length / 2 + 0.17 + self.crate.width / 2
+        return transform((x, 0.0, 0.0), (0.0, 0.0, math.pi / 2))
 
     @property
     def chain(self) -> tuple[Joint, ...]:
@@ -595,10 +730,11 @@ def urdf(machine: Harvester, open_shear: bool = False) -> str:
 
     `base_link` is fixed on the main path's floor. The aisle carriage rides
     across it, the trolley down a path off the carriage, and the platform up
-    the trolley's mast; the arm stands on the platform through a fixed joint
-    the importer merges away, and the shear's head on the last wrist through
-    another. The trolley's chassis and mast collide, the arm and the shear;
-    the platform and the wheels are drawn only.
+    the trolley's mast; the arm and the crate stand on the platform through
+    fixed joints the importer merges away, so the crate's colliders are the
+    platform's, and the shear's head on the last wrist through another. The
+    trolley's chassis and mast collide, the crate, the arm and the shear; the
+    platform's own deck and the wheels are drawn only.
     """
     m = machine
     aisle, rail, lift, *_ = m.chain
@@ -621,6 +757,7 @@ def urdf(machine: Harvester, open_shear: bool = False) -> str:
     mast = m.lift + 0.3
     rear = -m.length / 2 + 0.1
     front = 0.25
+    crate_mesh = f'<mesh filename="{shear._stl(m.crate.mesh(), "crate")}"/>'
     joints = "".join(
         _joint(joint, parent, child)
         for joint, parent, child in zip(arm.joints, arm.bodies[:-1], arm.bodies[1:], strict=True)
@@ -646,6 +783,16 @@ def urdf(machine: Harvester, open_shear: bool = False) -> str:
   <link name="platform">
 {_box(((rear + front) / 2, 0.0, -0.02), (front - rear, 0.5, 0.04), "steel")}
 {_inertial(25.0, _box_inertia(25.0, front - rear, 0.5, 0.04), ((rear + front) / 2, 0, -0.02))}
+  </link>
+  <joint name="crate_mount" type="fixed">
+    <parent link="platform"/>
+    <child link="crate"/>
+    {_origin(m.crate_frame[:3, 3], rpy_of(m.crate_frame[:3, :3]))}
+  </joint>
+  <link name="crate">
+{_tagged("visual", _origin((0, 0, 0), (0, 0, 0)), crate_mesh, ("crate", MATERIALS["crate"]))}
+{chr(10).join(box.collision() for box in m.crate.boxes())}
+{_inertial(m.crate.mass, _box_inertia(m.crate.mass, m.crate.length, m.crate.width, m.crate.height), (0, 0, m.crate.height / 2))}
   </link>
   <joint name="arm_mount" type="fixed">
     <parent link="platform"/>

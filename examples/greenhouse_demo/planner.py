@@ -6,9 +6,9 @@ joints hold where `harvest` stations them. Its robot is
 spheres, the shear held open. Its world is every collider of the running Newton model within the
 arm's reach but the arm's own, each as the box round it, placed where the
 simulation has it at the moment of planning: the trolley's chassis and mast,
-the rails, the floor, the stems, and the trusses and their fruit, bent or
-fallen. So the planner keeps off whatever the simulation would collide with,
-the robot's own trolley included.
+the crate on the platform, the rails, the floor, the stems, and the trusses
+and their fruit, bent or fallen. So the planner keeps off whatever the
+simulation would collide with, the robot's own trolley and crate included.
 
 A cut is planned the way cuRobo plans a grasp: of a set of cut poses it
 picks one it can reach, the shear's own spheres off, since the shear has to
@@ -76,11 +76,12 @@ class Planner:
 
     Build one after the first `SimulationContext.reset()`, once Newton's
     model exists. Two cuRobo planners are kept, one for the cuts and one for
-    the folds: cuRobo captures each kind of problem in CUDA graphs of its own
+    the moves to joint positions, folding the arm or swinging a truss to the
+    crate: cuRobo captures each kind of problem in CUDA graphs of its own
     shape, and replaying one planner's graphs for the other kind fails. The
-    fold planner captures none; a fold plans in a third of a second without.
+    move planner captures none; a move plans in a third of a second without.
 
-    It folds once before the cut planner captures its graphs. A fold builds
+    It moves once before the cut planner captures its graphs. A move builds
     a kernel of its own into a Warp module the cut planner's graphs launch
     from, and Warp reloads a module that gains a kernel: a graph captured
     before that runs code that is gone, and crashes once Kit's renderer has
@@ -91,12 +92,12 @@ class Planner:
         self._machine = machine
         cfg = harvester.curobo_cfg(machine)
         cache = {"cuboid": OBSTACLES}
-        self._folding = MotionPlanner(
+        self._moving = MotionPlanner(
             MotionPlannerCfg.create(robot=cfg, collision_cache=cache, use_cuda_graph=False)
         )
         home = np.array(harvester.ARM_HOME)
-        self._folding.plan_cspace(
-            self._state(self._folding, home), self._state(self._folding, home + 0.1)
+        self._moving.plan_cspace(
+            self._state(self._moving, home), self._state(self._moving, home + 0.1)
         )
         self._cutting = MotionPlanner(
             MotionPlannerCfg.create(robot=cfg, collision_cache=cache, max_goalset=GOALS)
@@ -239,16 +240,15 @@ class Planner:
         positions = np.array(positions)
         return positions, np.gradient(positions, self.dt, axis=0)
 
-    def fold(
-        self, q: np.ndarray, platform: np.ndarray, skip, beside
+    def move(
+        self, q: np.ndarray, goal, platform: np.ndarray, skip, beside
     ) -> tuple[np.ndarray, np.ndarray] | None:
-        """A move from arm joint positions `q` to `ARM_HOME`, the platform at
+        """A move from arm joint positions `q` to `goal`, the platform at
         `platform`, the bodies in `skip` and the stretch of the stem `beside`
         names left out of the world (`_world`); or None if there is none."""
-        planner = self._folding
+        planner = self._moving
         self._world(planner, platform, skip, beside)
-        home = self._state(planner, harvester.ARM_HOME)
-        result = planner.plan_cspace(home, self._state(planner, q))
+        result = planner.plan_cspace(self._state(planner, goal), self._state(planner, q))
         if result is None or not result.success.any():
             return None
         return _trajectory(result.interpolated_trajectory, result.interpolated_last_tstep)

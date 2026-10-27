@@ -38,8 +38,8 @@ PATHS = [1]
 from where the trolley starts."""
 
 SETTLE = 1.5
-"""Seconds of simulated time not filmed at the start, while the arm folds
-from where it spawned."""
+"""Seconds of simulated time not filmed at the start, while the trusses
+settle under their fruit."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -64,14 +64,15 @@ CLOSE = Shot(eye=(0.5, -0.9, 0.2), look=(0.0, 0.0, -0.15))
 """The cuts' close-up: from the path a little ahead of the cut, so the
 shear comes in from behind it, toward the camera."""
 
-FALLING = Shot(eye=(0.5, -0.9, 0.2), look=(0.0, 0.0, -0.6), lens=18.0)
-"""The same of where the shear lets the truss go, looking down at it falling
-to the floor."""
+CRATE = Shot(eye=(0.0, -0.45, 0.8), look=(0.0, 0.0, 0.1), lens=18.0)
+"""The crate, from above the path across from the side the truss is cut on,
+as the arm carries the truss to it and lets it go: the point it frames is
+the crate's middle, at its underside."""
 
 TAKES = (
     "A truss is due once its least ripe fruit is turning",
     "The shear comes in along the stem, on a straight line",
-    "Cut and held by its stem, the truss is let go in the path",
+    "Cut and held by its stem, the truss is carried to the crate",
 )
 """The captions of the cuts filmed close up: the first the trolley makes, in
 order."""
@@ -98,18 +99,26 @@ from behind."""
 CLOSING = Shot(
     eye=(5.0, -0.4, 2.0),
     look=(1.5, 0.0, 0.3),
-    caption="Every due truss cut and on the floor",
+    caption="The path harvested into the crate",
 )
-"""The same, lower: the trusses on the floor and the trolley driving out."""
+"""The same, lower: the trolley driving out with the crate."""
 
-PACE = {"inward": 2.0, "close": 2.0, "outward": 1.5, "pull": 1.5, "drop": 3.0, "rest": 0.25}
+PACE = {
+    "inward": 2.0,
+    "close": 2.0,
+    "outward": 1.5,
+    "pull": 1.5,
+    "open": 3.0,
+    "drop": 3.0,
+    "rest": 0.25,
+}
 """How many times slower than the simulation the video plays: a take's
-stages by `Harvest.stage`, the truss dropping once let go, and the cuts no
-take has. The rest plays at the simulation's own speed."""
+stages by `Harvest.stage`, the truss settling in the crate once let go, and
+the cuts no take has. The rest plays at the simulation's own speed."""
 
 DROP = 0.8
-"""Seconds of simulated time a take stays on once the shear has let its
-truss go, while it falls."""
+"""Seconds of simulated time a take stays on the crate once the harvest
+moves on from its truss, while the truss settles in it."""
 
 EASE = 1.5
 """Seconds of video the camera takes from one shot to the next."""
@@ -147,8 +156,10 @@ def main():
         y = demo.path_ys(stage, demo.GREENHOUSE_PATH)[PATHS[0]]
         entrance, left = np.array([0.0, y, 0.0]), np.array([0.0, 1.0, 0.0])
         rig, film = Rig(stage, FPS, EASE, CUT), Film(out, SIZE, FPS)
-        # The takes' captions, by the prim of the truss each films.
+        # The takes' captions, by the prim of the truss each films, and the
+        # trusses swung round to the crate.
         captions: dict[str, str] = {}
+        swung: set[str] = set()
         # Frames due, counted a fraction a physics step: an eighth, at the
         # simulation's own speed. `last` is the truss cut last, let go at
         # `left_at` once the harvest moves on from it, and `shown` the one
@@ -164,10 +175,15 @@ def main():
                     last, left_at = harvest.cut[-1], None
                 if last is not None and left_at is None and harvest.job is not last:
                     left_at = now
+                if truss and harvest.stage == "carry":
+                    swung.add(truss.prim)
                 filmed = None
                 gone = left_at is not None and now - left_at < DROP
-                if last is not None and last.prim in captions and gone:
-                    shot, filmed, pace = FALLING, last, "drop"
+                carried = harvest.severed and harvest.stage in ("carry", "open", "tip")
+                if truss and truss.prim in captions and truss.prim in swung and carried:
+                    shot, filmed, pace = CRATE, truss, harvest.stage
+                elif last is not None and last.prim in captions and last.prim in swung and gone:
+                    shot, filmed, pace = CRATE, last, "drop"
                 elif (
                     truss
                     and truss.prim in captions
@@ -188,13 +204,12 @@ def main():
                 due -= 1
                 ahead = 1.0
                 if filmed:
-                    # Ahead is the way the shear comes in, and the truss is
-                    # let go back out from the cut and across the path.
+                    # Ahead is the way the shear comes in.
                     way = demo.heading(filmed.cut[:3, 0], filmed.side)
                     point, side, caption = filmed.cut[:3, 3], filmed.side, captions[filmed.prim]
                     ahead = float(np.sign(way[0]))
-                    if pace == "drop":
-                        point = point - demo.STANDOFF * way - demo.PULL * side
+                    if shot is CRATE:
+                        point = (harvest.platform() @ machine.crate_frame)[:3, 3]
                 else:
                     point, side, caption = entrance, left, shot.caption
                 rig.aim(framing(shot, point, side, ahead), cut=filmed is not shown)

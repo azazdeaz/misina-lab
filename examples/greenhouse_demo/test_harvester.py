@@ -7,6 +7,7 @@ dataset, which the first run downloads.
 
 from __future__ import annotations
 
+import itertools
 import xml.etree.ElementTree as ElementTree
 
 import numpy as np
@@ -88,6 +89,26 @@ def test_a_shapes_spheres_hold_all_of_it(shape):
     centres, radii = map(np.array, zip(*shape.cover(), strict=True))
     gaps = np.linalg.norm(points[:, None] - centres[None], axis=-1) - radii[None]
     assert gaps.min(axis=1).max() <= 1e-12
+
+
+def test_the_crates_boxes_are_its_mesh():
+    """Every corner of the crate's mesh, its ribs and rim included, is in one
+    of the boxes it collides as, and the boxes reach no further out than the
+    mesh does: a wall leaning the wrong way would leave its rim out."""
+    crate = MACHINE.crate
+    points = np.unique(crate.mesh().reshape(-1, 3), axis=0)
+    gaps, corners = [], []
+    for box in crate.boxes():
+        frame = kinematics.transform(box.xyz, box.rpy)
+        half = np.array(box.size) / 2
+        local = (points - frame[:3, 3]) @ frame[:3, :3]
+        gaps.append(np.linalg.norm(np.clip(np.abs(local) - half, 0.0, None), axis=1))
+        ends = np.array(list(itertools.product(*zip(-half, half, strict=True))))
+        corners.append(ends @ frame[:3, :3].T + frame[:3, 3])
+    assert np.min(gaps, axis=0).max() < 0.001
+    corners = np.concatenate(corners)
+    assert corners.min(axis=0) == pytest.approx(points.min(axis=0), abs=0.001)
+    assert corners.max(axis=0) == pytest.approx(points.max(axis=0), abs=0.001)
 
 
 @pytest.mark.parametrize(("way", "clear"), [(MACHINE.way_in, True), ((0.0, 0.0, 1.0), False)])
