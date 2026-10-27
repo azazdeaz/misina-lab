@@ -42,6 +42,13 @@
 //! leaves a stub. A young crop has no trusses that old and keeps its lowest
 //! leaves.
 //!
+//! A stem collides as a chain of capsules along its axis, each straight from
+//! one of the axis's points to another, none of the points between further
+//! than [`STRAY`] off it: a run along the gutter is one, the bowed rise a few,
+//! a bend a capsule for each pair of its points, cut across as chords. Each
+//! reaches a radius past both its points, so the chain keeps its radius over
+//! every joint, as a rail's pipe does.
+//!
 //! No two stems lie along the gutter alike, so each is a mesh of its own and
 //! nothing here is quantized. A stem authors a [`LeafConfig`] at each node
 //! that keeps its leaf and a [`TrussConfig`] in every third internode, and
@@ -51,6 +58,7 @@
 //! Row_02/Plant_017       Xform on the block's top
 //!   Stem_0               Xform
 //!     Tube               -> parts/Stem_n, this stem's own, with its stubs
+//!     Collision_00 …     a capsule along a straight span of the stem, root up
 //!     Hook               -> parts/Hook_0, on the wire
 //!     Twine              -> parts/Twine_n, wound down the rise
 //!     Leaf_00 …          a LeafConfig, on the stem's axis at its node
@@ -66,7 +74,7 @@ use misina_lab::geometry::strand::{Bark, Strand, strand_mesh};
 use misina_lab::palette::{Response, srgb};
 use misina_lab::params::{Label, Slider};
 use misina_lab::rng::{Rng, salt};
-use misina_lab::scene::{Library, Order};
+use misina_lab::scene::{COLLISION, Library, Order, capsule_between};
 use nalgebra::Point3;
 
 use super::gutter::{self, GutterParams};
@@ -188,6 +196,12 @@ const RIPENING_JITTER: f64 = 0.3;
 const TWINE_RADIUS: f32 = 0.001;
 const TWINE_PITCH: f32 = 0.3;
 const TWINE_STEP: f32 = 0.03;
+
+/// How far off a stem's axis its colliders may run, in meters: a capsule
+/// spans as many of the axis's points as all lie this near it. The axis is
+/// drawn as a curve through the points, which a bend's few points leave
+/// bowing further off the chord between them.
+const STRAY: f32 = 0.003;
 
 /// Vertices around a stem and round its twine, and rings per meter along
 /// both.
@@ -601,6 +615,31 @@ fn strand(points: &[Vec3], radii: &[f32], offset: Vec3, sides: usize) -> Strand 
     Strand::new(points, radii, sides, DETAIL, Bark::none())
 }
 
+/// The capsules `stem` collides as, root to head: each a radius and the two
+/// points of its axis it spans, straight between them, as thick as the stem
+/// is anywhere along it, and no point between further than [`STRAY`] off it.
+fn colliders(stem: &Stem) -> Vec<(f32, Vec3, Vec3)> {
+    let points = &stem.points;
+    let off = |a: Vec3, b: Vec3, p: Vec3| {
+        let d = b - a;
+        p.distance(a + d * ((p - a).dot(d) / d.length_squared()).clamp(0.0, 1.0))
+    };
+    let mut spans = Vec::new();
+    let mut from = 0;
+    while from + 1 < points.len() {
+        let mut to = from + 1;
+        while to + 1 < points.len()
+            && (from + 1..=to).all(|i| off(points[from], points[to + 1], points[i]) < STRAY)
+        {
+            to += 1;
+        }
+        let radius = stem.radii[from..=to].iter().copied().fold(0.0, f32::max);
+        spans.push((radius, points[from], points[to]));
+        from = to;
+    }
+    spans
+}
+
 /// A hook hung from its origin on the wire: the wire it is bent from, and the
 /// twine reel at its foot.
 fn hook_mesh() -> MeshData {
@@ -750,6 +789,15 @@ fn author(
             ))
             .with_children(|parent| {
                 parent.spawn((Name::new("Tube"), tube));
+                for (k, (radius, from, to)) in colliders(stem).into_iter().enumerate() {
+                    // Straight across the whole span, its caps past both
+                    // ends, so it overlaps the next one over their joint.
+                    let out = (to - from).normalize_or_zero() * radius;
+                    parent.spawn((
+                        Name::new(format!("{COLLISION}_{k:02}")),
+                        capsule_between(radius, from - out - origin, to + out - origin),
+                    ));
+                }
                 parent.spawn((
                     Name::new("Hook"),
                     hook.clone(),
@@ -795,7 +843,7 @@ mod tests {
     use super::*;
     use crate::elements::fruit::{FruitConfig, FruitParams, Hung, ripeness};
     use crate::elements::{GreenhouseParams, grown, in_scene, small};
-    use misina_lab::scene::UsdReference;
+    use misina_lab::scene::{Collider, UsdReference};
     use misina_lab::testing::{named_children, prim_path};
 
     /// How far `p` is from the polyline through `axis`.
@@ -815,9 +863,10 @@ mod tests {
     /// its peduncle and the two frames a gripper takes it by. A leaf hangs at
     /// each of the top `leaves_kept` nodes, on the stem's axis half a node off
     /// the trusses, a childless prim that references its mesh, and none in
-    /// the harvest band round the two trusses nearest their picking. At the
-    /// defaults with an extra stem on half the plants, on a low gutter under a
-    /// high wire, and on a stem too short for the leaves asked for.
+    /// the harvest band round the two trusses nearest their picking. The
+    /// stem's colliders chain straight through every joint between them. At
+    /// the defaults with an extra stem on half the plants, on a low gutter
+    /// under a high wire, and on a stem too short for the leaves asked for.
     #[test]
     fn trusses_and_leaves_hang_at_the_stems_nodes() {
         let extra: fn(&mut GreenhouseParams) = |p| p.stem.extra_stems = 0.5;
@@ -882,6 +931,30 @@ mod tests {
                     "{path} hangs at {}",
                     lowest.z
                 );
+
+                // The colliders chain straight through every joint: each
+                // one's straight part ends where the next one's begins.
+                let capsules: Vec<(Vec3, Vec3)> = named_children(world, on)
+                    .into_iter()
+                    .filter(|(name, _)| name.starts_with(COLLISION))
+                    .map(|(_, capsule)| {
+                        let at = world.entity(capsule);
+                        let (place, shape) = (
+                            at.get::<Transform>().unwrap(),
+                            at.get::<Collider>().unwrap().0,
+                        );
+                        let half = place.rotation * Vec3::Z * shape.height / 2.0;
+                        (place.translation - half, place.translation + half)
+                    })
+                    .collect();
+                assert!(capsules.len() > 1, "{path}: {} colliders", capsules.len());
+                for pair in capsules.windows(2) {
+                    assert!(
+                        pair[0].1.distance(pair[1].0) < 1e-4,
+                        "{path}: a neck at {}",
+                        pair[0].1
+                    );
+                }
 
                 // The axis through the trusses up to the head, under the hook.
                 let hook = named_children(world, on)
@@ -983,6 +1056,53 @@ mod tests {
             (weekly - about..=weekly + about).contains(&slid),
             "slid {slid} m in a week, grew {weekly} m"
         );
+    }
+
+    /// A stem's colliders run root to head along its axis, end to end, each
+    /// as thick as the stem and straight within `STRAY` of every point of
+    /// the axis it spans, and a long lowered stem takes far fewer of them
+    /// than it has points.
+    #[test]
+    fn a_stem_collides_as_a_few_capsules_along_its_axis() {
+        let live = Live {
+            rim: 0.56,
+            head: 4.28,
+            harvest: 1.2,
+            trusses: 9,
+            spread: 0.35,
+            ends: (0.2, 9.8),
+            flexible_below: 0.0,
+        };
+        let stem = grow(
+            Vec3::new(9.0, 0.0, 0.64),
+            1.0,
+            30.0,
+            0.0,
+            0.8,
+            live,
+            &mut Rng::new(5),
+        );
+        let spans = colliders(&stem);
+        assert!(
+            spans.len() * 4 < stem.points.len(),
+            "{} of {}",
+            spans.len(),
+            stem.points.len()
+        );
+        assert_eq!(spans[0].1, stem.points[0]);
+        assert_eq!(spans.last().unwrap().2, *stem.points.last().unwrap());
+        for pair in spans.windows(2) {
+            assert_eq!(pair[0].2, pair[1].1);
+        }
+        let thickest = stem.radii.iter().copied().fold(0.0, f32::max);
+        for (radius, from, to) in spans {
+            assert!(radius > 0.0 && radius <= thickest);
+            let first = stem.points.iter().position(|p| *p == from).unwrap();
+            let last = stem.points.iter().position(|p| *p == to).unwrap();
+            for p in &stem.points[first..=last] {
+                assert!(off_axis(*p, &[from, to]) < STRAY, "{p} is off its capsule");
+            }
+        }
     }
 
     /// A place round the gutter maps onto the left side running +X, the far

@@ -79,11 +79,10 @@ in, the arm's base is stationed."""
 RISE = 0.15
 """How far above the shoulder the cut is held, where the lift reaches."""
 TILTS = np.radians([0.0, 20.0, -20.0])
-"""How far off level the shear may point. Square to the peduncle, it has
-the peduncle across the mouth. Level, it is square to a standing stem too,
-which then runs behind the hook across the mouth's height and nowhere nearer
-the head; tilted, the stem runs toward the head, and 20 degrees keeps it a
-head's width off it."""
+"""How far off level the shear may point, turned about the blades' normal,
+square to the stem. Level, a standing stem runs behind the hook straight
+across the mouth's height and nowhere nearer the head; tilted, it runs
+toward the head, and 20 degrees keeps it a head's width off it."""
 STEPS = np.array([0.02, 0.02, 0.01])
 """How far each trolley joint's target may move per control tick on a run,
 every joint pacing itself to arrive with the slowest: 1 m/s across and down a
@@ -100,7 +99,8 @@ joint at the joint, so this one drops the whole truss, and the piece the
 jaws hold runs straight from the cut to the next joint."""
 ASKEW = 45.0
 """How far off the way its `Cut` was authored a peduncle may run for the
-shear to be squared to it as it hangs, in degrees."""
+shear to be squared to it as it hangs, in degrees, as far as its stem lets
+it be."""
 TRIES = 2
 """How many times a truss's cut is tried before it is given up on: a shear
 that closed on nothing opens, backs out and plans the cut afresh."""
@@ -126,6 +126,8 @@ FELL = 0.2
 
 # A rod body's label ends in its segment's prim; segment 0 is the held one.
 SEGMENT = re.compile(r"(.*)/Cable_edge_body_(\d+)$")
+# A stem's collider's label is its prim: one capsule along each span of it.
+STEM = re.compile(r"(.*/Stem_\d+)/Collision_\d+$")
 
 
 @dataclasses.dataclass
@@ -138,6 +140,10 @@ class Truss:
     """The horizontal direction from the path it is cut from to it."""
     bodies: list[int] = dataclasses.field(default_factory=list)
     """Its rod's bodies, by model index, from the stem out."""
+    stem: np.ndarray = dataclasses.field(default_factory=lambda: np.array([0.0, 0.0, 1.0]))
+    """Which way the stem it hangs from runs at its node."""
+    stem_shapes: list[int] = dataclasses.field(default_factory=list)
+    """Its stem's colliders, by model index."""
 
 
 def parse_args() -> argparse.Namespace:
@@ -216,6 +222,31 @@ def read_trusses(stage, root: str) -> list[Truss]:
     return trusses
 
 
+def stem_axes(model) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Each stem's colliders, by the stem's prim: their model indices and
+    the two ends of each one's axis in the world."""
+    poses, scales = model.shape_transform.numpy(), model.shape_scale.numpy()
+    found: dict[str, list[int]] = {}
+    for shape, label in enumerate(model.shape_label):
+        if match := STEM.match(label):
+            found.setdefault(match[1], []).append(shape)
+    axes = {}
+    for stem, shapes in found.items():
+        shapes = np.array(shapes)
+        frames = [frame_of(pose[:3], pose[3:]) for pose in poses[shapes]]
+        reach = np.array([f[:3, 2] for f in frames]) * scales[shapes, 1, None]
+        middles = poses[shapes, :3]
+        axes[stem] = (shapes, middles - reach, middles + reach)
+    return axes
+
+
+def distances(point: np.ndarray, starts: np.ndarray, ends: np.ndarray) -> np.ndarray:
+    """How far `point` is from each segment from `starts[i]` to `ends[i]`."""
+    span = ends - starts
+    t = np.clip(np.einsum("ij,ij->i", point - starts, span) / (span * span).sum(1), 0.0, 1.0)
+    return np.linalg.norm(point - (starts + span * t[:, None]), axis=1)
+
+
 def path_ys(stage, root: str) -> list[float]:
     """Each path's centre line, by its number."""
     from pxr import Usd, UsdGeom
@@ -251,17 +282,23 @@ def plan(trusses: list[Truss], ys: list[float], paths: list[int], pitch: float) 
 
 def peduncle(truss: Truss, shears) -> tuple[np.ndarray, np.ndarray]:
     """Where the blade crosses `truss`'s peduncle, `PAST` its rod's first
-    joint, and which way the peduncle runs there, as it hangs now: the way
-    the segment past that joint runs. The truss's weight bends the rod at
-    that joint, off the way `Cut` was authored. One running more than
-    `ASKEW` off that way, pushed along the row by a neighbour, is taken to
-    run as authored."""
+    joint, as it hangs now, and the way square to the stem nearest the way
+    the peduncle runs there: the normal of the blades' plane, which runs
+    along the stem. A plane square to the peduncle itself would cross the
+    stem a few centimetres from the cut wherever the peduncle rises or
+    droops off square to it, where the hook sweeps it.
+
+    The peduncle runs the way the segment past that joint runs. The truss's
+    weight bends the rod at that joint, off the way `Cut` was authored. One
+    running more than `ASKEW` off that way, pushed along the row by a
+    neighbour, is taken to run as authored."""
     authored = truss.cut[:3, 0] / np.linalg.norm(truss.cut[:3, 0])
     start, end = shears.capsules()
     first = np.searchsorted(shears.bodies, truss.bodies[1])
     hangs = (end[first] - start[first]) / np.linalg.norm(end[first] - start[first])
     along = hangs if hangs @ authored > np.cos(np.radians(ASKEW)) else authored
-    return start[first] + PAST * along, along
+    square = along - (along @ truss.stem) * truss.stem
+    return start[first] + PAST * along, square / np.linalg.norm(square)
 
 
 def heading(along: np.ndarray, side: np.ndarray) -> np.ndarray:
@@ -281,11 +318,11 @@ def heading(along: np.ndarray, side: np.ndarray) -> np.ndarray:
 def approaches(
     truss: Truss, at: np.ndarray, along: np.ndarray, machine: Harvester
 ) -> list[np.ndarray]:
-    """The mouth's poses that cut `truss`'s peduncle at `at`, where it runs
-    `along`: the blade's plane through `at`, +X along it, so it lies across
-    the mouth with the jaws on the truss's side of the cut, and +Z the way
-    the shear points, `heading` tilted up to `TILTS` off level, square to
-    the peduncle still."""
+    """The mouth's poses that cut `truss`'s peduncle at `at`, the blades'
+    plane square to `along` (see `peduncle`): through `at`, +X `along`, so
+    the peduncle lies across the mouth with the jaws on the truss's side of
+    the cut, and +Z the way the shear points, `heading` tilted up to `TILTS`
+    off level."""
     level = heading(along, truss.side)
     up = np.cross(level, along)
     poses = []
@@ -352,10 +389,11 @@ class Harvest:
     at `base` in the world.
 
     A cut is planned clear of everything first, but for the held segment and
-    the next, which the shear closes on. Failing that, the arm may brush
-    the truss it cuts, and failing that any truss: the rods bend aside, as
-    the crop does round a picker's arm. The trolley, the rails and the floor
-    it never touches.
+    the next, which the shear closes on, and the stretch of its stem by the
+    cut, which the shear slides along (`planner.BESIDE`). Failing that, the
+    arm may brush the truss it cuts, and failing that any truss: the rods
+    bend aside, as the crop does round a picker's arm. The trolley, the
+    rails, the floor and every other stretch of stem it never touches.
     """
 
     def __init__(
@@ -373,6 +411,9 @@ class Harvest:
         self.time = 0.0
         self.soft: set[int] = set()
         """The rod bodies the arm may brush, those the last cut was planned through."""
+        self.beside: tuple[list[int], np.ndarray] = ([], np.zeros(3))
+        """The stem the last cut was planned beside, its colliders, and where
+        it was cut: the planner leaves the stem out of its world there."""
         self._next()
 
     @property
@@ -413,10 +454,12 @@ class Harvest:
         self.stage, self.ticks = "run", 0
         if np.abs(self.q[3:] - ARM_HOME).max() < ARRIVED:
             return
-        folding = self.planner.fold(self.q[3:], self.platform(), self.soft)
+        folding = self.planner.fold(self.q[3:], self.platform(), self.soft, self.beside)
         if folding is None:
             # From among the trusses, the arm may brush any on the way out.
-            folding = self.planner.fold(self.q[3:], self.platform(), set(self.shears.bodies))
+            folding = self.planner.fold(
+                self.q[3:], self.platform(), set(self.shears.bodies), self.beside
+            )
         if folding is None:
             # From a pose already touching what it may not brush, a fold
             # finds no way; the arm folds on a straight line instead.
@@ -430,9 +473,11 @@ class Harvest:
     def _plan(self) -> None:
         """Plan the cut of the truss the trolley stands for, or give it up."""
         truss, platform = self.job, self.platform()
-        poses = approaches(truss, *peduncle(truss, self.shears), self.machine)
+        at, along = peduncle(truss, self.shears)
+        poses = approaches(truss, at, along, self.machine)
+        beside = (truss.stem_shapes, at)
         for soft in (set(truss.bodies[:2]), set(truss.bodies), set(self.shears.bodies)):
-            planned = self.planner.cut(self.q[3:], platform, poses, STANDOFF, soft)
+            planned = self.planner.cut(self.q[3:], platform, poses, STANDOFF, soft, beside)
             if planned is not None:
                 break
         if planned is None:
@@ -443,7 +488,7 @@ class Harvest:
         self.tries += 1
         self.tally.reachable += self.tries == 1
         self.tally.crowded += self.tries == 1 and len(soft) > 2
-        self.planned, self.soft = planned, soft
+        self.planned, self.soft, self.beside = planned, soft, beside
         self._play("approach", planned.approach)
 
     def _play(self, stage: str, trajectory: tuple[np.ndarray, np.ndarray]) -> None:
@@ -640,8 +685,13 @@ def run(
         if match := SEGMENT.match(label):
             chains.setdefault(match[1], []).append((int(match[2]), body))
     trusses = read_trusses(stage, GREENHOUSE_PATH)
+    stems = stem_axes(NewtonManager.get_model())
     for truss in trusses:
         truss.bodies = [body for _, body in sorted(chains[truss.prim])]
+        shapes, starts, ends = stems[truss.prim.rsplit("/", 1)[0]]
+        nearest = distances(truss.cut[:3, 3], starts, ends).argmin()
+        truss.stem = (ends - starts)[nearest] / np.linalg.norm((ends - starts)[nearest])
+        truss.stem_shapes = list(shapes)
     ys = path_ys(stage, GREENHOUSE_PATH)
     paths = paths if paths is not None else list(range(len(ys)))
     if not all(0 <= path < len(ys) for path in paths):

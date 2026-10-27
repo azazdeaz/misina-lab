@@ -18,7 +18,7 @@ import pytest
 # under its own message, and pytest skips only when the error names the module
 # it was asked to import.
 try:
-    from misina_lab.isaaclab import spawn
+    from misina_lab.isaaclab import rods, spawn
     from vinery_lab.isaaclab import ShootCfg, VineyardCfg, physics, vineyard
 except ImportError:
     pytest.skip("Isaac Lab is not installed", allow_module_level=True)
@@ -32,7 +32,7 @@ from isaaclab_newton.physics import (  # noqa: E402
     VBDSolverCfg,
 )
 from isaaclab_physx.physics import PhysxCfg  # noqa: E402
-from newton import JointType, ShapeFlags  # noqa: E402
+from newton import GeoType, JointType, ShapeFlags  # noqa: E402
 
 VINEYARD = "/World/Vineyard"
 ROBOT = "/World/envs/env_0/Robot"
@@ -174,6 +174,11 @@ def builder(monkeypatch) -> object:
     the trunk of the rod's vine, the trunk of another, and a collider authored
     under the rod's second segment, 20 cm past the segment's body along x. The
     other two joints are there to be walked past.
+
+    Every shape is a capsule 2 cm across and 10 cm long but the ground, a
+    plane, and the rider, a sphere. The trunk of the rod's vine stands on
+    the origin, where the rod's first segment is held inside it; the second
+    segment, a metre off, is clear of it.
     """
     import warp as wp
 
@@ -215,6 +220,12 @@ def builder(monkeypatch) -> object:
         shape_transform=[wp.transform_identity()] * 8
         + [wp.transform((1.2, 0.0, 1.0), wp.quat_identity())],
         shape_flags=[int(ShapeFlags.COLLIDE_SHAPES)] * 9,
+        shape_type=[GeoType.CAPSULE] * 4
+        + [GeoType.PLANE]
+        + [GeoType.CAPSULE] * 3
+        + [GeoType.SPHERE],
+        shape_scale=[(0.01, 0.05, 0.0)] * 9,
+        shape_margin=[0.0] * 9,
         shape_collision_group=[1] * 9,
         shape_collision_filter_pairs=[],
     )
@@ -296,8 +307,53 @@ def test_a_collider_under_a_segment_rides_the_segments_body_and_passes_its_rod(b
     # 20 cm along x in the world is 20 cm along -y to a body turned a quarter
     # turn about z.
     assert list(builder.shape_transform[8])[:3] == pytest.approx([0.0, -0.2, 0.0], abs=1e-6)
-    assert builder.shape_collision_filter_pairs == [(0, 8), (1, 8)]
+    # And the held segment, authored inside its vine's trunk at the origin,
+    # passes through that.
+    assert set(builder.shape_collision_filter_pairs) == {(0, 8), (1, 8), (0, 6)}
     assert builder.shape_collision_group[8] == physics.VINE_GROUPS
+
+
+@pytest.mark.parametrize("margin", [0.0, 0.003])
+def test_a_rod_passes_through_its_own_wood_only_where_it_starts_inside_it(builder, margin):
+    """The vine's trunk lies level across the top of the rod's first segment,
+    5 mm clear of it. Grown by a 3 mm margin each, the two overlap, and a pair
+    authored overlapping would shove the rod off its rest shape at the first
+    step, so the segment is let through the trunk; clear, it still meets it.
+    The other vine's trunk and the post overlap the segment too, but the one
+    never pairs with it and the other is the scene's; the riders' pairs are
+    `carry_riders`'."""
+    import warp as wp
+
+    across = wp.quat_from_axis_angle(wp.vec3(1.0, 0.0, 0.0), 1.5707964)
+    builder.shape_transform[6] = wp.transform((0.0, 0.0, 0.075), across)
+    builder.shape_margin[0] = builder.shape_margin[6] = margin
+    physics.tune_shoots()
+    NewtonManager.dispatch_event(PhysicsEvent.MODEL_INIT)
+
+    let = {(0, 6)} if margin else set()
+    assert set(builder.shape_collision_filter_pairs) == {(0, 8), (1, 8)} | let
+
+
+@pytest.mark.parametrize(
+    ("p", "q", "s", "t", "near"),
+    [
+        ((0, 0, 0), (0, 0, 1), (1, 0, 0), (1, 0, 1), 1.0),  # side by side
+        ((-1, 0, 0), (1, 0, 0), (0, -1, 0.2), (0, 1, 0.2), 0.2),  # crossing
+        ((0, 0, 0), (0, 0, 1), (0, 0, 1.5), (0, 0, 3), 0.5),  # end to end
+        ((0, 0, 0), (1, 0, 0), (2, 1, 0), (2, 2, 1), 2**0.5),  # skew, end to end
+        ((0.5, 0.3, 0), (0.5, 0.3, 0), (0, 0, 0), (1, 0, 0), 0.3),  # a point
+        ((0, 0, 0), (0, 0, 0), (0, 3, 4), (0, 3, 4), 5.0),  # two points
+    ],
+)
+def test_the_least_distance_between_two_segments(p, q, s, t, near):
+    """Wherever the nearest pair of points lies: inside both segments, at an
+    end of one or of both, or on a segment shrunk to a point."""
+    import numpy as np
+
+    got = rods._distances(
+        np.array(p, float), np.array(q, float), np.array([s], float), np.array([t], float)
+    )
+    assert got[0] == pytest.approx(near, abs=1e-12)
 
 
 def test_the_groups_pair_what_they_are_meant_to():

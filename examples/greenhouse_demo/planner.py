@@ -6,9 +6,9 @@ joints hold where `harvest` stations them. Its robot is
 spheres, the shear held open. Its world is every collider of the running Newton model within the
 arm's reach but the arm's own, each as the box round it, placed where the
 simulation has it at the moment of planning: the trolley's chassis and mast,
-the rails, the floor, and the trusses and their fruit, bent or fallen. So the
-planner keeps off whatever the simulation would collide with, the robot's own
-trolley included.
+the rails, the floor, the stems, and the trusses and their fruit, bent or
+fallen. So the planner keeps off whatever the simulation would collide with,
+the robot's own trolley included.
 
 A cut is planned the way cuRobo plans a grasp: of a set of cut poses it
 picks one it can reach, the shear's own spheres off, since the shear has to
@@ -52,6 +52,10 @@ SPEED = 0.4
 INSIDE = 0.02
 """How far inside cuRobo's joint range a straight line keeps the arm, in
 radians: cuRobo plans from no pose on the bound itself."""
+BESIDE = 0.2
+"""How near a cut, in meters, the stem it is made beside is left out of the
+world: the shear slides along it there, on the line in and out and at the
+stand-off, closer than the spheres it is covered in allow."""
 LINE_TOLERANCE = (0.002, 0.02)
 """How close to the straight line every point of it has to be solved, in
 meters and radians."""
@@ -148,18 +152,25 @@ class Planner:
         self._kind = kind[self._shapes]
 
     def cut(
-        self, q: np.ndarray, platform: np.ndarray, poses: list[np.ndarray], standoff: float, skip
+        self,
+        q: np.ndarray,
+        platform: np.ndarray,
+        poses: list[np.ndarray],
+        standoff: float,
+        skip,
+        beside,
     ) -> Cut | None:
         """A cut from arm joint positions `q` to one of the mouth's `poses`, in
-        the world, the platform at `platform`, the bodies in `skip` left out of
-        the world; or None if none is reachable. Its line in starts `standoff`
-        back from the pose along `Harvester.way_in`.
+        the world, the platform at `platform`, the bodies in `skip` and the
+        stretch of the stem `beside` names left out of the world (`_world`);
+        or None if none is reachable. Its line in starts `standoff` back from
+        the pose along `Harvester.way_in`.
 
         cuRobo plans to the set as a whole first. Planning to a set it seeds
         no paths from its graph, so it can miss a pose it reaches alone, and
         each pose is tried alone after."""
         planner = self._cutting
-        self._world(planner, platform, skip)
+        self._world(planner, platform, skip, beside)
         # The stand-off, in the mouth's frame at the cut. cuRobo backs off from
         # the pose it is given along the shear's +Z alone, so it is given the
         # cut pose moved the rest of the way.
@@ -229,22 +240,25 @@ class Planner:
         return positions, np.gradient(positions, self.dt, axis=0)
 
     def fold(
-        self, q: np.ndarray, platform: np.ndarray, skip
+        self, q: np.ndarray, platform: np.ndarray, skip, beside
     ) -> tuple[np.ndarray, np.ndarray] | None:
         """A move from arm joint positions `q` to `ARM_HOME`, the platform at
-        `platform`, the bodies in `skip` left out of the world; or None if
-        there is none."""
+        `platform`, the bodies in `skip` and the stretch of the stem `beside`
+        names left out of the world (`_world`); or None if there is none."""
         planner = self._folding
-        self._world(planner, platform, skip)
+        self._world(planner, platform, skip, beside)
         home = self._state(planner, harvester.ARM_HOME)
         result = planner.plan_cspace(home, self._state(planner, q))
         if result is None or not result.success.any():
             return None
         return _trajectory(result.interpolated_trajectory, result.interpolated_last_tstep)
 
-    def _world(self, planner: MotionPlanner, platform: np.ndarray, skip) -> None:
+    def _world(self, planner: MotionPlanner, platform: np.ndarray, skip, beside) -> None:
         """Hand `planner` the colliders round the platform, at `platform` in
-        the world, as boxes in its frame."""
+        the world, as boxes in its frame, but those on the bodies in `skip`.
+        `beside` is a stem's colliders, capsules, and a point in the world: of
+        those only the stretches further than `BESIDE` from the point are
+        kept, each as a box of its own."""
         model = NewtonManager.get_model()
         bodies = NewtonManager.get_state_0().body_q.numpy()
         placed = model.shape_transform.numpy()[self._shapes]
@@ -274,13 +288,28 @@ class Planner:
                 middle, size[i] = self._offset[shape]
                 poses[i] = poses[i] @ transform(middle)
 
+        names = [f"shape_{shape}" for shape in self._shapes]
+        left = np.isin(self._body, list(skip))
+        stem, point = beside
+        point = (np.linalg.inv(platform) @ [*point, 1.0])[:3]
+        pieces, sizes = [], []
+        for i in np.flatnonzero(np.isin(self._shapes, list(stem))):
+            left[i] = True
+            for k, (a, b) in enumerate(_beyond(poses[i], half[i], point)):
+                pieces.append(poses[i] @ transform((0.0, 0.0, (a + b) / 2)))
+                sizes.append([2 * radius[i], 2 * radius[i], b - a + 2 * radius[i]])
+                names.append(f"{names[i]}_{k}")
+        if pieces:
+            poses, size = np.concatenate([poses, pieces]), np.concatenate([size, sizes])
+            left = np.concatenate([left, np.zeros(len(pieces), dtype=bool)])
+
         reach = np.linalg.norm(poses[:, :3, 3], axis=1) - np.linalg.norm(size, axis=1) / 2
-        kept = [i for i in np.argsort(reach) if reach[i] < REACH and self._body[i] not in skip]
+        kept = [i for i in np.argsort(reach) if reach[i] < REACH and not left[i]]
         kept = kept[:OBSTACLES]
         quaternions = Rotation.from_matrix(poses[kept, :3, :3]).as_quat(scalar_first=True)
         boxes = [
             Cuboid(
-                name=f"shape_{self._shapes[i]}",
+                name=names[i],
                 dims=size[i].tolist(),
                 pose=[*poses[i, :3, 3].tolist(), *quaternion.tolist()],
             )
@@ -292,6 +321,18 @@ class Planner:
     def _state(planner: MotionPlanner, q) -> JointState:
         position = torch.tensor([list(q)], dtype=torch.float32, device="cuda")
         return JointState.from_position(position, joint_names=planner.joint_names)
+
+
+def _beyond(pose: np.ndarray, half: float, point: np.ndarray) -> list[tuple[float, float]]:
+    """The stretches of the axis of a capsule at `pose`, from `-half` to
+    `half` along its +Z, that run further than `BESIDE` from `point`."""
+    along = (point - pose[:3, 3]) @ pose[:3, 2]
+    off = np.linalg.norm(point - pose[:3, 3] - along * pose[:3, 2])
+    if off >= BESIDE:
+        return [(-half, half)]
+    near = math.sqrt(BESIDE**2 - off**2)
+    stretches = ((-half, min(half, along - near)), (max(-half, along + near), half))
+    return [(a, b) for a, b in stretches if a < b]
 
 
 def _trajectory(plan: JointState, last: torch.Tensor) -> tuple[np.ndarray, np.ndarray]:

@@ -84,10 +84,13 @@ The plan comes from the scene's own ground truth, not from a camera:
 3. **The approach.** Each truss is cut by the stem, at the first joint of
    its rod, which `Cut` marks within a centimetre: the blade crosses the
    peduncle half a centimetre past the joint, and the cut is made at it,
-   so the whole truss falls. The shear comes in square to the peduncle as
-   it hangs, so the peduncle lies across the mouth, and within 20° of
-   level, square to the stem as well, which then runs behind the blades
-   and clear of the shear's head. It comes in along the row with the hook
+   so the whole truss falls. The blades' plane runs along the stem, a
+   centimetre or so out from it, so the peduncle lies across the mouth,
+   as square to it as the stem lets it be, and the shear slides past the
+   stem rather than through it: a plane square to a peduncle that rises
+   or droops off square to the stem would cross the stem a few
+   centimetres from the cut. Within 20° of level, the stem runs behind
+   the blades and clear of the shear's head. It comes in along the row with the hook
    above the peduncle, so the truss's weight hangs the peduncle off the
    hook into the mouth, rather than dragging it over the hook's edge; the
    trolley stands behind the cut that way, so the arm reaches away from its
@@ -118,12 +121,13 @@ The tally counts the trusses due on the paths worked, how many the arm
 reaches, how many of those only by brushing a truss, how many it cuts,
 holds and lets go, how many it sees fall, and the seconds per truss cut.
 On the demo's two 4 m rows, 36 trusses are due on the three paths. The
-robot reaches all but one, a third of them only by brushing a truss, and
-cuts every one it reaches. Nearly nine in ten ride out in the jaws and are
-let go in the path; the rest slip out as they are cut (see
-[Cutting and holding](#cutting-and-holding)). Every truss cut drops whole
-to the floor. That is about 5 s of simulated time a cut and 270 s for the
-whole run, which takes about six minutes on an RTX 5070 Ti.
+robot reaches four in five, a third of those only by brushing a truss; the
+stems of the plants beside the rest keep the arm off them. It cuts all but
+two or three of those it reaches, and nearly every truss it cuts rides out
+in the jaws, is let go in the path and drops whole to the floor (see
+[Cutting and holding](#cutting-and-holding)). That is about 5 s of
+simulated time a cut and 230 s for the whole run, which takes about five
+minutes on an RTX 5070 Ti.
 
 ## Cutting and holding
 
@@ -159,7 +163,8 @@ The blade crosses the peduncle half a centimetre past its rod's first
 joint, and `Shears.cut` makes the cut at the joint. Now and then the
 peduncle shifts under the closing blade far enough that the cut lands a
 centimetre or more past the joint, in the segment the jaws hold; that
-truss slips out of them and falls where it is cut, about one cut in ten.
+truss slips out of them and falls where it is cut. Over four runs of the
+demo, 6 of the 106 trusses cut were lost from the jaws.
 
 ## Planning with cuRobo
 
@@ -180,18 +185,22 @@ station. What it collides with is what the simulation collides with:
 - **The world.** `planner.py` reads every collider of the running Newton
   model within the arm's reach, but the arm's own, and hands cuRobo the box
   round each where the simulation has it at that moment: the trolley's
-  chassis and mast, the rails, the floor, and the trusses and their fruit,
-  bent or fallen.
+  chassis and mast, the rails, the floor, the stems, and the trusses and
+  their fruit, bent or fallen.
 
 Bent trusses crowd the crop: a truss's fruit hang just below its cut and
 the next truss up a few centimeters above. A cut is planned clear of every
-truss first, but for the two segments the shear closes on; failing that,
-the arm may brush the truss it cuts, and failing that any truss, since the
-rods bend aside as they do round a picker's arm. The trolley, the rails and
-the floor it never touches. The straight lines in, out and across the path
-are solved point by point, not planned, so they stay on the branch of the
-arm cuRobo reached the stand-off on, and within the joint range cuRobo
-plans in, so the fold that follows plans from where they end.
+truss first, but for the two segments the shear closes on, and clear of
+every stem but the 20 cm either side of the cut of the one it is made
+beside, which the shear slides along closer than the spheres cuRobo covers
+it in allow; the fold that follows leaves that stretch out too. Failing
+that, the arm may brush the truss it cuts, and failing that any truss,
+since the rods bend aside as they do round a picker's arm. The trolley, the
+rails, the floor and every other stretch of stem it never touches. The
+straight lines in, out and across the path are solved point by point, not
+planned, so they stay on the branch of the arm cuRobo reached the stand-off
+on, and within the joint range cuRobo plans in, so the fold that follows
+plans from where they end.
 
 ## Recording the video
 

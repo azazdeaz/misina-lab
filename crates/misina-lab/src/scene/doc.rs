@@ -42,7 +42,7 @@ use serde::{Deserialize, Serialize};
 /// Bumped when the shape of this document changes incompatibly. The builder
 /// refuses anything it does not recognise, so a stale cached scene fails
 /// loudly instead of composing into something subtly wrong.
-pub const FORMAT: u32 = 10;
+pub const FORMAT: u32 = 11;
 
 /// One generated scene, ready to be turned into a USD stage.
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -275,6 +275,12 @@ pub struct Cable {
     /// ends, and each joint's bending stiffness goes with the fourth power of
     /// the diameter at its point.
     pub widths: Vec<f32>,
+    /// Each point's normal, in the prim's own frame: the +Y of the segment
+    /// leaving it in [`segment_frames`](super::segment_frames), and the last
+    /// point the last segment's. A rod's importer turns each segment's body
+    /// about the segment to put its +Y there, so the body's frame is its
+    /// prim's, and whatever rides the prim stays where it was put.
+    pub normals: Vec<[f32; 3]>,
     /// The mass hanging from each point, in kilograms, on top of the rod's
     /// own: what rides the organ without being simulated, such as its fruit.
     /// A point's load is split between the two segments it joins, as its share
@@ -352,6 +358,7 @@ mod tests {
         rod.cable = Some(Cable {
             points: vec![[0.0; 3], [0.0, 0.0, 0.1], [0.0, 0.0, 0.2]],
             widths: vec![0.011, 0.010, 0.009],
+            normals: vec![[0.0, 1.0, 0.0]; 3],
             loads: vec![0.0, 0.0, 0.05],
             display_color: [0.2, 0.5, 0.1],
             roughness: 0.85,
@@ -415,7 +422,8 @@ mod tests {
     fn defaulted_fields_are_left_out_of_the_json() {
         let json = serde_json::to_string(&doc()).unwrap();
 
-        assert!(!json.contains("\"normals\""), "got:\n{json}");
+        // The cable's, which it always carries; the part has none.
+        assert_eq!(json.matches("\"normals\"").count(), 1, "got:\n{json}");
         assert!(!json.contains("\"uvs\""), "got:\n{json}");
         assert!(!json.contains("\"colors\""), "got:\n{json}");
         assert!(!json.contains("\"collision\""), "got:\n{json}");

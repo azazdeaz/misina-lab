@@ -70,7 +70,7 @@ to the floor."""
 
 TAKES = (
     "A truss is due once its least ripe fruit is turning",
-    "The shear comes in square to the peduncle, on a straight line",
+    "The shear comes in along the stem, on a straight line",
     "Cut and held by its stem, the truss is let go in the path",
 )
 """The captions of the cuts filmed close up: the first the trolley makes, in

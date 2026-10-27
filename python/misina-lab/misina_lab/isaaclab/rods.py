@@ -118,7 +118,9 @@ A group is one signed integer per shape. A positive group meets itself and
 every negative one; a negative group meets everything but its own; zero meets
 nothing. That is the whole algebra, and it is enough: a plant's rods and its
 wood share a positive group, so a cut piece catches on its own plant's stub,
-its other rods and its wood, and segments of different plants never pair. The
+its other rods and its wood -- but a wood collider a segment of it was
+authored inside, which `let_rods_out_of_their_wood` lets it through for good
+-- and segments of different plants never pair. The
 ground, the trellis and the robot's bodies are negative, so every rod meets
 them. The robot takes a group per body, which pairs its parts exactly as the
 default group did.
@@ -252,8 +254,10 @@ def tune_rods(
 
     First seats every collider authored under a segment's prim on the
     segment's body, with `carry_riders`, so it takes the plant's group with
-    the rod. Also registers `reserve_contact_slots` on `PHYSICS_READY`, so a
-    cut can make the two faces of a cut meet; see `ContactSlots`.
+    the rod, and once the groups are set lets each rod through the wood it
+    is authored inside, with `let_rods_out_of_their_wood`. Also registers
+    `reserve_contact_slots` on `PHYSICS_READY`, so a cut can make the two
+    faces of a cut meet; see `ContactSlots`.
 
     Registers once. While the registration stands -- the manager drops it when
     the simulation stops -- a further call returns it unchanged, rather than
@@ -264,8 +268,9 @@ def tune_rods(
     scene pays N(N-1)/2 candidate pairs for collisions it never solves; see
     `PLANT_GROUPS`.
 
-    A rod meets its own plant's rods and wood, the ground, the posts and the
-    robot, and passes through every other plant.
+    A rod meets its own plant's rods and wood (all but the wood colliders it
+    is authored inside), the ground, the posts and the robot, and passes
+    through every other plant.
     """
     global _tuning
     # Matches a label up to and including its plant prim.
@@ -325,6 +330,8 @@ def tune_rods(
         for shape in builder.body_shapes[-1]:
             regroup((shape,), plant_group(builder.shape_label[shape]))
 
+        let_rods_out_of_their_wood(builder)
+
     _tuning = NewtonManager.register_callback(tune, PhysicsEvent.MODEL_INIT)
     NewtonManager.register_callback(
         lambda _payload: reserve_contact_slots(NewtonManager.get_model()),
@@ -383,6 +390,81 @@ def carry_riders(builder) -> int:
         builder.body_shapes[body].append(shape)
         seated += 1
     return seated
+
+
+def let_rods_out_of_their_wood(builder) -> int:
+    """Let every shape on a rod through each collider of its own plant's
+    wood that it overlaps as authored. Returns how many pairs were let
+    through.
+
+    A rod is held where it leaves the wood it grows from, and a wood collider
+    is a proxy, straighter and often fatter than the wood it stands for, so
+    the segments next to the held one can start inside it. A pair authored
+    overlapping would shove the rod off its rest shape the moment the
+    simulation starts, at the joint a flush cut is made at.
+
+    A pair let through stays so for as long as the model stands, a piece cut
+    free included: such a segment passes through the whole of that collider,
+    however long. Every other pair of the rod's shapes and its wood still
+    meets.
+
+    Capsules and spheres only, which is what a rod and a proxy are made of.
+    Call it on a builder whose collision groups are set, as `tune_rods` does:
+    a plant's group is what says whose wood a rod's shape may meet.
+    """
+    from newton import GeoType, ShapeFlags
+
+    def own(shape: int) -> bool:
+        return (
+            bool(builder.shape_flags[shape] & ShapeFlags.COLLIDE_SHAPES)
+            and builder.shape_type[shape] in (GeoType.CAPSULE, GeoType.SPHERE)
+            and builder.shape_collision_group[shape] >= PLANT_GROUPS
+        )
+
+    def axis(shape: int) -> tuple[np.ndarray, np.ndarray, float]:
+        """The shape's axis, its two ends in the world, and its radius out to
+        where it touches."""
+        pose = builder.shape_transform[shape]
+        if (body := builder.shape_body[shape]) >= 0:
+            pose = builder.body_q[body] * pose
+        pose = np.array(pose, dtype=float)
+        x, y, z, w = pose[3:]
+        up = np.array([2 * (x * z + y * w), 2 * (y * z - x * w), 1 - 2 * (x * x + y * y)])
+        scale = builder.shape_scale[shape]
+        reach = up * (scale[1] if builder.shape_type[shape] == GeoType.CAPSULE else 0.0)
+        return pose[:3] - reach, pose[:3] + reach, scale[0] + builder.shape_margin[shape]
+
+    woods: dict[int, list[int]] = {}
+    for shape in filter(own, builder.body_shapes[-1]):
+        woods.setdefault(builder.shape_collision_group[shape], []).append(shape)
+    ends = {shape: axis(shape) for group in woods.values() for shape in group}
+    let = 0
+    for body, shapes in builder.body_shapes.items():
+        for shape in shapes if body >= 0 else ():
+            wood = woods.get(builder.shape_collision_group[shape]) if own(shape) else None
+            if not wood:
+                continue
+            start, end, radius = axis(shape)
+            starts, stops, radii = (np.array(column) for column in zip(*(ends[w] for w in wood)))
+            gaps = _distances(start, end, starts, stops) - radius - radii
+            for other in np.array(wood)[gaps < 0.0]:
+                builder.add_shape_collision_filter_pair(shape, int(other))
+                let += 1
+    return let
+
+
+def _distances(p: np.ndarray, q: np.ndarray, s: np.ndarray, t: np.ndarray) -> np.ndarray:
+    """The least distance from the segment `p`-`q` to each segment
+    `s[i]`-`t[i]`: the closest points of the two lines, each clamped to its
+    segment in turn (Ericson, *Real-Time Collision Detection*, 5.1.9)."""
+    d1, d2, r = q - p, t - s, p - s
+    a, e = d1 @ d1, np.einsum("ij,ij->i", d2, d2)
+    b, c, f = d2 @ d1, r @ d1, np.einsum("ij,ij->i", d2, r)
+    den = a * e - b * b
+    u = np.clip(np.divide(b * f - c * e, den, out=np.zeros_like(den), where=den > 1e-12), 0, 1)
+    v = np.clip((b * u + f) / np.maximum(e, 1e-12), 0, 1)
+    u = np.clip((b * v - c) / max(a, 1e-12), 0, 1)
+    return np.linalg.norm(r + np.outer(u, d1) - d2 * v[:, None], axis=1)
 
 
 def steps_rods(physics: PhysicsCfg | None) -> bool:

@@ -251,6 +251,9 @@ pub struct Cable(pub doc::Cable);
 /// `loads` is the mass hanging from each point, in kilograms, or empty for an
 /// organ that carries nothing; see [`doc::Cable::loads`].
 ///
+/// The curve carries the [`segment_frames`] of its points as its normals, so a
+/// solver builds each segment's body in the frame its prim is authored at.
+///
 /// No transform of its own — the points are already where the organ put them,
 /// and the first segment between them is what gets held.
 pub fn cable(
@@ -264,10 +267,18 @@ pub fn cable(
         loads.is_empty() || loads.len() == points.len(),
         "one load per point, or none"
     );
+    // Each segment's +Y on the point it starts from, and the last segment's
+    // again on the last point.
+    let mut normals: Vec<[f32; 3]> = segment_frames(&points)
+        .iter()
+        .map(|frame| (frame.rotation * Vec3::Y).to_array())
+        .collect();
+    normals.extend(normals.last().copied());
     (
         UsdType("BasisCurves"),
         Cable(doc::Cable {
             points,
+            normals,
             widths,
             loads,
             display_color: skin.color,
@@ -297,18 +308,37 @@ pub fn segment_name(index: usize) -> String {
 }
 
 /// The rest frame of every segment `points` becomes, in the organ's own frame:
-/// origin at the segment's midpoint, local +Z along it.
+/// origin at the segment's midpoint, local +Z along it, and turned from the
+/// segment before by the least rotation that lays one along the other, the
+/// first from +Z. So the frames twist nowhere along a rod however it bends:
+/// the facets of neighbouring [`segment_tubes`] line up, and a segment that
+/// points straight down is framed as well as any other, where the least turn
+/// from +Z to each segment swings about wildly.
 ///
-/// That is Newton's frame for the capsule body, so a prim authored here starts
-/// exactly where the solver will go on keeping it.
+/// Each turn starts from the frame's own +Z rather than from the segment
+/// before: a turn too small for `f32`, under about 7e-4 rad, comes out as no
+/// turn, and from the frame it is caught up once the lag grows past that,
+/// instead of adding up along a gently curved rod. So on such a rod a frame
+/// may lie up to about 1e-3 rad off its segment, and its body that far off
+/// its prim.
+///
+/// [`cable`] hands these to the solver as the curve's normals, each segment's
+/// +Y, and Newton's importer turns each segment's capsule body about the
+/// segment to match: a prim authored here starts where the solver will go
+/// on keeping it. Left to itself, the importer frames the curve in
+/// the world rather than the organ, and twists each body off its prim by as
+/// much as half a turn.
 pub fn segment_frames(points: &[[f32; 3]]) -> Vec<Transform> {
+    let mut turn = Quat::IDENTITY;
     points
         .windows(2)
         .map(|pair| {
             let (from, to) = (Vec3::from(pair[0]), Vec3::from(pair[1]));
+            turn = (Quat::from_rotation_arc(turn * Vec3::Z, (to - from).normalize()) * turn)
+                .normalize();
             Transform {
                 translation: (from + to) * 0.5,
-                rotation: Quat::from_rotation_arc(Vec3::Z, (to - from).normalize()),
+                rotation: turn,
                 scale: Vec3::ONE,
             }
         })
@@ -835,5 +865,57 @@ mod tests {
         let hung = frames[2] * rebase(&frames[2], &placement);
         assert!(hung.translation.distance(placement.translation) < 1e-6);
         assert!((hung.rotation * Vec3::Y).distance(placement.rotation * Vec3::Y) < 1e-6);
+    }
+
+    /// Down a rod that leaves level, turns to point nearly straight down and
+    /// curls back up, no segment's frame twists about the rod from the one
+    /// before, where the least turn from +Z to each would twist by up to half
+    /// a turn; down a long rod bent too gently for `f32` to see one segment
+    /// turn from the next, every frame still lies along its segment; and the
+    /// cable carries each segment's +Y as its starting point's normal.
+    #[test]
+    fn a_rods_frames_twist_nowhere_and_ride_its_curve_as_normals() {
+        // 60 segments of 2 cm round a 60 m bend: 3e-4 rad a joint, under
+        // the 7e-4 `Quat::from_rotation_arc` takes for none.
+        let gentle: Vec<[f32; 3]> = (0..61)
+            .map(|i| {
+                let a = 0.02 * i as f32 / 60.0;
+                [60.0 * (1.0 - a.cos()), 0.0, 60.0 * a.sin()]
+            })
+            .collect();
+        for (frame, pair) in segment_frames(&gentle).iter().zip(gentle.windows(2)) {
+            let along = (Vec3::from(pair[1]) - Vec3::from(pair[0])).normalize();
+            assert!((frame.rotation * Vec3::Z).distance(along) < 1e-3);
+        }
+
+        let points: Vec<[f32; 3]> = (0..12)
+            .map(|i| {
+                let a = 0.35 * i as f32;
+                [0.1 * a.sin(), 0.03 * a, 0.1 * a.cos()]
+            })
+            .collect();
+        let frames = segment_frames(&points);
+        for (frame, pair) in frames.iter().zip(points.windows(2)) {
+            let along = (Vec3::from(pair[1]) - Vec3::from(pair[0])).normalize();
+            assert!((frame.rotation * Vec3::Z).distance(along) < 1e-5);
+        }
+        for pair in frames.windows(2) {
+            let (axis, angle) = (pair[0].rotation.inverse() * pair[1].rotation).to_axis_angle();
+            assert!(axis.z.abs() * angle < 1e-4, "twisted by {}", axis.z * angle);
+        }
+
+        let mut world = World::new();
+        let skin = crate::palette::Response {
+            roughness: 0.5,
+            reflectance: 0.5,
+        }
+        .surface([0.5; 3]);
+        let curve = world.spawn(cable(points.clone(), vec![0.01; 12], vec![], skin));
+        let normals = &curve.get::<Cable>().unwrap().0.normals;
+        assert_eq!(normals.len(), points.len());
+        for (normal, frame) in normals.iter().zip(&frames) {
+            assert!(Vec3::from(*normal).distance(frame.rotation * Vec3::Y) < 1e-6);
+        }
+        assert_eq!(normals[11], normals[10]);
     }
 }
