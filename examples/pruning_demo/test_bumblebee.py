@@ -19,8 +19,15 @@ import pytest
 bumblebee = pytest.importorskip("bumblebee", reason="Isaac Lab is not installed")
 
 import kinematics  # noqa: E402
+from shear import BLADE  # noqa: E402
 
 MACHINE = bumblebee.Bumblebee()
+
+
+def in_hand(corner, across, up) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """A rectangle in the shear's frame, in the hand's."""
+    tool = bumblebee.TOOL
+    return (tool @ [*corner, 1.0])[:3], tool[:3, :3] @ across, tool[:3, :3] @ up
 
 
 @pytest.fixture
@@ -78,7 +85,7 @@ def test_the_mouth_is_what_the_closing_blade_sweeps():
     centre = MACHINE.tool[:3, 3]
 
     def reached(angle: float) -> bool:
-        corner, across, up = MACHINE.blade(angle)
+        corner, across, up = in_hand(*shear.blade_plane(angle))
         offset = centre - corner
         on = np.array([[offset @ across / (across @ across), offset @ up / (up @ up)]])
         covered, _ = shear.covers(on, angle)
@@ -94,7 +101,7 @@ def test_the_mouth_is_what_the_closing_blade_sweeps():
         assert abs(np.cross(chord, [y, z])) / np.linalg.norm(chord) == pytest.approx(room)
     assert shear.clearance(y, z) > room
     assert MACHINE.tool[:3, 0] == pytest.approx([1.0, 0.0, 0.0])
-    corner, across, up = MACHINE.blade(0.0)
+    corner, across, up = in_hand(*shear.blade_plane(0.0))
     normal = np.cross(across, up)
     assert abs(normal @ MACHINE.tool[:3, 0]) == pytest.approx(np.linalg.norm(normal))
 
@@ -111,7 +118,7 @@ def test_the_head_collides(built):
     ("name", "x", "length"),
     [
         ("shear_link", 0.0, MACHINE.shear.blade + MACHINE.shear.claw),
-        (bumblebee.BLADE, MACHINE.shear.bypass, MACHINE.shear.blade),
+        (BLADE, MACHINE.shear.bypass, MACHINE.shear.blade),
     ],
 )
 def test_the_blades_collide_where_they_are_drawn(built, name, x, length):
@@ -139,7 +146,7 @@ def test_the_blades_collide_where_they_are_drawn(built, name, x, length):
     ends = np.array(sorted(ends))
     assert ends[0, 0] == pytest.approx(0.0, abs=1e-6)
     assert ends[1:, 0] == pytest.approx(ends[:-1, 1], abs=1e-6), "end to end"
-    if name == bumblebee.BLADE:
+    if name == BLADE:
         assert ends == pytest.approx(shear.spans, abs=1e-6)
 
 
@@ -166,7 +173,7 @@ def test_a_cane_in_the_mouth_is_pinched_where_the_edges_are_a_cane_apart():
     assert shear.clearance(shear.edge(0.05), 0.05) == pytest.approx(0.0, abs=1e-6)
     front, behind = shear.edge(0.05) - 0.003, shear.edge(0.05) + 0.003
     assert shear.clearance(front, 0.05) > 0 > shear.clearance(behind, 0.05), "the mouth's side"
-    corner, across, up = MACHINE.wedge()
+    corner, across, up = in_hand(*shear.wedge())
     point = (bumblebee.TOOL @ [shear.bypass, *shear.mouth, 1.0])[:3]
     on = np.array(
         [[(point - corner) @ across / (across @ across), (point - corner) @ up / (up @ up)]]

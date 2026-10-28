@@ -3,16 +3,18 @@
 Two short rows whose lowest trusses are rods Newton's VBD bends, and the
 `harvester` in the main path at their heads. It crosses to each path in
 turn and works down it and back: every due truss on its left going in, every
-one on its right coming out. Each is cut at its peduncle, by its stem, and
-drops to the floor; nothing catches it.
+one on its right coming out. Each is cut at its peduncle, by its stem, held
+by it, pulled out of the crop into the path and let go there, to drop to the
+floor.
 
 What is due and where to cut it come from the scene's own ground truth, not
 from a camera. A truss is due once its least ripe fruit is turning, as the
-generator stages them, and is cut at its `Cut` frame. For each, the arm folds
-and the trolley runs to a station behind the cut on the rail and the lift.
+generator stages them, and is cut by its `Cut` frame. For each, the arm folds
+and the trolley runs to a station back from the cut on the rail and the lift.
 cuRobo plans the arm from there, around the simulation's own colliders (see
-`planner`), to a stand-off and in on a straight line, and once it holds still
-with the mouth within `TOLERANCE` of the cut, `Shears` cuts the truss there.
+`planner`), to a stand-off and in on a straight line, and once it holds
+still the shear closes: `shear.Stroke` cuts the peduncle where the blade
+reaches it, and the jaws take the truss as it is cut.
 
     uv run harvest.py                        # in Kit's window, running on once done
     HEADLESS=1 uv run harvest.py --viz kit   # without one, printing the tally
@@ -37,8 +39,9 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
 from greenhouse_lab.isaaclab import GreenhouseCfg, LayoutCfg, StemCfg
 from harvester import AISLE, ARM_HOME, HAND, LIFT, RAIL, Harvester, arm_joints, harvester_cfg
-from kinematics import frames
-from misina_lab.isaaclab import rods
+from kinematics import frames, solve, transform
+from misina_lab.isaaclab import ColliderView, rods
+from shear import SHEAR_JOINT, Stroke
 
 BELOW = 1.8
 """Height, in meters, below which a truss's node puts it on a rod: the band
@@ -52,10 +55,10 @@ GREENHOUSE_CFG = GreenhouseCfg(
 GREENHOUSE_PATH = "/World/Greenhouse"
 # Where `design_scene` puts the robot: its scene's one environment.
 ROBOT_PATH = "/World/envs/env_0/Robot"
-ROBOT_CONTACT = [rf"{ROBOT_PATH}/.*(forearm|wrist_[123])_link"]
-"""The parts of the robot a truss meets: the forearm and the wrists, the
-cutter's head riding on the last. Each costs a proxy in the solver that bends
-the trusses."""
+ROBOT_CONTACT = [rf"{ROBOT_PATH}/.*(forearm|wrist_[123]|blade|finger)_link"]
+"""The parts of the robot a truss meets: the forearm, the wrists, the
+shear's head, hook and jaw riding on the last, the cutting blade and the
+finger on it. Each costs a proxy in the solver that bends the trusses."""
 
 SIM_DT = 0.005
 SUBSTEPS = 4
@@ -68,16 +71,18 @@ STAGES = ("set", "expanding", "mature_green", "breaker", "turning", "pink", "lig
 DUE = STAGES.index("turning")
 
 STANDOFF = 0.12
-"""How far short of the cut, back along the cutter, the straight line in starts."""
+"""How far short of the cut the straight line in starts, back the way the
+mouth comes in (`Harvester.way_in`)."""
 BACK = 0.3
-"""How far behind the cut, down the rail, the arm's base is stationed."""
+"""How far back from the cut along the rail, against the way the shear comes
+in, the arm's base is stationed."""
 RISE = 0.15
 """How far above the shoulder the cut is held, where the lift reaches."""
 TILTS = np.radians([0.0, 20.0, -20.0])
-"""How far off level the cutter may come in. Square to the peduncle, it has
-the peduncle across the V. Level, it is square to a standing stem too, which
-then crosses the V's plane at the mouth and nowhere nearer the head; tilted,
-the stem crosses toward the head, and 20 degrees keeps it off its corner."""
+"""How far off level the shear may point, turned about the blades' normal,
+square to the stem. Level, a standing stem runs behind the hook straight
+across the mouth's height and nowhere nearer the head; tilted, it runs
+toward the head, and 20 degrees keeps it a head's width off it."""
 STEPS = np.array([0.02, 0.02, 0.01])
 """How far each trolley joint's target may move per control tick on a run,
 every joint pacing itself to arrive with the slowest: 1 m/s across and down a
@@ -87,9 +92,30 @@ ARRIVED = 0.05
 STILL = 0.002
 """How little every joint may still move per control tick for the robot to
 count as settled: a tenth of a radian a second."""
-TOLERANCE = 0.015
-"""How close the mouth has to hold to the cut for the truss to be cut, in
-meters."""
+PAST = 0.005
+"""How far past its rod's first joint, by the stem, the blade crosses a
+peduncle, in meters. `Shears.cut` makes a cut within a centimetre of a
+joint at the joint, so this one drops the whole truss, and the piece the
+jaws hold runs straight from the cut to the next joint."""
+ASKEW = 45.0
+"""How far off the way its `Cut` was authored a peduncle may run for the
+shear to be squared to it as it hangs, in degrees, as far as its stem lets
+it be."""
+TRIES = 2
+"""How many times a truss's cut is tried before it is given up on: a shear
+that closed on nothing opens, backs out and plans the cut afresh."""
+PULL = 0.2
+"""How far a truss cut and held is pulled out across the path, from the
+stand-off, before it is let go: out of the crop wall, and short of the
+trolley."""
+HELD = 0.015
+"""How near the middle of the jaws, in meters, a truss's rod cut free
+passes once it is pulled out, for the jaws to have it: a peduncle anywhere
+between them passes within this."""
+TIP = 1.2
+"""How far the blades are turned down about the peduncle, in radians, to
+tip out a truss the open finger still bears: one lying across it slides
+off once it slopes past the rubber's 45 degrees."""
 PATIENCE = 300
 """Control ticks a stage may wait on the robot before its job is given up
 on: 6 s."""
@@ -100,6 +126,8 @@ FELL = 0.2
 
 # A rod body's label ends in its segment's prim; segment 0 is the held one.
 SEGMENT = re.compile(r"(.*)/Cable_edge_body_(\d+)$")
+# A stem's collider's label is its prim: one capsule along each span of it.
+STEM = re.compile(r"(.*/Stem_\d+)/Collision_\d+$")
 
 
 @dataclasses.dataclass
@@ -112,6 +140,10 @@ class Truss:
     """The horizontal direction from the path it is cut from to it."""
     bodies: list[int] = dataclasses.field(default_factory=list)
     """Its rod's bodies, by model index, from the stem out."""
+    stem: np.ndarray = dataclasses.field(default_factory=lambda: np.array([0.0, 0.0, 1.0]))
+    """Which way the stem it hangs from runs at its node."""
+    stem_shapes: list[int] = dataclasses.field(default_factory=list)
+    """Its stem's colliders, by model index."""
 
 
 def parse_args() -> argparse.Namespace:
@@ -121,6 +153,14 @@ def parse_args() -> argparse.Namespace:
         type=int,
         nargs="+",
         help="The paths to work, as the scene numbers them -- Path_00 first. Every one by default.",
+    )
+    parser.add_argument(
+        "--colliders",
+        action="store_true",
+        help=(
+            "Draw every collider the physics steps, translucent over the scene, kept in step "
+            "with the ones moved or resized while it runs: the shear's slices, a cut peduncle."
+        ),
     )
     add_launcher_args(parser)
     parser.set_defaults(visualizer=["kit"])
@@ -182,6 +222,31 @@ def read_trusses(stage, root: str) -> list[Truss]:
     return trusses
 
 
+def stem_axes(model) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Each stem's colliders, by the stem's prim: their model indices and
+    the two ends of each one's axis in the world."""
+    poses, scales = model.shape_transform.numpy(), model.shape_scale.numpy()
+    found: dict[str, list[int]] = {}
+    for shape, label in enumerate(model.shape_label):
+        if match := STEM.match(label):
+            found.setdefault(match[1], []).append(shape)
+    axes = {}
+    for stem, shapes in found.items():
+        shapes = np.array(shapes)
+        frames = [frame_of(pose[:3], pose[3:]) for pose in poses[shapes]]
+        reach = np.array([f[:3, 2] for f in frames]) * scales[shapes, 1, None]
+        middles = poses[shapes, :3]
+        axes[stem] = (shapes, middles - reach, middles + reach)
+    return axes
+
+
+def distances(point: np.ndarray, starts: np.ndarray, ends: np.ndarray) -> np.ndarray:
+    """How far `point` is from each segment from `starts[i]` to `ends[i]`."""
+    span = ends - starts
+    t = np.clip(np.einsum("ij,ij->i", point - starts, span) / (span * span).sum(1), 0.0, 1.0)
+    return np.linalg.norm(point - (starts + span * t[:, None]), axis=1)
+
+
 def path_ys(stage, root: str) -> list[float]:
     """Each path's centre line, by its number."""
     from pxr import Usd, UsdGeom
@@ -215,37 +280,71 @@ def plan(trusses: list[Truss], ys: list[float], paths: list[int], pitch: float) 
     return jobs
 
 
-def approaches(truss: Truss, base: np.ndarray) -> list[np.ndarray]:
-    """The mouth's poses that cut `truss`: at its `Cut`, +X along the
-    peduncle either way, so it lies across the V, and +Z the way the cutter
-    comes in, square to the peduncle and within `TILTS` of level. It comes in
-    along the row away from `base`, where the arm stands, so the arm reaches
-    past the near side of the cut, not round its far side."""
-    along = truss.cut[:3, 0] / np.linalg.norm(truss.cut[:3, 0])
-    heading = np.cross([0.0, 0.0, 1.0], along)
-    heading /= np.linalg.norm(heading)
-    if heading @ (truss.cut[:3, 3] - base) < 0:
-        heading = -heading
-    up = np.cross(along, heading)
+def peduncle(truss: Truss, shears) -> tuple[np.ndarray, np.ndarray]:
+    """Where the blade crosses `truss`'s peduncle, `PAST` its rod's first
+    joint, as it hangs now, and the way square to the stem nearest the way
+    the peduncle runs there: the normal of the blades' plane, which runs
+    along the stem. A plane square to the peduncle itself would cross the
+    stem a few centimetres from the cut wherever the peduncle rises or
+    droops off square to it, where the hook sweeps it.
+
+    The peduncle runs the way the segment past that joint runs. The truss's
+    weight bends the rod at that joint, off the way `Cut` was authored. One
+    running more than `ASKEW` off that way, pushed along the row by a
+    neighbour, is taken to run as authored."""
+    authored = truss.cut[:3, 0] / np.linalg.norm(truss.cut[:3, 0])
+    start, end = shears.capsules()
+    first = np.searchsorted(shears.bodies, truss.bodies[1])
+    hangs = (end[first] - start[first]) / np.linalg.norm(end[first] - start[first])
+    along = hangs if hangs @ authored > np.cos(np.radians(ASKEW)) else authored
+    square = along - (along @ truss.stem) * truss.stem
+    return start[first] + PAST * along, square / np.linalg.norm(square)
+
+
+def heading(along: np.ndarray, side: np.ndarray) -> np.ndarray:
+    """The level way the shear comes in to a peduncle running `along` on the
+    `side` of the path: square to it, and of the two ways, the one that turns
+    the shear's +Y up, so the hook is above the peduncle and the truss's
+    weight hangs it off the hook into the mouth, from where the cutting blade
+    lifts it onto the hook. Hung the other way, on the hook, the weight drags
+    it over the hook's thin edge, out of the blade's reach. A peduncle
+    running along the row is come at from the path all the same, the other
+    way being out of the crop wall."""
+    way = np.cross(along, [0.0, 0.0, 1.0])
+    way /= np.linalg.norm(way)
+    return -way if way @ side < -0.5 else way
+
+
+def approaches(
+    truss: Truss, at: np.ndarray, along: np.ndarray, machine: Harvester
+) -> list[np.ndarray]:
+    """The mouth's poses that cut `truss`'s peduncle at `at`, the blades'
+    plane square to `along` (see `peduncle`): through `at`, +X `along`, so
+    the peduncle lies across the mouth with the jaws on the truss's side of
+    the cut, and +Z the way the shear points, `heading` tilted up to `TILTS`
+    off level."""
+    level = heading(along, truss.side)
+    up = np.cross(level, along)
     poses = []
     for tilt in TILTS:
-        approach = np.cos(tilt) * heading + np.sin(tilt) * up
-        for x in (along, -along):
-            pose = np.eye(4)
-            pose[:3, 0], pose[:3, 1], pose[:3, 2] = x, np.cross(approach, x), approach
-            pose[:3, 3] = truss.cut[:3, 3]
-            poses.append(pose)
+        approach = np.cos(tilt) * level + np.sin(tilt) * up
+        pose = np.eye(4)
+        pose[:3, 0], pose[:3, 1], pose[:3, 2] = along, np.cross(approach, along), approach
+        pose[:3, 3] = at - machine.shear.bypass * along
+        poses.append(pose)
     return poses
 
 
-def station(machine: Harvester, cut: np.ndarray, aisle: float) -> np.ndarray:
-    """Where the trolley stands for a cut at `cut`, a point in the robot's
-    base frame: across at `aisle`, the arm's base `BACK` behind the cut down
-    the rail, and the lift holding the cut `RISE` above the shoulder. The
-    three joints' positions."""
+def station(machine: Harvester, cut: np.ndarray, way: np.ndarray, aisle: float) -> np.ndarray:
+    """Where the trolley stands for a cut at `cut` the shear comes in to
+    `way`, both in the robot's base frame: across at `aisle`, the arm's base
+    `BACK` back from the cut along the rail, so the shear comes in away from
+    it and the arm reaches past the near side of the cut, not round its far
+    side, and the lift holding the cut `RISE` above the shoulder. The three
+    joints' positions."""
     chain = machine.chain
     shoulder = chain[2].xyz[2] + chain[3].xyz[2]
-    wanted = [aisle, cut[0] - BACK, cut[2] - RISE - shoulder]
+    wanted = [aisle, cut[0] - BACK * np.sign(way[0]), cut[2] - RISE - shoulder]
     return np.clip(wanted, *zip(*(joint.limits for joint in chain[:3]), strict=True))
 
 
@@ -256,6 +355,8 @@ class Tally:
     cut: int = 0
     crowded: int = 0
     """Reachable only by brushing a truss."""
+    held: int = 0
+    """Cut, and still in the jaws once pulled out across the path."""
     missed: int = 0
     fell: int = 0
     seconds: float = 0.0
@@ -265,7 +366,8 @@ class Tally:
         return (
             f"{self.due} trusses due: {share(self.reachable)} reachable, "
             f"{self.crowded} of them only by brushing a truss, "
-            f"{share(self.cut)} cut, {share(self.fell)} fell, {self.missed} given up on, "
+            f"{share(self.cut)} cut, {share(self.held)} held and let go, "
+            f"{share(self.fell)} fell, {self.missed} given up on, "
             f"{self.seconds / max(self.cut, 1):.1f} s per truss cut"
         )
 
@@ -273,19 +375,25 @@ class Tally:
 class Harvest:
     """The jobs `plan` lists, done one at a time, a control tick at a time.
 
-    `control` takes where the joints are and the mouth's world pose, and
-    returns every joint's position and velocity targets. The trolley runs
-    only with the arm folded, and `planner` plans the fold from wherever the
-    arm is. A joint position is a run to it. A truss is a run to its station,
-    and then the cut `planner` plans from there: the move to a stand-off and
-    the straight line in, holding still until the mouth is at the cut, the
-    cut, and the line back out. The robot's base is at `base` in the world.
+    `control` takes where the joints are, the hand's world pose and the
+    shear's angle, and returns every joint's position and velocity targets
+    and the shear's. The trolley runs only with the arm folded, and `planner`
+    plans the fold from wherever the arm is. A joint position is a run to
+    it. A truss is a run to its station, and then the cut `planner` plans
+    from there: the move to a stand-off and the straight line in, holding
+    still until the mouth is at the cut, the shear closing,
+    cutting and taking the truss, the line back out, a straight line `PULL`
+    out across the path, and the shear opening there, letting the truss go,
+    and tipped down if it still lies on the finger. A shear that cut nothing opens and backs out, and the cut is planned
+    afresh, `TRIES` times in all. `stroke` is the shear. The robot's base is
+    at `base` in the world.
 
     A cut is planned clear of everything first, but for the held segment and
-    the next, which the cutter closes on. Failing that, the arm may brush
-    the truss it cuts, and failing that any truss: the rods bend aside, as
-    the crop does round a picker's arm. The trolley, the rails and the floor
-    it never touches.
+    the next, which the shear closes on, and the stretch of its stem by the
+    cut, which the shear slides along (`planner.BESIDE`). Failing that, the
+    arm may brush the truss it cuts, and failing that any truss: the rods
+    bend aside, as the crop does round a picker's arm. The trolley, the
+    rails, the floor and every other stretch of stem it never touches.
     """
 
     def __init__(
@@ -293,6 +401,7 @@ class Harvest:
     ):
         self.machine, self.planner, self.base = machine, planner, base
         self.shears, self.tally = shears, tally
+        self.stroke = Stroke(machine.shear, machine.shear_frame, shears)
         self.jobs = list(jobs)
         self.q = np.array(q, dtype=float)
         self.target = self.q.copy()
@@ -302,11 +411,19 @@ class Harvest:
         self.time = 0.0
         self.soft: set[int] = set()
         """The rod bodies the arm may brush, those the last cut was planned through."""
+        self.beside: tuple[list[int], np.ndarray] = ([], np.zeros(3))
+        """The stem the last cut was planned beside, its colliders, and where
+        it was cut: the planner leaves the stem out of its world there."""
         self._next()
 
     @property
     def done(self) -> bool:
         return self.stage == "done"
+
+    @property
+    def severed(self) -> bool:
+        """Whether the job's truss is cut."""
+        return bool(self.cut) and self.cut[-1] is self.job
 
     def platform(self) -> np.ndarray:
         """The platform's pose in the world, the trolley where it is held: a
@@ -319,12 +436,15 @@ class Harvest:
             self.job = self.jobs.pop(0)
             if not isinstance(self.job, Truss):
                 self.goal = self.job[:3]
-            elif self.shears.loose[np.searchsorted(self.shears.bodies, self.job.bodies[1])]:
+            elif self.shears.loose[np.searchsorted(self.shears.bodies, self.job.bodies)].any():
                 continue
             else:
-                cut = np.linalg.inv(self.base) @ self.job.cut[:, 3]
-                self.goal = station(self.machine, cut, self.target[0])
-                self.started = self.time
+                local = np.linalg.inv(self.base)
+                _, along = peduncle(self.job, self.shears)
+                way = local[:3, :3] @ heading(along, self.job.side)
+                cut = local @ self.job.cut[:, 3]
+                self.goal = station(self.machine, cut, way, self.target[0])
+                self.started, self.tries = self.time, 0
             self._fold()
             return
         self.job, self.stage = None, "done"
@@ -334,7 +454,12 @@ class Harvest:
         self.stage, self.ticks = "run", 0
         if np.abs(self.q[3:] - ARM_HOME).max() < ARRIVED:
             return
-        folding = self.planner.fold(self.q[3:], self.platform(), self.soft)
+        folding = self.planner.fold(self.q[3:], self.platform(), self.soft, self.beside)
+        if folding is None:
+            # From among the trusses, the arm may brush any on the way out.
+            folding = self.planner.fold(
+                self.q[3:], self.platform(), set(self.shears.bodies), self.beside
+            )
         if folding is None:
             # From a pose already touching what it may not brush, a fold
             # finds no way; the arm folds on a straight line instead.
@@ -348,40 +473,108 @@ class Harvest:
     def _plan(self) -> None:
         """Plan the cut of the truss the trolley stands for, or give it up."""
         truss, platform = self.job, self.platform()
-        poses = approaches(truss, platform[:3, 3])
+        at, along = peduncle(truss, self.shears)
+        poses = approaches(truss, at, along, self.machine)
+        beside = (truss.stem_shapes, at)
         for soft in (set(truss.bodies[:2]), set(truss.bodies), set(self.shears.bodies)):
-            planned = self.planner.cut(self.q[3:], platform, poses, STANDOFF, soft)
+            planned = self.planner.cut(self.q[3:], platform, poses, STANDOFF, soft, beside)
             if planned is not None:
                 break
         if planned is None:
             print(f"[INFO]: {truss.prim}: out of reach")
+            self.tally.missed += self.tries > 0
             self._next()
             return
-        self.tally.reachable += 1
-        self.tally.crowded += len(soft) > 2
-        self.planned, self.soft = planned, soft
+        self.tries += 1
+        self.tally.reachable += self.tries == 1
+        self.tally.crowded += self.tries == 1 and len(soft) > 2
+        self.planned, self.soft, self.beside = planned, soft, beside
         self._play("approach", planned.approach)
 
     def _play(self, stage: str, trajectory: tuple[np.ndarray, np.ndarray]) -> None:
         self.stage, self.ticks, self.clock = stage, 0, 0.0
         self.trajectory = trajectory
 
-    def control(self, q: np.ndarray, mouth: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Advance one tick, `q` every joint's position and `mouth` the mouth's
-        world pose. Returns every joint's position and velocity targets."""
+    def _shut(self) -> None:
+        """Count the truss cut if its rod is, now the shear is shut, and
+        back out with what the jaws hold."""
+        if self.shears.loose[np.searchsorted(self.shears.bodies, self.job.bodies)].any():
+            print(f"[INFO]: {self.job.prim}: cut after {self.time - self.started:.1f} s")
+            self.cut.append(self.job)
+            self.tally.cut += 1
+            self.tally.seconds += self.time - self.started
+        else:
+            missed = "a neighbour" if self.stroke.cuts else "nothing"
+            print(f"[INFO]: {self.job.prim}: the shear cut {missed}")
+            self.tally.missed += self.tries == TRIES
+        self._play("outward", self.planned.outward)
+
+    def _opened(self) -> None:
+        """Plan the cut afresh if the shear closed on nothing and it has
+        tries left; else move on, the arm brushing the truss let go as it
+        falls past the shear."""
+        if not self.severed and self.tries < TRIES:
+            self._plan()
+            return
+        self.soft |= set(self.job.bodies)
+        self._next()
+
+    def _pull(self, hand: np.ndarray) -> None:
+        """Pull the truss held out across the path, or let it go where it is
+        if the arm cannot reach out that way."""
+        start = hand @ self.machine.tool
+        end = start.copy()
+        end[:3, 3] -= PULL * self.job.side
+        pulling = self.planner.line(self.q[3:], self.platform(), start, end)
+        if pulling is None:
+            print(f"[INFO]: {self.job.prim}: let go at the stand-off")
+            self._release(hand)
+        else:
+            self._play("pull", pulling)
+
+    def _release(self, hand: np.ndarray) -> None:
+        """Open the shear, counting the truss held if its rod cut free still
+        passes within `HELD` of the middle of the jaws."""
+        jaws = (hand @ self.machine.tool @ transform((self.machine.shear.hold, 0.0, 0.0)))[:3, 3]
+        rod = np.searchsorted(self.shears.bodies, self.job.bodies)
+        start, end = (each[rod[self.shears.loose[rod]]] for each in self.shears.capsules())
+        axis = end - start
+        along = np.clip(((jaws - start) * axis).sum(1) / (axis * axis).sum(1), 0.0, 1.0)
+        gaps = np.linalg.norm(start + along[:, None] * axis - jaws, axis=1)
+        self.tally.held += bool((gaps < HELD).any())
+        self.stage, self.ticks = "open", 0
+
+    def _tip(self, hand: np.ndarray) -> None:
+        """Turn the blades `TIP` down about the peduncle, on a straight line
+        in joint space."""
+        platform = self.base @ frames(self.machine.chain[:3], self.q[:3])[-1]
+        tipped = hand @ self.machine.tool @ transform(rpy=(TIP, 0.0, 0.0))
+        q, _, _ = solve(
+            self.planner.chain, self.machine.tool, np.linalg.inv(platform) @ tipped, self.q[3:]
+        )
+        line = np.linspace(self.q[3:], q, 1 + int(np.abs(q - self.q[3:]).max() / 0.04))
+        self._play("tip", (line, np.gradient(line, self.planner.dt, axis=0)))
+
+    def control(
+        self, q: np.ndarray, hand: np.ndarray, angle: float
+    ) -> tuple[np.ndarray, np.ndarray, float]:
+        """Advance one tick, `q` every joint's position, `hand` the last
+        wrist's world pose and `angle` the shear's. Returns every joint's
+        position and velocity targets, and the shear's angle to hold."""
         moved = float(np.abs(q - self.q).max())
         self.q = np.array(q, dtype=float)
         self.velocity[:] = 0.0
         if self.done:
-            return self.target, self.velocity
+            return self.target, self.velocity, self.stroke.jaw
         tick = DECIMATION * SIM_DT
         self.time += tick
         self.ticks += 1
         settled = np.abs(self.target - self.q).max() < ARRIVED and moved < STILL
-        if self.ticks > PATIENCE and self.stage == "cut":
-            # Backed out along the line it came in on, clear of the crop.
-            print(f"[INFO]: {self.job.prim}: gave up at the cut")
-            self.tally.missed += 1
+        if self.ticks > PATIENCE and self.stage == "close":
+            # Backed out along the line it came in on, clear of the crop, to
+            # try again if it may.
+            print(f"[INFO]: {self.job.prim}: gave up at the {self.stage}")
+            self.tally.missed += self.tries == TRIES
             self._play("outward", self.planned.outward)
         elif self.ticks > PATIENCE:
             print(f"[INFO]: {getattr(self.job, 'prim', 'a run')}: gave up at {self.stage}")
@@ -400,16 +593,16 @@ class Harvest:
                 self._plan()
             elif settled:
                 self._next()
-        elif self.stage == "cut":
-            # Held still with the mouth at the cut, the truss is cut at its
-            # first joint, by the stem, which `Cut` sits within a centimetre of.
-            if moved < STILL and np.linalg.norm(mouth[:3, 3] - self.job.cut[:3, 3]) <= TOLERANCE:
-                self.shears.cut(self.job.bodies[1], 0.0)
-                print(f"[INFO]: {self.job.prim}: cut after {self.time - self.started:.1f} s")
-                self.cut.append(self.job)
-                self.tally.cut += 1
-                self.tally.seconds += self.time - self.started
-                self._play("outward", self.planned.outward)
+        elif self.stage == "close":
+            if self.stroke.tick(hand, angle, closing=True):
+                self._shut()
+        elif self.stage == "open":
+            if self.stroke.tick(hand, angle, closing=False):
+                # A truss let go still lying on the finger is tipped out.
+                if self.severed and self.stroke.fouled(hand):
+                    self._tip(hand)
+                else:
+                    self._opened()
         else:
             # A planned stretch, played on the simulation's clock, its end
             # held still until the robot is there and still.
@@ -425,11 +618,16 @@ class Harvest:
                 self.target[3:] = positions[-1]
                 if settled and self.stage == "approach":
                     self._play("inward", self.planned.inward)
-                elif settled and self.stage == "outward":
-                    self._next()
-                elif settled:
-                    self.stage, self.ticks = {"fold": "run", "inward": "cut"}[self.stage], 0
-        return self.target, self.velocity
+                elif settled and self.stage == "outward" and self.severed:
+                    self._pull(hand)
+                elif settled and self.stage == "pull":
+                    self._release(hand)
+                elif settled and self.stage == "tip" and not self.stroke.fouled(hand):
+                    self._opened()
+                elif settled and self.stage in ("fold", "inward", "outward"):
+                    after = {"fold": "run", "inward": "close", "outward": "open"}
+                    self.stage, self.ticks = after[self.stage], 0
+        return self.target, self.velocity, self.stroke.jaw
 
 
 def frame_of(position: np.ndarray, quat: np.ndarray) -> np.ndarray:
@@ -487,8 +685,13 @@ def run(
         if match := SEGMENT.match(label):
             chains.setdefault(match[1], []).append((int(match[2]), body))
     trusses = read_trusses(stage, GREENHOUSE_PATH)
+    stems = stem_axes(NewtonManager.get_model())
     for truss in trusses:
         truss.bodies = [body for _, body in sorted(chains[truss.prim])]
+        shapes, starts, ends = stems[truss.prim.rsplit("/", 1)[0]]
+        nearest = distances(truss.cut[:3, 3], starts, ends).argmin()
+        truss.stem = (ends - starts)[nearest] / np.linalg.norm((ends - starts)[nearest])
+        truss.stem_shapes = list(shapes)
     ys = path_ys(stage, GREENHOUSE_PATH)
     paths = paths if paths is not None else list(range(len(ys)))
     if not all(0 <= path < len(ys) for path in paths):
@@ -496,7 +699,9 @@ def run(
     jobs = plan(trusses, ys, paths, GREENHOUSE_CFG.layout.pitch)
     tally = Tally(due=sum(isinstance(job, Truss) for job in jobs))
 
-    joints, _ = robot.find_joints([AISLE, RAIL, LIFT, *arm_joints()], preserve_order=True)
+    joints, _ = robot.find_joints(
+        [AISLE, RAIL, LIFT, *arm_joints(), SHEAR_JOINT], preserve_order=True
+    )
     hand, _ = robot.find_bodies([HAND])
     base = frame_of(
         robot.data.root_pos_w.torch[0].cpu().numpy(),
@@ -514,15 +719,15 @@ def run(
                 joint_ids=joints,
             )
 
-    def mouth() -> np.ndarray:
-        hand_pose = frame_of(
+    def hand_pose() -> np.ndarray:
+        return frame_of(
             robot.data.body_link_pos_w.torch[0, hand[0]].cpu().numpy(),
             robot.data.body_link_quat_w.torch[0, hand[0]].cpu().numpy(),
         )
-        return hand_pose @ machine.tool
 
-    # A drive with no target holds zero, so the arm is held home first.
-    hold([0.0, 0.0, 0.0, *ARM_HOME], np.zeros(len(joints)))
+    # A drive with no target holds zero, so the arm is held home and the
+    # shear open first.
+    hold([0.0, 0.0, 0.0, *ARM_HOME, machine.shear.opening], np.zeros(len(joints)))
     # Where the robot spawns: its joints read zero until the first step.
     spawned = [0.0, 0.0, 0.0, *ARM_HOME]
     harvest = Harvest(machine, Planner(machine, ROBOT_PATH), jobs, base, spawned, shears, tally)
@@ -531,8 +736,10 @@ def run(
     rest = NewtonManager.get_state_0().body_q.numpy()[:, 2].copy()
     step, after = 0, 0
     while sim.is_running():
+        q = robot.data.joint_pos.torch[0, joints].cpu().numpy()
         if step % DECIMATION == 0:
-            hold(*harvest.control(robot.data.joint_pos.torch[0, joints].cpu().numpy(), mouth()))
+            targets, velocities, jaw = harvest.control(q[:-1], hand_pose(), float(q[-1]))
+            hold([*targets, jaw], [*velocities, 0.0])
         robot.write_data_to_sim()
         sim.step(render=render)
         robot.update(SIM_DT)
@@ -541,7 +748,10 @@ def run(
         after = after + 1 if harvest.done else 0
         if after == round(FALL / SIM_DT):
             drop = rest - NewtonManager.get_state_0().body_q.numpy()[:, 2]
-            tally.fell = sum(drop[t.bodies[1:]].min() > FELL for t in harvest.cut)
+            loose = shears.bodies[shears.loose]
+            tally.fell = sum(
+                drop[np.intersect1d(t.bodies, loose)].min() > FELL for t in harvest.cut
+            )
             print(f"[INFO]: done in {harvest.time:.0f} s. {tally.summary()}", flush=True)
             if not sim.has_gui:
                 return
@@ -554,8 +764,15 @@ def main():
         sim = sim_utils.SimulationContext(sim_cfg)
         machine = make_machine()
         robot = design_scene(machine)
-        for _ in run(sim, robot, machine, args.paths):
-            pass
+        colliders = None
+        for step, _ in enumerate(run(sim, robot, machine, args.paths)):
+            # Colliders only move on a control tick, when the stroke places
+            # the shear's slices or a cut reshapes a peduncle.
+            if args.colliders and step % DECIMATION == 0:
+                if colliders is None:
+                    colliders = ColliderView()
+                else:
+                    colliders.update()
 
 
 if __name__ == "__main__":

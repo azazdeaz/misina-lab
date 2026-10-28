@@ -148,9 +148,9 @@ curve when shut, so the open mouth spans the same angle at every distance
 out from the pivot. A cane coming in outside the hook's tip slides off its
 back, so the mouth's point a cane is brought to keeps clear of the tip: the
 centre of the widest circle between the straight lines from the pivot to
-the two tips. Each blade is drawn as a mesh `bumblebee.py` writes beside
-the URDF, and collides as convex pieces along it, the moving blade's being
-the slices below.
+the two tips. Each blade is drawn as a mesh `shear.py` writes beside the
+URDF, and collides as convex pieces along it, the moving blade's being the
+slices below.
 
 A real bypass shear closes its moving blade past a fixed one, and the wood
 between them gives. A simulated cane does not give: a blade closing on it
@@ -169,7 +169,7 @@ pivot                                              tip
                                              the rest close with the blade
 ```
 
-Every tick while the shear closes, `pruner.Stroke`:
+Every tick while the shear closes, `shear.Stroke`:
 
 1. **Carries.** A slice rides the blade, and pushes a cane in the mouth
    across, onto the fixed blade.
@@ -233,7 +233,8 @@ least squares; the solver and the simulation come from one description.
 | file | what it owns |
 | --- | --- |
 | `main.py` | the vineyard, the sky, the robot, the simulation loop |
-| `bumblebee.py` | the robot: the Warthog, its dimensions, the URDF built from them, the actuators, the shear |
+| `bumblebee.py` | the robot: the Warthog, its dimensions, the URDF built from them, the actuators |
+| `shear.py` | the bypass shear: its blades' geometry, their meshes and colliders, and `Stroke`, the blade closing through the canes; the greenhouse demo's module, kept the same |
 | `kinematics.py` | forward and inverse kinematics of the arm on its slide |
 | `pruner.py` | the ground truth off the stage, the rule, the cut sequence, the score |
 | `driver.py` | driving the skid steer from stop to stop |

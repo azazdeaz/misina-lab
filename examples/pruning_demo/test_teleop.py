@@ -11,7 +11,7 @@ bumblebee = pytest.importorskip("bumblebee", reason="Isaac Lab is not installed"
 import kinematics  # noqa: E402
 import teleop  # noqa: E402
 from driver import CRUISE_SPEED, MAX_YAW_RATE  # noqa: E402
-from pruner import BLADE_STEP  # noqa: E402
+from shear import BLADE_STEP  # noqa: E402
 
 MACHINE = bumblebee.Bumblebee()
 

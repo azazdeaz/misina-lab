@@ -19,10 +19,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from bumblebee import ARM_HOME, Bumblebee
+from bumblebee import ARM_HOME, TOOL, Bumblebee
 from driver import CRUISE_SPEED, MAX_YAW_RATE, Driver
 from kinematics import frames, solve
-from pruner import JOINT_STEP, Stroke, reached, squared
+from pruner import JOINT_STEP, reached, squared
+from shear import Stroke
 
 if TYPE_CHECKING:
     from vinery_lab.isaaclab import Shears
@@ -72,7 +73,7 @@ class Teleop:
     def __init__(self, machine: Bumblebee, driver: Driver, shears: Shears):
         self.machine, self.driver = machine, driver
         self.held: set[str] = set()
-        self.stroke = Stroke(machine, shears)
+        self.stroke = Stroke(machine.shear, TOOL, shears)
         self.closing = False
         # From the folded arm out to the ready posture, on a planned move,
         # with the mouth squared up exactly where that posture puts it.

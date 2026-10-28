@@ -62,15 +62,16 @@ class Shot:
 
 CLOSE = Shot(eye=(0.5, -0.9, 0.2), look=(0.0, 0.0, -0.15))
 """The cuts' close-up: from the path a little ahead of the cut, so the
-cutter comes in from behind it, toward the camera."""
+shear comes in from behind it, toward the camera."""
 
 FALLING = Shot(eye=(0.5, -0.9, 0.2), look=(0.0, 0.0, -0.6), lens=18.0)
-"""The same, looking down after the cut, at the truss falling to the floor."""
+"""The same of where the shear lets the truss go, looking down at it falling
+to the floor."""
 
 TAKES = (
     "A truss is due once its least ripe fruit is turning",
-    "The cutter comes in square to the peduncle, on a straight line",
-    "Cut at its stem, the truss drops whole to the floor",
+    "The shear comes in along the stem, on a straight line",
+    "Cut and held by its stem, the truss is let go in the path",
 )
 """The captions of the cuts filmed close up: the first the trolley makes, in
 order."""
@@ -101,14 +102,14 @@ CLOSING = Shot(
 )
 """The same, lower: the trusses on the floor and the trolley driving out."""
 
-PACE = {"inward": 2.0, "cut": 2.0, "outward": 2.0, "drop": 3.0, "rest": 0.25}
+PACE = {"inward": 2.0, "close": 2.0, "outward": 1.5, "pull": 1.5, "drop": 3.0, "rest": 0.25}
 """How many times slower than the simulation the video plays: a take's
-stages by `Harvest.stage`, the truss dropping after its cut, and the cuts no
+stages by `Harvest.stage`, the truss dropping once let go, and the cuts no
 take has. The rest plays at the simulation's own speed."""
 
 DROP = 0.8
-"""Seconds of simulated time a take stays on after its cut, while the truss
-falls."""
+"""Seconds of simulated time a take stays on once the shear has let its
+truss go, while it falls."""
 
 EASE = 1.5
 """Seconds of video the camera takes from one shot to the next."""
@@ -120,10 +121,11 @@ to the next too: the arm moves on to the next truss past where the last
 take's camera stands."""
 
 
-def framing(shot: Shot, point: np.ndarray, side: np.ndarray) -> np.ndarray:
+def framing(shot: Shot, point: np.ndarray, side: np.ndarray, ahead: float = 1.0) -> np.ndarray:
     """The camera's pose for `shot` of `point`, `side` the horizontal direction
-    across the path it counts from: eye, aim, focal length and aperture."""
-    axes = np.column_stack([[1.0, 0.0, 0.0], side, [0.0, 0.0, 1.0]])
+    across the path it counts from and `ahead` the way along the row, +1 or
+    -1: eye, aim, focal length and aperture."""
+    axes = np.column_stack([[ahead, 0.0, 0.0], side, [0.0, 0.0, 1.0]])
     eye, target = point + axes @ shot.eye, point + axes @ shot.look
     return np.array([*eye, *target, shot.lens, shot.f_stop])
 
@@ -148,9 +150,10 @@ def main():
         # The takes' captions, by the prim of the truss each films.
         captions: dict[str, str] = {}
         # Frames due, counted a fraction a physics step: an eighth, at the
-        # simulation's own speed. `last` is the truss cut last, at `cut_at`,
-        # and `shown` the one the last frame filmed.
-        due, last, cut_at, shown = 0.0, None, 0.0, None
+        # simulation's own speed. `last` is the truss cut last, let go at
+        # `left_at` once the harvest moves on from it, and `shown` the one
+        # the last frame filmed.
+        due, last, left_at, shown = 0.0, None, None, None
         try:
             for step, harvest in enumerate(demo.run(sim, robot, machine, PATHS, render=False)):
                 now = step * demo.SIM_DT
@@ -158,9 +161,12 @@ def main():
                 if truss and truss.prim not in captions and len(captions) < len(TAKES):
                     captions[truss.prim] = TAKES[len(captions)]
                 if harvest.cut and harvest.cut[-1] is not last:
-                    last, cut_at = harvest.cut[-1], now
+                    last, left_at = harvest.cut[-1], None
+                if last is not None and left_at is None and harvest.job is not last:
+                    left_at = now
                 filmed = None
-                if last is not None and last.prim in captions and now - cut_at < DROP:
+                gone = left_at is not None and now - left_at < DROP
+                if last is not None and last.prim in captions and gone:
                     shot, filmed, pace = FALLING, last, "drop"
                 elif (
                     truss
@@ -180,11 +186,18 @@ def main():
                 if now < SETTLE or due < 1:
                     continue
                 due -= 1
+                ahead = 1.0
                 if filmed:
+                    # Ahead is the way the shear comes in, and the truss is
+                    # let go back out from the cut and across the path.
+                    way = demo.heading(filmed.cut[:3, 0], filmed.side)
                     point, side, caption = filmed.cut[:3, 3], filmed.side, captions[filmed.prim]
+                    ahead = float(np.sign(way[0]))
+                    if pace == "drop":
+                        point = point - demo.STANDOFF * way - demo.PULL * side
                 else:
                     point, side, caption = entrance, left, shot.caption
-                rig.aim(framing(shot, point, side), cut=filmed is not shown)
+                rig.aim(framing(shot, point, side, ahead), cut=filmed is not shown)
                 shown = filmed
                 sim.render()
                 camera.update(demo.SIM_DT, force_recompute=True)

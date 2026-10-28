@@ -1,28 +1,32 @@
-"""A pipe-rail truss harvester: a trolley, a lift, a UR5e and a cutter.
+"""A pipe-rail truss harvester: a trolley, a lift, a UR5e and a shear.
 
 The layout of eternal.ag's Harvester and most robots of its kind: a trolley
 the width of a path's heating pipes, a lift on it, a cobot arm on the lift
 and a cutter in the arm's hand. Here the trolley does not roll. It rides
 three prismatic joints off a base fixed in the main path: `AISLE` across the
-row heads to a path, `RAIL` down it and `LIFT` up. The trolley, the lift and
-the cutter are primitives, every dimension a field of `Harvester`; the arm
+row heads to a path, `RAIL` down it and `LIFT` up. The trolley and the lift
+are primitives, every dimension a field of `Harvester`; the arm
 is MuJoCo Menagerie's model of Universal Robots' UR5e, fetched from `ASSETS`
 on first use and read out of its MJCF, so its links are drawn and weighed
 as Menagerie has them. `urdf` writes the robot, and `Harvester.chain` is the
 same joints for `kinematics`.
 
-The cutter is a head on the flange and two blades fixed open in a V in
-front of it. Only the head collides: a truss is cut by rule, with
-`Shears`, once the V's crotch is at its peduncle, and the blades let the
-piece fall rather than catch it.
+The cutter is the pruning demo's bypass shear, `shear.Shear`, made to cut
+and hold: on the side the truss hangs, a rubber jaw beside the hook and a
+sprung rubber finger riding the cutting blade press the peduncle between
+them as the blade cuts it, and friction holds the truss there until the
+shear opens. Its head, both blades, the jaw and the finger collide, and
+`shear.Stroke` closes it and cuts what it closes on, a control tick at a
+time.
 
 The robot collides with itself. Its colliders are the trolley's chassis and
-mast, Menagerie's capsules on the arm and the cutter's head; the platform has
-none, the arm's base standing flush on it. The arm's and the cutter's are
-each a `Shape`: `urdf` writes it for Isaac Sim's importer, and `curobo_cfg`
-hands cuRobo the spheres that cover it, so a pose cuRobo finds clear is clear
-in the simulation. The trolley's reach cuRobo with the rest of the world, from
-the simulation itself (see `planner`).
+mast, Menagerie's capsules on the arm and the shear; the platform has none,
+the arm's base standing flush on it. The arm's are each a `Shape`, and so is
+the box round each part of the shear: `urdf` writes the arm's for Isaac Sim's
+importer, the shear's own pieces going with `shear.urdf`, and `curobo_cfg`
+hands cuRobo the spheres that cover each, so a pose cuRobo finds clear is
+clear in the simulation. The trolley's reach cuRobo with the rest of the
+world, from the simulation itself (see `planner`).
 """
 
 from __future__ import annotations
@@ -41,9 +45,12 @@ import numpy as np
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
+from isaaclab_newton.sim.schemas import MujocoRigidBodyCfg
 
 import kinematics
+import shear
 from kinematics import Joint, rpy_of, transform
+from shear import BLADE, FINGER_JOINT, HEAD, SHEAR_JOINT, Shear
 
 ASSETS = "azazdeaz/misina-lab-sim-assets"
 """The Hugging Face dataset the demos' larger assets live in. `huggingface_hub`
@@ -60,53 +67,55 @@ AISLE, RAIL, LIFT = "aisle", "rail", "lift"
 """The trolley's joints: across the main path, down a path, up."""
 
 HAND = "wrist_3_link"
-"""The body the cutter is fixed to, once the importer merges the fixed joint
-between them, and whose pose says where the mouth is."""
-CUTTER = "cutter"
-"""The cutter's link in the URDF, at the flange, +Z out between the blades."""
+"""The body the shear's head is fixed to, once the importer merges the fixed
+joint between them, and whose pose says where the mouth is."""
 
 ARM_HOME = (0.0, -math.pi / 2, math.pi / 2, -math.pi / 2, -math.pi / 2, 0.0)
 """Joint positions the arm rides folded to: the upper arm upright and the
-forearm level back over the trolley, the cutter hanging down inside its
+forearm level back over the trolley, the shear hanging down inside its
 width."""
 
 # -- Actuation: position drives on every joint.
 TRAVEL = {AISLE: (1e5, 1.2e4, 1e4), RAIL: (1e5, 1.2e4, 1e4), LIFT: (2e5, 6e3, 5e3)}
 """Stiffness, damping and effort limit of each trolley joint, in N/m, N s/m
 and N: about critically damped on the 400 kg the aisle and the rail carry and
-the 50 the lift does, which holds the lift's load to a few millimetres of
-sag."""
+the 50 the lift does."""
 SHOULDER_STIFFNESS = 6000.0
 SHOULDER_DAMPING = 600.0
-"""The three joints carrying the arm's weight, three times Menagerie's gain:
-the 60 N m an outstretched arm hangs on the shoulder then sags the mouth
-under a centimetre."""
+"""The three joints nearest the base, three times Menagerie's gain, so the
+mouth keeps to a straight line it is played on within a few millimetres."""
 WRIST_STIFFNESS = 500.0
 WRIST_DAMPING = 100.0
 """Menagerie's gains for the wrists."""
 ARMATURE = 0.1
 """Reflected rotor inertia on each arm joint, in kg m^2: Menagerie's."""
+SHEAR_DRIVE = (20.0, 1.0, 10.0, 0.002)
+"""The shear's stiffness, damping, effort limit and armature, in N m/rad,
+N m s/rad, N m and kg m^2: the pruning demo's."""
+FINGER_SPRING = (2.0, 0.05, 0.0005)
+"""The finger's spring, its damping and armature, in N m/rad, N m s/rad and
+kg m^2, holding it against the cutting blade. A 7 mm peduncle against the
+hook halfway along it stops the finger 7 to 11 degrees short of shut, so
+with the blade shut the finger presses it with about 10 N."""
 
-HEAD = 0.06
-"""How far the cutter's head stands out of the flange, in meters."""
-HEAD_WIDTH = 0.05
-"""The head across, either way."""
-BLADE = 0.07
-"""Length of a blade, out from the crotch of the V."""
-OPENING = 0.7
-"""Angle between the blades, in radians."""
-MOUTH = 0.012
-"""How far into the V from its crotch the mouth is: where a peduncle is cut."""
-BLADE_THICKNESS, BLADE_WIDTH = 0.003, 0.015
-"""A blade's plate: through it, and across from its inner, cutting edge."""
+AIM = (0.5, 0.0045)
+"""Where the mouth brings a peduncle: half the blade's length out from the
+pivot, as a share of that length, and a 7 mm one's radius and a millimetre
+off the hook's edge, in meters. A peduncle is too short and stiff between its stem and the cut for
+the blade to carry it across the mouth, as the pruning demo's carries a
+cane: brought to the hook, it lies against it as the shear closes, and is
+cut where the blade reaches it. One the blade leaves short of the hook is
+cut as the blades meet, still between them where the cutting blade is
+widest."""
 
 GRAIN = 0.015
-"""The thinnest a box is cut into for its spheres, in meters: a blade is
-covered a blade's width across, not its thickness."""
+"""The thinnest a box is cut into for its spheres, in meters: a blade and
+the jaw or the finger beside it are covered as one slab, a centimetre and
+more across."""
 
 MATERIALS = {
     "chassis": "0.18 0.45 0.25 1",
-    "steel": "0.55 0.57 0.60 1",
+    "steel": shear.MATERIALS["steel"],
     "tire": "0.05 0.05 0.05 1",
 }
 """Colours, as URDF rgba: a green trolley, galvanized steel and rubber."""
@@ -161,10 +170,6 @@ class Shape:
         return [(frame[:3, :3] @ centre + frame[:3, 3], radius) for centre in centres]
 
 
-CUTTER_HEAD = Shape("box", (0.0, 0.0, HEAD / 2), (HEAD_WIDTH, HEAD_WIDTH, HEAD))
-"""The cutter's head, standing out of the flange: the part of it that collides."""
-
-
 @dataclasses.dataclass(frozen=True)
 class Harvester:
     """One machine, in meters and kilograms."""
@@ -193,6 +198,16 @@ class Harvester:
     down: float = 30.0
     """How far `RAIL` goes, out of the main path and down a path."""
 
+    shear: Shear = Shear(blade=0.06, opening=0.6, slices=6, hold=0.016)
+    """The pruning demo's shear made smaller, for a peduncle about 7 mm
+    across, its six slices a centimetre each, and made to cut and hold: the
+    jaw and the finger stand 1.6 cm out along the pivot from the hook, past
+    the round end the cut leaves on the piece cut free and short of the
+    rod's next joint, where the peduncle bends into the rachis (see
+    `harvest.PAST`). It opens less, 35 degrees: a peduncle is brought to
+    the hook, not to the middle of the mouth (see `AIM`), and the open blade
+    reaching 2 cm past it keeps out of the truss's fruit."""
+
     @property
     def width(self) -> float:
         """The trolley across, over its wheels."""
@@ -216,10 +231,35 @@ class Harvester:
         )
 
     @property
+    def shear_frame(self) -> np.ndarray:
+        """The shear's own frame off the last wrist (see `Shear`): its head
+        standing on the flange, the pivot at the head's face."""
+        return _ur5e().flange @ transform((0.0, 0.0, self.shear.head))
+
+    @property
     def tool(self) -> np.ndarray:
-        """The mouth's frame off the last wrist: +Z out between the blades,
-        +X across the V, along which a peduncle has to lie to be cut."""
-        return _ur5e().flange @ transform((0.0, 0.0, HEAD + MOUTH))
+        """The mouth's frame off the last wrist: at `AIM`, +Z out along the
+        blades and +X along the pivot, which a peduncle has to lie along to
+        be cut, the jaws toward +X."""
+        out, off = AIM
+        y, z = self.shear.off_edge(out * self.shear.blade, off)
+        return self.shear_frame @ transform((0.0, y, z))
+
+    @property
+    def way_in(self) -> np.ndarray:
+        """Which way the mouth moves on its straight line in to a peduncle, a
+        unit vector in the mouth's frame: so the peduncle comes in through the
+        middle of the open mouth's entrance, between the claw's tip and the
+        open cutting blade's, and on to `AIM`. Out along the blades, the way
+        the mouth points, the hook's edge curves down past `AIM` into the
+        claw, which would sweep through the peduncle on the way in."""
+        s = self.shear
+        out, off = AIM
+        aim = np.array(s.off_edge(out * s.blade, off))
+        claw = np.array([s.edge(s.blade + s.claw), s.blade + s.claw])
+        tip = s.blade * np.array([-math.sin(s.opening), math.cos(s.opening)])
+        y, z = (claw + tip) / 2 - aim
+        return np.array([0.0, y, z]) / math.hypot(y, z)
 
 
 def arm_joints() -> list[str]:
@@ -232,12 +272,33 @@ def arm_links() -> list[str]:
     return list(_ur5e().bodies[1:])
 
 
-def spheres() -> dict[str, list[dict]]:
-    """The arm's and the cutter's shapes as the spheres cuRobo collides, by
-    link: each one's `Shape.cover`. The blades are covered too: the
-    simulation lets a cut truss fall through them, and the planner keeps them
-    off the crop all the same."""
-    shapes = {**_ur5e().shapes, CUTTER: (CUTTER_HEAD, *blades())}
+def shear_shapes(s: Shear) -> dict[str, tuple[Shape, ...]]:
+    """The shear's parts as the boxes round them, by link: the head, and each
+    blade with the jaw or the finger beside it as one slab, the cutting
+    blade's in its own frame."""
+
+    def slab(x: float, y: tuple[float, float], length: float) -> Shape:
+        """From `x` along the pivot out past the jaws, across `y` and out
+        `length` from the pivot."""
+        far = max(s.hold + s.jaw_thickness / 2, s.bypass + s.thickness / 2)
+        low = x - s.thickness / 2
+        centre = ((low + far) / 2, sum(y) / 2, length / 2)
+        return Shape("box", centre, (far - low, y[1] - y[0], length))
+
+    tip = s.blade + s.claw
+    return {
+        HEAD: (
+            Shape("box", (0.0, 0.0, -s.head / 2), (s.head, s.head, s.head)),
+            slab(0.0, (min(float(s.edge(tip)), 0.0), s.bow + s.width), tip),
+        ),
+        BLADE: (slab(s.bypass, (-s.width, s.bow), s.blade),),
+    }
+
+
+def spheres(machine: Harvester) -> dict[str, list[dict]]:
+    """The arm's and the shear's shapes as the spheres cuRobo collides, by
+    link: each one's `Shape.cover`."""
+    shapes = {**_ur5e().shapes, **shear_shapes(machine.shear)}
     return {
         link: [
             {"center": centre.tolist(), "radius": radius}
@@ -249,23 +310,25 @@ def spheres() -> dict[str, list[dict]]:
 
 
 def curobo_cfg(machine: Harvester) -> dict:
-    """The arm as cuRobo's robot config: from the platform out to the cutter,
-    the tool it poses, colliding as `spheres`. Every pair of links is checked
-    against the other but a joint's two and the pairs whose spheres meet at
-    `ARM_HOME`: the last wrist spins the cutter about an axis the wrist before
-    it shares, so those two meet however the arm is posed."""
-    covers = spheres()
+    """The arm as cuRobo's robot config: from the platform out to the shear's
+    head, the tool it poses, colliding as `spheres`, the shear fixed open.
+    Every pair of links is checked against the other but a joint's two and
+    the pairs whose spheres meet at `ARM_HOME`: the last wrist spins the
+    shear about an axis the wrist before it shares, so those meet however the
+    arm is posed."""
+    covers = spheres(machine)
     arm = _ur5e()
     frames = kinematics.frames(machine.chain, [0.0, 0.0, 0.0, *ARM_HOME])
     placed = dict(zip(arm.bodies[1:], frames[3:], strict=True))
-    placed[CUTTER] = placed[HAND] @ arm.flange
+    placed[HEAD] = placed[HAND] @ machine.shear_frame
+    placed[BLADE] = placed[HEAD] @ transform(rpy=(machine.shear.opening, 0.0, 0.0))
 
     def balls(link: str) -> tuple[np.ndarray, np.ndarray]:
         centres = np.array([ball["center"] for ball in covers[link]])
         radii = np.array([ball["radius"] for ball in covers[link]])
         return centres @ placed[link][:3, :3].T + placed[link][:3, 3], radii
 
-    chain = [*arm.bodies[1:], CUTTER]
+    chain = [*arm.bodies[1:], HEAD, BLADE]
     ignore = {link: [after] for link, after in zip(chain, chain[1:])}
     for a, b in itertools.combinations(covers, 2):
         (ca, ra), (cb, rb) = balls(a), balls(b)
@@ -274,9 +337,9 @@ def curobo_cfg(machine: Harvester) -> dict:
             ignore.setdefault(a, []).append(b)
     return {
         "kinematics": {
-            "urdf_path": write_urdf(machine),
+            "urdf_path": write_urdf(machine, open_shear=True),
             "base_link": "platform",
-            "tool_frames": [CUTTER],
+            "tool_frames": [HEAD],
             "collision_link_names": list(covers),
             "collision_spheres": covers,
             "self_collision_ignore": ignore,
@@ -305,12 +368,24 @@ def harvester_cfg(machine: Harvester, prim_path: str, position) -> ArticulationC
             asset_path=write_urdf(machine),
             usd_dir=str(_CACHE),
             fix_base=True,
+            # Every body's weight compensated, as a cobot's controller
+            # compensates its own: the drives hold each joint where it is
+            # sent, not sagging short of it by what the arm weighs.
+            rigid_props=MujocoRigidBodyCfg(gravcomp=1.0),
+            # Boxes, cylinders, spheres and the blades' convex pieces: a hull
+            # of each is the shape itself.
+            collision_type="Convex Hull",
             joint_drive=None,  # the actuators below own the gains
             activate_contact_sensors=False,
             self_collision=True,
         ),
         init_state=ArticulationCfg.InitialStateCfg(
-            pos=tuple(position), joint_pos=dict(zip(arm_joints(), ARM_HOME, strict=True))
+            pos=tuple(position),
+            joint_pos={
+                **dict(zip(arm_joints(), ARM_HOME, strict=True)),
+                SHEAR_JOINT: machine.shear.opening,
+                FINGER_JOINT: 0.0,
+            },
         ),
         actuators={
             **{
@@ -332,6 +407,20 @@ def harvester_cfg(machine: Harvester, prim_path: str, position) -> ArticulationC
                 damping=WRIST_DAMPING,
                 effort_limit={joint.name: joint.effort for joint in arm[3:]},
                 armature=ARMATURE,
+            ),
+            "shear": ImplicitActuatorCfg(
+                joint_names_expr=[SHEAR_JOINT],
+                stiffness=SHEAR_DRIVE[0],
+                damping=SHEAR_DRIVE[1],
+                effort_limit=SHEAR_DRIVE[2],
+                armature=SHEAR_DRIVE[3],
+            ),
+            # Held at zero: a target is never set.
+            "finger": ImplicitActuatorCfg(
+                joint_names_expr=[FINGER_JOINT],
+                stiffness=FINGER_SPRING[0],
+                damping=FINGER_SPRING[1],
+                armature=FINGER_SPRING[2],
             ),
         },
     )
@@ -491,24 +580,25 @@ _CACHE = pathlib.Path(tempfile.gettempdir()) / "greenhouse_demo"
 robots, and the URDF converter caches on the name too."""
 
 
-def write_urdf(machine: Harvester) -> str:
-    """Build the URDF for one machine and return its path, writing it once."""
-    text = urdf(machine)
+def write_urdf(machine: Harvester, open_shear: bool = False) -> str:
+    """Build the URDF for one machine and return its path, writing it once;
+    with `open_shear`, the shear fixed open, as cuRobo plans with it."""
+    text = urdf(machine, open_shear)
     _CACHE.mkdir(parents=True, exist_ok=True)
     path = _CACHE / f"harvester_{hashlib.sha256(text.encode()).hexdigest()[:16]}.urdf"
     path.write_text(text)
     return str(path)
 
 
-def urdf(machine: Harvester) -> str:
-    """`machine` as a URDF document.
+def urdf(machine: Harvester, open_shear: bool = False) -> str:
+    """`machine` as a URDF document, the shear fixed open if `open_shear`.
 
     `base_link` is fixed on the main path's floor. The aisle carriage rides
     across it, the trolley down a path off the carriage, and the platform up
     the trolley's mast; the arm stands on the platform through a fixed joint
-    the importer merges away, and the cutter on the last wrist through
-    another. The trolley's chassis and mast collide, the arm and the
-    cutter's head; the platform, the wheels and the blades are drawn only.
+    the importer merges away, and the shear's head on the last wrist through
+    another. The trolley's chassis and mast collide, the arm and the shear;
+    the platform and the wheels are drawn only.
     """
     m = machine
     aisle, rail, lift, *_ = m.chain
@@ -564,35 +654,9 @@ def urdf(machine: Harvester) -> str:
   </joint>
 {chr(10).join(arm.links)}
 {joints}
-  <joint name="cutter_mount" type="fixed">
-    <parent link="{HAND}"/>
-    <child link="{CUTTER}"/>
-    {_origin(tuple(arm.flange[:3, 3]), rpy_of(arm.flange[:3, :3]))}
-  </joint>
-  <link name="{CUTTER}">
-{_tagged("visual", _origin(CUTTER_HEAD.xyz, CUTTER_HEAD.rpy), CUTTER_HEAD.geometry(), STEEL)}
-{CUTTER_HEAD.collision()}
-{chr(10).join(_tagged("visual", _origin(b.xyz, b.rpy), b.geometry(), STEEL) for b in blades())}
-{_inertial(0.4, _box_inertia(0.4, HEAD_WIDTH, HEAD_WIDTH, HEAD), (0, 0, HEAD / 2))}
-  </link>
+{shear.urdf(m.shear, HAND, m.shear_frame, 0.4, m.shear.opening if open_shear else None)}
 </robot>
 """
-
-
-def blades() -> tuple[Shape, Shape]:
-    """The two blades, plates standing out of the head's face in the
-    cutter's YZ plane, `OPENING` apart: the V a peduncle lying along X is
-    cut in."""
-    plates = []
-    for side in (-1, 1):
-        angle = side * OPENING / 2
-        # Out along the blade from the crotch, and back from its inner edge.
-        along = np.array([0.0, -math.sin(angle), math.cos(angle)])
-        back = np.array([0.0, math.cos(angle), math.sin(angle)]) * side
-        centre = np.array([0.0, 0.0, HEAD]) + along * BLADE / 2 + back * BLADE_WIDTH / 2
-        size = (BLADE_THICKNESS, BLADE_WIDTH, BLADE)
-        plates.append(Shape("box", tuple(centre), size, (angle, 0.0, 0.0)))
-    return tuple(plates)
 
 
 def _joint(joint: Joint, parent: str, child: str) -> str:
@@ -615,7 +679,6 @@ def _origin(xyz, rpy) -> str:
 
 
 BOTH = ("visual", "collision")
-STEEL = ("steel", MATERIALS["steel"])
 
 
 def _box(xyz, size, material: str, tags: tuple[str, ...] = ("visual",)) -> str:
