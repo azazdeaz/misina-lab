@@ -150,3 +150,49 @@ def test_curobo_poses_the_shear_where_the_chain_does():
         assert head == pytest.approx(
             np.linalg.inv(chain[2]) @ chain[-1] @ MACHINE.shear_frame, abs=1e-4
         )
+
+
+def test_a_stems_fin_runs_from_its_front_back_to_its_rows_middle():
+    """An upright stem's box is swept back, square to the stem, from its
+    front to the middle of its row; a stem lowered along the gutter stays as
+    it is, as does any other box."""
+    planner = pytest.importorskip("planner")
+    poses = np.array(
+        [
+            kinematics.transform((0.0, -0.2, 1.2), (0.15, 0.0, 0.0)),  # leaning out of the row
+            kinematics.transform((0.0, -0.1, 0.6), (0.0, np.pi / 2, 0.0)),  # lowered, along x
+            np.eye(4),
+        ]
+    )
+    size = np.array([[0.02, 0.02, 1.0]] * 3)
+    swept, grown = poses.copy(), size.copy()
+    planner._fins(swept, grown, np.array([0.1, 0.1, np.nan]))
+    assert swept[1:] == pytest.approx(poses[1:]) and grown[1:] == pytest.approx(size[1:])
+    fin, half = swept[0], grown[0, 1] / 2
+    assert fin[:3, :3] @ fin[:3, :3].T == pytest.approx(np.eye(3))
+    assert np.linalg.det(fin[:3, :3]) == pytest.approx(1.0)
+    assert fin[:3, 2] == pytest.approx(poses[0, :3, 2])
+    front, back = fin[:3, 3] - fin[:3, 1] * half, fin[:3, 3] + fin[:3, 1] * half
+    assert np.linalg.norm(front - poses[0, :3, 3]) == pytest.approx(0.01)
+    assert front[1] < poses[0, 1, 3] < 0.1 < back[1]
+
+
+def test_a_turned_approach_cuts_as_far_off_the_stem():
+    """Every cut pose keeps the blades' plane along the stem and the hook
+    up, and the fixed blade as far off the stem's axis as coming in along
+    the row; turned, the shear points into the row from the path."""
+    harvest = pytest.importorskip("harvest")
+    truss = harvest.Truss("", np.eye(4), True, side=np.array([0.0, 1.0, 0.0]))
+    truss.axis = np.array([0.3, 0.5, 1.0])
+    along = np.array([0.0, -1.0, 0.0])  # at the path
+    at = truss.axis + 0.016 * along + [0.0, 0.0, 0.005]
+    poses = harvest.approaches(truss, at, along, MACHINE)
+    turns = list(itertools.product(harvest.YAWS, harvest.TILTS))
+    assert len(poses) == len(turns)
+    for pose, (yaw, tilt) in zip(poses, turns, strict=True):
+        x, y, z = pose[:3, :3].T
+        assert pose[:3, :3] @ pose[:3, :3].T == pytest.approx(np.eye(3))
+        assert x @ truss.stem == pytest.approx(0.0, abs=1e-9)
+        assert x @ (pose[:3, 3] - truss.axis) == pytest.approx(0.016 - MACHINE.shear.bypass)
+        assert z @ truss.side == pytest.approx(np.sin(yaw) * np.cos(tilt))
+        assert y[2] > 0.0

@@ -40,7 +40,7 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
 from greenhouse_lab.isaaclab import GreenhouseCfg, LayoutCfg, StemCfg
 from harvester import AISLE, ARM_HOME, HAND, LIFT, RAIL, Harvester, arm_joints, harvester_cfg
-from kinematics import frames, solve, transform
+from kinematics import frames, rotation, solve, transform
 from misina_lab.isaaclab import ColliderView, rods
 from shear import SHEAR_JOINT, Stroke
 
@@ -80,11 +80,16 @@ BACK = 0.3
 in, the arm's base is stationed."""
 RISE = 0.15
 """How far above the shoulder the cut is held, where the lift reaches."""
-TILTS = np.radians([0.0, 20.0, -20.0])
+TILTS = np.radians([0.0, 20.0, -20.0, 30.0, -30.0])
 """How far off level the shear may point, turned about the blades' normal,
 square to the stem. Level, a standing stem runs behind the hook straight
 across the mouth's height and nowhere nearer the head; tilted, it runs
-toward the head, and 20 degrees keeps it a head's width off it."""
+toward the head, the nearer the further it is tilted."""
+YAWS = np.radians([0.0, 25.0])
+"""How far the shear and its blades' plane may be turned about the stem
+toward the path, off coming in along the row: turned, the shear comes in
+partly from the path, its wrist further out of the crop wall. The blades'
+plane still runs along the stem, and crosses the peduncle aslant."""
 STEPS = np.array([0.02, 0.02, 0.01])
 """How far each trolley joint's target may move per control tick on a run,
 every joint pacing itself to arrive with the slowest: 1 m/s across and down a
@@ -146,6 +151,8 @@ class Truss:
     """Its rod's bodies, by model index, from the stem out."""
     stem: np.ndarray = dataclasses.field(default_factory=lambda: np.array([0.0, 0.0, 1.0]))
     """Which way the stem it hangs from runs at its node."""
+    axis: np.ndarray = dataclasses.field(default_factory=lambda: np.zeros(3))
+    """A point on that stem's axis by its node."""
     stem_shapes: list[int] = dataclasses.field(default_factory=list)
     """Its stem's colliders, by model index."""
 
@@ -251,6 +258,14 @@ def distances(point: np.ndarray, starts: np.ndarray, ends: np.ndarray) -> np.nda
     return np.linalg.norm(point - (starts + span * t[:, None]), axis=1)
 
 
+def joint_line(start, end) -> np.ndarray:
+    """The arm's joint positions on a straight line in joint space from
+    `start` to `end`, no joint moving more than 0.04 rad from one to the
+    next: both ends, however near, so it has a gradient."""
+    start, end = np.asarray(start, dtype=float), np.asarray(end, dtype=float)
+    return np.linspace(start, end, 2 + int(np.abs(end - start).max() / 0.04))
+
+
 def path_ys(stage, root: str) -> list[float]:
     """Each path's centre line, by its number."""
     from pxr import Usd, UsdGeom
@@ -325,17 +340,26 @@ def approaches(
     """The mouth's poses that cut `truss`'s peduncle at `at`, the blades'
     plane square to `along` (see `peduncle`): through `at`, +X `along`, so
     the peduncle lies across the mouth with the jaws on the truss's side of
-    the cut, and +Z the way the shear points, `heading` tilted up to `TILTS`
-    off level."""
+    the cut, and +Z the way the shear points, `heading`; each turned
+    `YAWS` about the stem toward the path, and tilted up to `TILTS` off
+    level about its +X. A turned plane crosses the peduncle further out,
+    where it is as far off the stem's axis as the unturned one."""
     level = heading(along, truss.side)
-    up = np.cross(level, along)
+    off = at - truss.axis
+    reach = np.linalg.norm(off - (off @ truss.stem) * truss.stem)
+    toward = np.sign(np.cross(truss.stem, level) @ truss.side)
     poses = []
-    for tilt in TILTS:
-        approach = np.cos(tilt) * level + np.sin(tilt) * up
-        pose = np.eye(4)
-        pose[:3, 0], pose[:3, 1], pose[:3, 2] = along, np.cross(approach, along), approach
-        pose[:3, 3] = at - machine.shear.bypass * along
-        poses.append(pose)
+    for yaw in YAWS:
+        turn = rotation(truss.stem, toward * yaw)
+        x, ahead = turn @ along, turn @ level
+        up = np.cross(ahead, x)
+        through = at + (reach / np.cos(yaw) - reach) * along
+        for tilt in TILTS:
+            approach = np.cos(tilt) * ahead + np.sin(tilt) * up
+            pose = np.eye(4)
+            pose[:3, 0], pose[:3, 1], pose[:3, 2] = x, np.cross(approach, x), approach
+            pose[:3, 3] = through - machine.shear.bypass * x
+            poses.append(pose)
     return poses
 
 
@@ -468,11 +492,13 @@ class Harvest:
             )
         if folding is None:
             # From a pose already touching what it may not brush, a fold
-            # finds no way; the arm folds on a straight line instead.
+            # finds no way. The arm folds on straight lines in joint space
+            # instead: out of the crop with the shoulder pan held, then
+            # round. Turned while still out, it would sweep along the crop
+            # wall into the stems.
             print(f"[INFO]: no clear way to fold from {np.round(self.q[3:], 2)}")
-            line = np.linspace(
-                self.q[3:], ARM_HOME, 1 + int(np.abs(ARM_HOME - self.q[3:]).max() / 0.04)
-            )
+            out = [self.q[3], *ARM_HOME[1:]]
+            line = np.concatenate([joint_line(self.q[3:], out), joint_line(out, ARM_HOME)])
             folding = (line, np.gradient(line, self.planner.dt, axis=0))
         self._play("fold", folding)
 
@@ -598,7 +624,7 @@ class Harvest:
         q, _, _ = solve(
             self.planner.chain, self.machine.tool, np.linalg.inv(platform) @ tipped, self.q[3:]
         )
-        line = np.linspace(self.q[3:], q, 1 + int(np.abs(q - self.q[3:]).max() / 0.04))
+        line = joint_line(self.q[3:], q)
         self._play("tip", (line, np.gradient(line, self.planner.dt, axis=0)))
 
     def control(
@@ -738,11 +764,16 @@ def run(
             chains.setdefault(match[1], []).append((int(match[2]), body))
     trusses = read_trusses(stage, GREENHOUSE_PATH)
     stems = stem_axes(NewtonManager.get_model())
+    rows: dict[str, list[int]] = {}
+    for stem, (shapes, _, _) in stems.items():
+        # A stem's row is its plant's parent.
+        rows.setdefault(stem.rsplit("/", 2)[0], []).extend(shapes)
     for truss in trusses:
         truss.bodies = [body for _, body in sorted(chains[truss.prim])]
         shapes, starts, ends = stems[truss.prim.rsplit("/", 1)[0]]
         nearest = distances(truss.cut[:3, 3], starts, ends).argmin()
         truss.stem = (ends - starts)[nearest] / np.linalg.norm((ends - starts)[nearest])
+        truss.axis = starts[nearest]
         truss.stem_shapes = list(shapes)
     ys = path_ys(stage, GREENHOUSE_PATH)
     paths = paths if paths is not None else list(range(len(ys)))
@@ -782,7 +813,8 @@ def run(
     hold([0.0, 0.0, 0.0, *ARM_HOME, machine.shear.opening], np.zeros(len(joints)))
     # Where the robot starts.
     spawned = [0.0, 0.0, 0.0, *ARM_HOME]
-    harvest = Harvest(machine, Planner(machine, ROBOT_PATH), jobs, base, spawned, shears, tally)
+    planner = Planner(machine, ROBOT_PATH, list(rows.values()))
+    harvest = Harvest(machine, planner, jobs, base, spawned, shears, tally)
     print(f"[INFO]: {len(trusses)} trusses bend, {tally.due} due on paths {paths}", flush=True)
     sim.set_camera_view(eye=[-3.5, -2.5, 2.8], target=[1.5, 0.0, 1.0])
     step, after = 0, 0

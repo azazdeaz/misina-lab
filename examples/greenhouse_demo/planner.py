@@ -9,6 +9,10 @@ simulation has it at the moment of planning: the trolley's chassis and mast,
 the crate on the platform, the rails, the floor, the stems, and the trusses
 and their fruit, bent or fallen. So the planner keeps off whatever the
 simulation would collide with, the robot's own trolley and crate included.
+An upright stem's box reaches back to the middle of its row, a fin, so the
+arm keeps to the path's side of the stems and meets the crop only between
+two, where the trusses hang: a stand-off reached round the back of a stem
+is one cuRobo finds no way back out of.
 
 A cut is planned the way cuRobo plans a grasp: of a set of cut poses it
 picks one it can reach, the shear's own spheres off, since the shear has to
@@ -45,7 +49,7 @@ meters: past the arm's reach with the shear on it."""
 OBSTACLES = 1000
 """The most boxes the world holds; the nearest are kept. cuRobo checks every
 sphere against every box in one kernel launch, which caps their product."""
-GOALS = 6
+GOALS = 10
 """The most cut poses a cut is planned to at once."""
 SPEED = 0.4
 """How fast the mouth moves on the straight line in and out, in m/s."""
@@ -72,7 +76,8 @@ class Cut:
 
 
 class Planner:
-    """cuRobo for `machine`, whose articulation is at `robot`.
+    """cuRobo for `machine`, whose articulation is at `robot`, in a crop
+    whose stems' colliders are `rows`, by model index, a list for each row.
 
     Build one after the first `SimulationContext.reset()`, once Newton's
     model exists. Two cuRobo planners are kept, one for the cuts and one for
@@ -88,7 +93,7 @@ class Planner:
     reused its memory.
     """
 
-    def __init__(self, machine: harvester.Harvester, robot: str):
+    def __init__(self, machine: harvester.Harvester, robot: str, rows: list[list[int]]):
         self._machine = machine
         cfg = harvester.curobo_cfg(machine)
         cache = {"cuboid": OBSTACLES}
@@ -151,6 +156,12 @@ class Planner:
         self._shapes = np.array(shapes)
         self._body = body[self._shapes]
         self._kind = kind[self._shapes]
+        placed = model.shape_transform.numpy()
+        self._middle = np.full(len(shapes), np.nan)
+        """For a stem's collider, the world y of its row's middle, between the
+        row's two faces: the mean of the row's stems. NaN for any other."""
+        for row in rows:
+            self._middle[np.isin(self._shapes, row)] = placed[row, 1].mean()
 
     def cut(
         self,
@@ -258,7 +269,8 @@ class Planner:
         the world, as boxes in its frame, but those on the bodies in `skip`.
         `beside` is a stem's colliders, capsules, and a point in the world: of
         those only the stretches further than `BESIDE` from the point are
-        kept, each as a box of its own."""
+        kept, each as a box of its own. An upright stem's box is a fin
+        reaching back to its row's middle."""
         model = NewtonManager.get_model()
         bodies = NewtonManager.get_state_0().body_q.numpy()
         placed = model.shape_transform.numpy()[self._shapes]
@@ -271,7 +283,6 @@ class Planner:
         frames[:, :3, :3] = Rotation.from_quat(bodies[self._body[moving], 3:]).as_matrix()
         frames[:, :3, 3] = bodies[self._body[moving], :3]
         poses[moving] = frames @ poses[moving]
-        poses = np.linalg.inv(platform) @ poses
 
         # The box round each: a box's own, and a round shape's along its z.
         radius, half = scale[:, 0], scale[:, 1]
@@ -290,8 +301,8 @@ class Planner:
 
         names = [f"shape_{shape}" for shape in self._shapes]
         left = np.isin(self._body, list(skip))
+        middle = [*self._middle]
         stem, point = beside
-        point = (np.linalg.inv(platform) @ [*point, 1.0])[:3]
         pieces, sizes = [], []
         for i in np.flatnonzero(np.isin(self._shapes, list(stem))):
             left[i] = True
@@ -299,10 +310,14 @@ class Planner:
                 pieces.append(poses[i] @ transform((0.0, 0.0, (a + b) / 2)))
                 sizes.append([2 * radius[i], 2 * radius[i], b - a + 2 * radius[i]])
                 names.append(f"{names[i]}_{k}")
+                middle.append(self._middle[i])
         if pieces:
             poses, size = np.concatenate([poses, pieces]), np.concatenate([size, sizes])
             left = np.concatenate([left, np.zeros(len(pieces), dtype=bool)])
 
+        _fins(poses, size, np.array(middle))
+
+        poses = np.linalg.inv(platform) @ poses
         reach = np.linalg.norm(poses[:, :3, 3], axis=1) - np.linalg.norm(size, axis=1) / 2
         kept = [i for i in np.argsort(reach) if reach[i] < REACH and not left[i]]
         kept = kept[:OBSTACLES]
@@ -333,6 +348,23 @@ def _beyond(pose: np.ndarray, half: float, point: np.ndarray) -> list[tuple[floa
     near = math.sqrt(BESIDE**2 - off**2)
     stretches = ((-half, min(half, along - near)), (max(-half, along + near), half))
     return [(a, b) for a, b in stretches if a < b]
+
+
+def _fins(poses: np.ndarray, size: np.ndarray, middle: np.ndarray) -> None:
+    """Sweep each of the boxes at `poses` in the world, of `size`, that is
+    round a stem within 60° of upright back from the stem, square to it, to
+    `middle`, the world y of its row's middle, NaN for any other box; in
+    place. The stems lowered along the gutter lie below anything the arm
+    reaches for, and some turn across the row there."""
+    fin = ~np.isnan(middle) & (np.abs(poses[:, 2, 2]) > 0.5)
+    along, depth = poses[fin, :3, 2], middle[fin] - poses[fin, 1, 3]
+    back = np.zeros_like(along)
+    back[:, 1] = np.copysign(1.0, depth)
+    back -= np.einsum("ij,ij->i", back, along)[:, None] * along
+    back /= np.linalg.norm(back, axis=1, keepdims=True)
+    poses[fin, :3, :3] = np.stack([np.cross(back, along), back, along], axis=2)
+    poses[fin, :3, 3] += back * np.abs(depth)[:, None] / 2
+    size[fin, 1] += np.abs(depth)
 
 
 def _trajectory(plan: JointState, last: torch.Tensor) -> tuple[np.ndarray, np.ndarray]:

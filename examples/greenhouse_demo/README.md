@@ -97,8 +97,9 @@ The plan comes from the scene's own ground truth, not from a camera:
    as square to it as the stem lets it be, and the shear slides past the
    stem rather than through it: a plane square to a peduncle that rises
    or droops off square to the stem would cross the stem a few
-   centimetres from the cut. Within 20° of level, the stem runs behind
-   the blades and clear of the shear's head. It comes in along the row with the hook
+   centimetres from the cut. Tilted up to 30° off level, the stem runs behind
+   the blades and clear of the shear's head. It comes in along the row, or
+   turned 25° about the stem toward the path, with the hook
    above the peduncle, so the truss's weight hangs the peduncle off the
    hook into the mouth, rather than dragging it over the hook's edge; the
    trolley stands behind the cut that way, so the arm reaches away from its
@@ -202,7 +203,12 @@ station. What it collides with is what the simulation collides with:
   model within the arm's reach, but the arm's own, and hands cuRobo the box
   round each where the simulation has it at that moment: the trolley's
   chassis and mast, the crate, the rails, the floor, the stems, and the
-  trusses and their fruit, bent or fallen.
+  trusses and their fruit, bent or fallen. An upright stem's box reaches
+  back to the middle of its row, a fin, so the arm keeps to the path's side
+  of the stems and meets the crop only between two, where the trusses
+  hang: a stand-off reached round the back of a stem is one cuRobo finds
+  no way back out of. A stretch of stem left out by a cut leaves its fin
+  out with it.
 
 Bent trusses crowd the crop: a truss's fruit hang just below its cut and
 the next truss up a few centimeters above. A cut is planned clear of every
@@ -218,7 +224,10 @@ planned, so they stay on the branch of the arm cuRobo reached the stand-off
 on, and within the joint range cuRobo plans in, so the fold that follows
 plans from where they end. The swing to the crate may brush any truss,
 which leaves cuRobo fewer to keep the arm off and the mouth less to turn
-on the way.
+on the way. Where the arm already touches what cuRobo keeps it off, a stem
+say, cuRobo finds no fold, and the arm folds on straight lines in joint
+space instead: out of the crop with the shoulder pan held, then round.
+Turned while still out, it would sweep along the crop wall into the stems.
 
 ## Recording the video
 
