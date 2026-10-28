@@ -44,8 +44,8 @@ uv run harvest.py
 ```
 
 opens Kit on two short rows and the harvester at their heads, which cuts
-every due truss below 1.8 m, where the trusses are rods, holds it, and lets
-it go in the path, as the next section tells.
+every due truss below 1.8 m, where the trusses are rods, holds it, and
+carries it to the crate on the lift, as the next section tells.
 `--paths` picks the paths it works, every one by default, and
 `HEADLESS=1 uv run harvest.py --viz kit` runs it without a window and
 prints the tally once the last truss has fallen. `--colliders` draws every
@@ -61,17 +61,25 @@ needed.
 
 ## Harvesting
 
-https://github.com/user-attachments/assets/2c8ad012-5383-44d5-90c9-e546da7c861e
+https://github.com/user-attachments/assets/6853635e-f1da-40b4-ba06-eb8d8e289957
 
 The robot has the layout of eternal.ag's Harvester and most robots of its
 kind: a trolley as wide as the heating pipes are spaced, a lift on it, a
-UR5e on the lift and a cut-and-hold shear in its hand. The trolley does not roll here: it
+UR5e and a crate on the lift and a cut-and-hold shear in its hand. The trolley does not roll here: it
 rides prismatic joints off a base fixed in the main path, across the row
 heads to a path, down it and up. The arm is
 [MuJoCo Menagerie's UR5e](https://github.com/google-deepmind/mujoco_menagerie/tree/main/universal_robots_ur5e),
 read out of its MJCF; the first run downloads it from the
 [misina-lab-sim-assets](https://huggingface.co/datasets/azazdeaz/misina-lab-sim-assets)
 dataset on Hugging Face, and later runs find it in the local cache.
+
+The crate, `harvester.Crate`, is a solid-walled Euro stacking crate,
+600 × 400 × 120 mm, standing on the lift behind the arm, turned across
+it, under the folded shear and within the arm's reach. It is
+drawn with the ribs down its walls, the rim round its top and the foot it
+stacks on, and collides as five boxes: the floor, and each wall out to the
+ribs' faces. The arm carries every truss it cuts to the crate and lets
+it go over its middle.
 
 The plan comes from the scene's own ground truth, not from a camera:
 
@@ -89,8 +97,9 @@ The plan comes from the scene's own ground truth, not from a camera:
    as square to it as the stem lets it be, and the shear slides past the
    stem rather than through it: a plane square to a peduncle that rises
    or droops off square to the stem would cross the stem a few
-   centimetres from the cut. Within 20° of level, the stem runs behind
-   the blades and clear of the shear's head. It comes in along the row with the hook
+   centimetres from the cut. Tilted up to 30° off level, the stem runs behind
+   the blades and clear of the shear's head. It comes in along the row, or
+   turned 25° about the stem toward the path, with the hook
    above the peduncle, so the truss's weight hangs the peduncle off the
    hook into the mouth, rather than dragging it over the hook's edge; the
    trolley stands behind the cut that way, so the arm reaches away from its
@@ -111,23 +120,30 @@ The plan comes from the scene's own ground truth, not from a camera:
    out and tries once more.
 5. **The release.** Held by its peduncle, the truss rides out on the line
    back to the stand-off and 20 cm across the path, clear of the crop
-   wall, and the shear opens there and lets it drop to the floor. One
-   still lying on the open finger is tipped off it. The
-   forearm, the wrists and the shear collide with the trusses they pass,
-   and the arm, the shear and the trolley's chassis and mast with each
-   other.
+   wall, rising as it goes until the jaws are 42 cm above the crate's
+   floor. The arm swings it round its base from there to over the crate's
+   middle, the mouth turning about the upright alone, so the truss hangs
+   in the jaws as it did when cut: turned so that its weight pulls toward
+   the mouth's entrance, it slides out of them. The shear opens over the
+   crate and the truss drops into it. One still lying on the open finger
+   is tipped off it. The
+   forearm, the wrists, the shear and the crate collide with the trusses
+   they meet, and the arm, the shear, the crate and the trolley's chassis
+   and mast with each other.
 
 The tally counts the trusses due on the paths worked, how many the arm
 reaches, how many of those only by brushing a truss, how many it cuts,
-holds and lets go, how many it sees fall, and the seconds per truss cut.
+holds and lets go, how many end in the crate, and the seconds per truss
+cut.
 On the demo's two 4 m rows, 36 trusses are due on the three paths. The
 robot reaches four in five, a third of those only by brushing a truss; the
 stems of the plants beside the rest keep the arm off them. It cuts all but
-two or three of those it reaches, and nearly every truss it cuts rides out
-in the jaws, is let go in the path and drops whole to the floor (see
-[Cutting and holding](#cutting-and-holding)). That is about 5 s of
-simulated time a cut and 230 s for the whole run, which takes about five
-minutes on an RTX 5070 Ti.
+a few of those it reaches, and four in five of the trusses it cuts ride in
+the jaws to the crate and land in it; the rest slip out of the jaws on the
+way, or are let go in the path where the shoulder cannot turn far enough
+to swing them round (see [Cutting and holding](#cutting-and-holding)).
+That is about 5 s of simulated time a cut and 290 s for the whole run,
+which takes about seven minutes on an RTX 5070 Ti.
 
 ## Cutting and holding
 
@@ -169,7 +185,8 @@ demo, 6 of the 106 trusses cut were lost from the jaws.
 ## Planning with cuRobo
 
 [cuRobo](https://github.com/NVlabs/curobo) plans every move of the arm: the
-fold before each run of the trolley and the reach to each stand-off. It
+fold before each run of the trolley, the reach to each stand-off and the
+swing to the crate. It
 plans the arm alone, from the platform out, while the trolley holds its
 station. What it collides with is what the simulation collides with:
 
@@ -185,8 +202,13 @@ station. What it collides with is what the simulation collides with:
 - **The world.** `planner.py` reads every collider of the running Newton
   model within the arm's reach, but the arm's own, and hands cuRobo the box
   round each where the simulation has it at that moment: the trolley's
-  chassis and mast, the rails, the floor, the stems, and the trusses and
-  their fruit, bent or fallen.
+  chassis and mast, the crate, the rails, the floor, the stems, and the
+  trusses and their fruit, bent or fallen. An upright stem's box reaches
+  back to the middle of its row, a fin, so the arm keeps to the path's side
+  of the stems and meets the crop only between two, where the trusses
+  hang: a stand-off reached round the back of a stem is one cuRobo finds
+  no way back out of. A stretch of stem left out by a cut leaves its fin
+  out with it.
 
 Bent trusses crowd the crop: a truss's fruit hang just below its cut and
 the next truss up a few centimeters above. A cut is planned clear of every
@@ -200,7 +222,12 @@ rails, the floor and every other stretch of stem it never touches. The
 straight lines in, out and across the path are solved point by point, not
 planned, so they stay on the branch of the arm cuRobo reached the stand-off
 on, and within the joint range cuRobo plans in, so the fold that follows
-plans from where they end.
+plans from where they end. The swing to the crate may brush any truss,
+which leaves cuRobo fewer to keep the arm off and the mouth less to turn
+on the way. Where the arm already touches what cuRobo keeps it off, a stem
+say, cuRobo finds no fold, and the arm folds on straight lines in joint
+space instead: out of the crop with the shoulder pan held, then round.
+Turned while still out, it would sweep along the crop wall into the stems.
 
 ## Recording the video
 
@@ -227,7 +254,7 @@ uploads it and points the video line above at it.
 | `harvest.py` | two rows and the harvester: the ground truth off the stage, the plan, the cuts, the holds and releases, the tally |
 | `harvester.py` | the robot: its dimensions, the UR5e read out of Menagerie's MJCF, its colliders, the shear on its flange, the URDF built from them and cuRobo's model of it, the actuators |
 | `shear.py` | the cut-and-hold shear: its blades' geometry, their meshes and colliders, and `Stroke`, the blade closing through a peduncle, and the jaw and the sprung finger that hold the truss; the pruning demo's module, kept the same |
-| `planner.py` | cuRobo: the world it plans in, read off the running simulation, the fold, the reach to a cut and the straight lines of the mouth |
+| `planner.py` | cuRobo: the world it plans in, read off the running simulation, the moves to joint positions, folded or over the crate, the reach to a cut and the straight lines of the mouth |
 | `video.py`, `record.sh` | the video: Path_01 harvested, filmed headless, and its encoding |
 | `kinematics.py` | forward and inverse kinematics of the trolley and the arm, for the URDF, the stations and the straight line in; the pruning demo's module, kept the same |
 
