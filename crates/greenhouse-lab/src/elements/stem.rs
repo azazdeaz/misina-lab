@@ -749,7 +749,9 @@ fn grow(
         .collect();
 
     // From the reel straight down to the head, then wound down the rise,
-    // just clear of the stem.
+    // just clear of the stem at its widest: its girth at its most, with a
+    // ridge on it.
+    let clear = (1.0 + GIRTH_JITTER as f32) * (1.0 + RIDGES as f32);
     let axis = (top - join).normalize();
     let across = axis.cross(Vec3::X).normalize();
     let over = axis.cross(across);
@@ -761,7 +763,7 @@ fn grow(
     let mut d = 0.0;
     while d < reach {
         let turn = TAU * d / TWINE_PITCH;
-        let out = (girth(d) + TWINE_RADIUS) * (across * turn.cos() + over * turn.sin());
+        let out = (girth(d) * clear + TWINE_RADIUS) * (across * turn.cos() + over * turn.sin());
         twine.push(rise(d) + out);
         d += TWINE_STEP;
     }
@@ -937,24 +939,17 @@ fn author(
 
     // Each stem's tube, with a stub at every stripped node, and its twine,
     // grown in parallel and registered serially: `Assets<Mesh>` takes one
-    // writer. The tube is skinned in two, the run and the rest from its
-    // take-off, so a long run leaves the rise its full detail.
+    // writer.
     let kept = |stem: &Stem| (params.leaves_kept as usize).min(stem.leafy);
     let meshes = par_map(&stems, |_, (_, plant, _, stem)| -> Result<(Mesh, Mesh)> {
         let origin = Vec3::new(layout.plants[*plant], 0.0, root_z);
-        let piece = |from: usize, to: usize| {
-            strand_mesh(&strand(
-                &stem.points[from..=to],
-                &stem.radii[from..=to],
-                origin,
-                SIDES,
-                stem.bark.clone(),
-            ))
-        };
-        let mut tube = vec![piece(stem.take_off, stem.points.len() - 1)?];
-        if stem.take_off > 0 {
-            tube.push(piece(0, stem.take_off)?);
-        }
+        let mut tube = vec![strand_mesh(&strand(
+            &stem.points,
+            &stem.radii,
+            origin,
+            SIDES,
+            stem.bark.clone(),
+        ))?];
         tube.extend(
             stem.nodes[kept(stem)..]
                 .iter()
