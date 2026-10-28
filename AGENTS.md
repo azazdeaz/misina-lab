@@ -86,6 +86,7 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinery_lab`,
 | [examples/straddler_demo/](examples/straddler_demo/) | a straddling robot driving every row, `--trim` to hedge it, and `record.sh`, which films it; its own uv project |
 | [examples/pruning_demo/](examples/pruning_demo/) | a Bumblebee-like arm pruning a dormant row to two-bud spurs, and `record.sh`, which films it; its own uv project |
 | [examples/greenhouse_demo/](examples/greenhouse_demo/) | the greenhouse in Isaac Sim, which its docs picture is rendered from, and a pipe-rail robot harvesting it, its arm planned by cuRobo; its own uv project |
+| [examples/butom_capture/](examples/butom_capture/) | RGB-D sequences like BUTom-ST21's, filmed by a PATHoBot-like trolley whose cameras carry that dataset's calibration, written in its layout; its own uv project |
 | [web/index.html](web/index.html) | host page for the wasm playground |
 | [web/stage_docs.py](web/stage_docs.py) | copies the docs site's pages to where Zensical builds them from, pointing links to anything else at GitHub |
 | [zensical.toml](zensical.toml) | the docs site; its nav lists every page on it |
