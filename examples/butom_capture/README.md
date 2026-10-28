@@ -26,7 +26,8 @@ uv run capture.py out
 
 generates the greenhouse, caches it, and films two passes of the trolley
 into `out/`, headless: about 45 s a pass on an RTX 5070 Ti once the
-greenhouse is cached, and about 110 MB a sequence. `--passes` sets how many, `--frames` how long each is, and `--set`
+greenhouse is cached, and about 110 MB a sequence. `--passes` sets how many, `--frames` how long each is, at most
+as many as fit a row between its 1 m margins, and `--set`
 changes the greenhouse's [parameters](../../crates/greenhouse-lab/docs/parameters.md)
 from the script's, each value as JSON:
 

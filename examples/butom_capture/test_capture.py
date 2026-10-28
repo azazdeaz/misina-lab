@@ -24,15 +24,23 @@ def test_importing_the_script_does_not_load_pxr():
     )
 
 
+@pytest.mark.parametrize("longest", [False, True])
 @pytest.mark.parametrize("seed", range(20))
-def test_a_pass_stays_on_its_row_and_drives_forward(seed):
+def test_a_pass_stays_on_its_row_and_drives_forward(seed, longest):
     layout = capture.GREENHOUSE_CFG.layout
-    row, face, xs = capture.plan(random.Random(seed), layout, capture.FRAMES)
+    frames = capture.most_frames(layout) if longest else capture.FRAMES
+    row, face, xs = capture.plan(random.Random(seed), layout, frames)
     assert 0 <= row < layout.rows
     assert capture.MARGIN <= xs.min() and xs.max() <= layout.row_length - capture.MARGIN
     # The cameras look to the trolley's right: along +x past a row's +y face,
     # along -x past its -y face.
     np.testing.assert_allclose(np.diff(xs) * face, capture.SPEED / capture.FPS)
+
+
+def test_one_frame_more_than_the_most_leaves_the_margins():
+    layout = capture.GREENHOUSE_CFG.layout
+    run = capture.SPEED * capture.most_frames(layout) / capture.FPS
+    assert run > layout.row_length - 2 * capture.MARGIN
 
 
 def test_depth_is_millimetres_and_zero_out_of_range():

@@ -106,6 +106,11 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
+def most_frames(layout) -> int:
+    """The longest sequence a pass fits between a row's margins."""
+    return int((layout.row_length - 2 * MARGIN) * FPS / SPEED) + 1
+
+
 def plan(rng: random.Random, layout, frames: int) -> tuple[int, int, np.ndarray]:
     """A pass: the row it films, the face of it, -1 for the row's -y side and
     1 for its +y, and the trolley's x at each frame."""
@@ -253,13 +258,20 @@ def record(sim: sim_utils.SimulationContext, cameras: list, args: argparse.Names
                 "world_from_camera": track,
                 "scene": scene,
             }
-        index.write_text(json.dumps(sequences))
+        # Written beside it and swapped in, so a write cut short leaves the
+        # earlier passes' index whole.
+        draft = index.with_suffix(".json.part")
+        draft.write_text(json.dumps(sequences))
+        draft.replace(index)
     print(f"[INFO]: {len(sequences)} sequences in {out}", flush=True)
 
 
 def main():
     args = parse_args()
     shots.configure(GREENHOUSE_CFG, args.set)
+    most = most_frames(GREENHOUSE_CFG.layout)
+    if not 1 <= args.frames <= most:
+        raise SystemExit(f"--frames is {args.frames}; a pass along this row fits 1 to {most}")
     sim_cfg = sim_utils.SimulationCfg()
     # Headless: nothing looks at the scene but the cameras, whose renderer
     # needs Kit's, which a camera made after launch cannot ask for.
