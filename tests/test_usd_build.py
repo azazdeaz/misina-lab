@@ -479,7 +479,7 @@ def test_a_flexible_organ_frames_its_segments_by_its_normals(stage: Usd.Stage, d
 
     (cable,) = [node["cable"] for node in nodes(doc["root"]) if node.get("cable")]
     authored = [tuple(n) for n in curves.GetNormalsAttr().Get()]
-    assert authored == pytest.approx([tuple(n) for n in cable["normals"]])
+    assert authored == [pytest.approx(tuple(n)) for n in cable["normals"]]
     assert curves.GetNormalsInterpolation() == UsdGeom.Tokens.vertex
 
 
