@@ -49,7 +49,7 @@ meters: past the arm's reach with the shear on it."""
 OBSTACLES = 1000
 """The most boxes the world holds; the nearest are kept. cuRobo checks every
 sphere against every box in one kernel launch, which caps their product."""
-GOALS = 6
+GOALS = 10
 """The most cut poses a cut is planned to at once."""
 SPEED = 0.4
 """How fast the mouth moves on the straight line in and out, in m/s."""

@@ -97,8 +97,9 @@ The plan comes from the scene's own ground truth, not from a camera:
    as square to it as the stem lets it be, and the shear slides past the
    stem rather than through it: a plane square to a peduncle that rises
    or droops off square to the stem would cross the stem a few
-   centimetres from the cut. Within 20° of level, the stem runs behind
-   the blades and clear of the shear's head. It comes in along the row with the hook
+   centimetres from the cut. Tilted up to 30° off level, the stem runs behind
+   the blades and clear of the shear's head. It comes in along the row, or
+   turned 25° about the stem toward the path, with the hook
    above the peduncle, so the truss's weight hangs the peduncle off the
    hook into the mouth, rather than dragging it over the hook's edge; the
    trolley stands behind the cut that way, so the arm reaches away from its

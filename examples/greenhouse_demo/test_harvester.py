@@ -175,3 +175,24 @@ def test_a_stems_fin_runs_from_its_front_back_to_its_rows_middle():
     front, back = fin[:3, 3] - fin[:3, 1] * half, fin[:3, 3] + fin[:3, 1] * half
     assert np.linalg.norm(front - poses[0, :3, 3]) == pytest.approx(0.01)
     assert front[1] < poses[0, 1, 3] < 0.1 < back[1]
+
+
+def test_a_turned_approach_cuts_as_far_off_the_stem():
+    """Every cut pose keeps the blades' plane along the stem and the hook
+    up, and the fixed blade as far off the stem's axis as coming in along
+    the row; turned, the shear points into the row from the path."""
+    harvest = pytest.importorskip("harvest")
+    truss = harvest.Truss("", np.eye(4), True, side=np.array([0.0, 1.0, 0.0]))
+    truss.axis = np.array([0.3, 0.5, 1.0])
+    along = np.array([0.0, -1.0, 0.0])  # at the path
+    at = truss.axis + 0.016 * along + [0.0, 0.0, 0.005]
+    poses = harvest.approaches(truss, at, along, MACHINE)
+    turns = list(itertools.product(harvest.YAWS, harvest.TILTS))
+    assert len(poses) == len(turns)
+    for pose, (yaw, tilt) in zip(poses, turns, strict=True):
+        x, y, z = pose[:3, :3].T
+        assert pose[:3, :3] @ pose[:3, :3].T == pytest.approx(np.eye(3))
+        assert x @ truss.stem == pytest.approx(0.0, abs=1e-9)
+        assert x @ (pose[:3, 3] - truss.axis) == pytest.approx(0.016 - MACHINE.shear.bypass)
+        assert z @ truss.side == pytest.approx(np.sin(yaw) * np.cos(tilt))
+        assert y[2] > 0.0

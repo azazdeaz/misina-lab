@@ -41,6 +41,7 @@ nav = [
     "crates/greenhouse-lab/docs/parameters.md",
     { "Examples" = [
       "examples/greenhouse_demo/README.md",
+      "examples/butom_capture/README.md",
     ] },
   ] },
   { "Development" = [
