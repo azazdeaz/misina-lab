@@ -748,6 +748,10 @@ def run(
             chains.setdefault(match[1], []).append((int(match[2]), body))
     trusses = read_trusses(stage, GREENHOUSE_PATH)
     stems = stem_axes(NewtonManager.get_model())
+    rows: dict[str, list[int]] = {}
+    for stem, (shapes, _, _) in stems.items():
+        # A stem's row is its plant's parent.
+        rows.setdefault(stem.rsplit("/", 2)[0], []).extend(shapes)
     for truss in trusses:
         truss.bodies = [body for _, body in sorted(chains[truss.prim])]
         shapes, starts, ends = stems[truss.prim.rsplit("/", 1)[0]]
@@ -792,7 +796,8 @@ def run(
     hold([0.0, 0.0, 0.0, *ARM_HOME, machine.shear.opening], np.zeros(len(joints)))
     # Where the robot starts.
     spawned = [0.0, 0.0, 0.0, *ARM_HOME]
-    harvest = Harvest(machine, Planner(machine, ROBOT_PATH), jobs, base, spawned, shears, tally)
+    planner = Planner(machine, ROBOT_PATH, list(rows.values()))
+    harvest = Harvest(machine, planner, jobs, base, spawned, shears, tally)
     print(f"[INFO]: {len(trusses)} trusses bend, {tally.due} due on paths {paths}", flush=True)
     sim.set_camera_view(eye=[-3.5, -2.5, 2.8], target=[1.5, 0.0, 1.0])
     step, after = 0, 0
