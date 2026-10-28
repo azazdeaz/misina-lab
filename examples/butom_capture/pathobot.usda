@@ -1,0 +1,167 @@
+#usda 1.0
+(
+    defaultPrim = "PATHoBot"
+    doc = """A pipe-rail trolley with a camera mast, laid out like the University of
+Bonn's PATHoBot as it recorded BUTom-ST21: four RealSense D435i on a vertical
+mast at one edge of the trolley, mounted portrait, looking across the path to
+its right. Only the middle two, cam_1 and cam_2, are cameras here: BUTom
+recorded those. Their intrinsics are BUTom's camera_parameters.yaml; the
+heights and the mast's offset are read off PATHoBot's dimensioned drawing
+(arXiv 2010.16272, Fig. 3), to about 10%."""
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+# Origin on the path's centreline, on the floor; x the way the trolley drives,
+# y to its left, z up. Its wheels sit on heating pipes 0.55 m apart, axis
+# 0.15 m above the floor.
+def Xform "PATHoBot"
+{
+    def Cube "Chassis"
+    {
+        double size = 1
+        color3f[] primvars:displayColor = [(0.3, 0.32, 0.35)]
+        double3 xformOp:translate = (0, 0, 0.33)
+        float3 xformOp:scale = (1.1, 0.62, 0.12)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+    }
+
+    def Xform "Wheels"
+    {
+        def Cylinder "FL"
+        {
+            uniform token axis = "Y"
+            double height = 0.04
+            double radius = 0.075
+            color3f[] primvars:displayColor = [(0.1, 0.1, 0.1)]
+            double3 xformOp:translate = (0.45, 0.275, 0.25)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+        }
+
+        def Cylinder "FR"
+        {
+            uniform token axis = "Y"
+            double height = 0.04
+            double radius = 0.075
+            color3f[] primvars:displayColor = [(0.1, 0.1, 0.1)]
+            double3 xformOp:translate = (0.45, -0.275, 0.25)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+        }
+
+        def Cylinder "RL"
+        {
+            uniform token axis = "Y"
+            double height = 0.04
+            double radius = 0.075
+            color3f[] primvars:displayColor = [(0.1, 0.1, 0.1)]
+            double3 xformOp:translate = (-0.45, 0.275, 0.25)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+        }
+
+        def Cylinder "RR"
+        {
+            uniform token axis = "Y"
+            double height = 0.04
+            double radius = 0.075
+            color3f[] primvars:displayColor = [(0.1, 0.1, 0.1)]
+            double3 xformOp:translate = (-0.45, -0.275, 0.25)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+        }
+    }
+
+    # The mast at the trolley's left edge, so the crop the cameras film stands
+    # about 1 m from them.
+    def Cube "Mast"
+    {
+        double size = 1
+        color3f[] primvars:displayColor = [(0.75, 0.75, 0.75)]
+        double3 xformOp:translate = (0, 0.33, 1.75)
+        float3 xformOp:scale = (0.06, 0.06, 2.72)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+    }
+
+    # A D435i's housing at each of the four heights, its long side vertical.
+    def Xform "Housings"
+    {
+        def Cube "cam_0"
+        {
+            double size = 1
+            color3f[] primvars:displayColor = [(0.15, 0.15, 0.15)]
+            double3 xformOp:translate = (0, 0.29, 0.97)
+            float3 xformOp:scale = (0.025, 0.025, 0.09)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+
+        def Cube "cam_1"
+        {
+            double size = 1
+            color3f[] primvars:displayColor = [(0.15, 0.15, 0.15)]
+            double3 xformOp:translate = (0, 0.29, 1.63)
+            float3 xformOp:scale = (0.025, 0.025, 0.09)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+
+        def Cube "cam_2"
+        {
+            double size = 1
+            color3f[] primvars:displayColor = [(0.15, 0.15, 0.15)]
+            double3 xformOp:translate = (0, 0.29, 2.30)
+            float3 xformOp:scale = (0.025, 0.025, 0.09)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+
+        def Cube "cam_3"
+        {
+            double size = 1
+            color3f[] primvars:displayColor = [(0.15, 0.15, 0.15)]
+            double3 xformOp:translate = (0, 0.29, 2.96)
+            float3 xformOp:scale = (0.025, 0.025, 0.09)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+    }
+
+    # The cameras look along the trolley's -y, level, image up along +z and
+    # image right toward the trolley's back. RTX projects through the OpenCV
+    # intrinsics below, principal point included; the focal length and
+    # apertures say the same field of view for anything that reads only those.
+    # Nothing nearer than 0.3 m is drawn: the crop behind the mast, which the
+    # real trolley's shield holds back, reaches in front of the lenses, and
+    # the crop they film comes no nearer than about 0.4 m.
+    def Camera "cam_1" (
+        prepend apiSchemas = ["OmniLensDistortionOpenCvPinholeAPI"]
+    )
+    {
+        float focalLength = 26.672
+        float horizontalAperture = 20.955
+        float verticalAperture = 37.253
+        float2 clippingRange = (0.3, 1000)
+        token omni:lensdistortion:model = "opencvPinhole"
+        int2 omni:lensdistortion:opencvPinhole:imageSize = (720, 1280)
+        float omni:lensdistortion:opencvPinhole:fx = 916.4210205078125
+        float omni:lensdistortion:opencvPinhole:fy = 916.4022216796875
+        float omni:lensdistortion:opencvPinhole:cx = 345.4689025878906
+        float omni:lensdistortion:opencvPinhole:cy = 659.4613647460938
+        double3 xformOp:translate = (0, 0.275, 1.63)
+        float3 xformOp:rotateXYZ = (90, 0, 180)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ"]
+    }
+
+    def Camera "cam_2" (
+        prepend apiSchemas = ["OmniLensDistortionOpenCvPinholeAPI"]
+    )
+    {
+        float focalLength = 26.760
+        float horizontalAperture = 20.955
+        float verticalAperture = 37.253
+        float2 clippingRange = (0.3, 1000)
+        token omni:lensdistortion:model = "opencvPinhole"
+        int2 omni:lensdistortion:opencvPinhole:imageSize = (720, 1280)
+        float omni:lensdistortion:opencvPinhole:fx = 919.456298828125
+        float omni:lensdistortion:opencvPinhole:fy = 920.6524047851562
+        float omni:lensdistortion:opencvPinhole:cx = 358.2794494628906
+        float omni:lensdistortion:opencvPinhole:cy = 643.212158203125
+        double3 xformOp:translate = (0, 0.275, 2.30)
+        float3 xformOp:rotateXYZ = (90, 0, 180)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ"]
+    }
+}

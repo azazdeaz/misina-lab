@@ -110,6 +110,7 @@ starting point for a new generator.
     - [Pruning example](examples/pruning_demo/README.md)
 - [Greenhouse Lab](#greenhouse-lab): tomato greenhouses
     - [Greenhouse example](examples/greenhouse_demo/README.md)
+    - [BUTom capture example](examples/butom_capture/README.md)
 
 ### Vinery Lab
 
@@ -161,6 +162,7 @@ The rows of a high-wire tomato greenhouse, grown to any week of the season.
 | Example | What it shows |
 | --- | --- |
 | [Greenhouse](examples/greenhouse_demo/README.md) | A pipe-rail robot with a UR5e on its lift cuts every due truss in the harvest band of each path, which drops to the floor. |
+| [BUTom capture](examples/butom_capture/README.md) | A trolley laid out like PATHoBot films RGB-D sequences of the crop with BUTom-ST21's calibrated cameras, written in that dataset's layout. |
 
 ## Try it
 
