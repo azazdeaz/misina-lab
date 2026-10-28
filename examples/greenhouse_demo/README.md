@@ -218,7 +218,10 @@ planned, so they stay on the branch of the arm cuRobo reached the stand-off
 on, and within the joint range cuRobo plans in, so the fold that follows
 plans from where they end. The swing to the crate may brush any truss,
 which leaves cuRobo fewer to keep the arm off and the mouth less to turn
-on the way.
+on the way. Where the arm already touches what cuRobo keeps it off, a stem
+say, cuRobo finds no fold, and the arm folds on straight lines in joint
+space instead: out of the crop with the shoulder pan held, then round.
+Turned while still out, it would sweep along the crop wall into the stems.
 
 ## Recording the video
 

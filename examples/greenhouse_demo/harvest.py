@@ -251,6 +251,14 @@ def distances(point: np.ndarray, starts: np.ndarray, ends: np.ndarray) -> np.nda
     return np.linalg.norm(point - (starts + span * t[:, None]), axis=1)
 
 
+def joint_line(start, end) -> np.ndarray:
+    """The arm's joint positions on a straight line in joint space from
+    `start` to `end`, no joint moving more than 0.04 rad from one to the
+    next."""
+    start, end = np.asarray(start, dtype=float), np.asarray(end, dtype=float)
+    return np.linspace(start, end, 1 + int(np.abs(end - start).max() / 0.04))
+
+
 def path_ys(stage, root: str) -> list[float]:
     """Each path's centre line, by its number."""
     from pxr import Usd, UsdGeom
@@ -468,11 +476,13 @@ class Harvest:
             )
         if folding is None:
             # From a pose already touching what it may not brush, a fold
-            # finds no way; the arm folds on a straight line instead.
+            # finds no way. The arm folds on straight lines in joint space
+            # instead: out of the crop with the shoulder pan held, then
+            # round. Turned while still out, it would sweep along the crop
+            # wall into the stems.
             print(f"[INFO]: no clear way to fold from {np.round(self.q[3:], 2)}")
-            line = np.linspace(
-                self.q[3:], ARM_HOME, 1 + int(np.abs(ARM_HOME - self.q[3:]).max() / 0.04)
-            )
+            out = [self.q[3], *ARM_HOME[1:]]
+            line = np.concatenate([joint_line(self.q[3:], out), joint_line(out, ARM_HOME)])
             folding = (line, np.gradient(line, self.planner.dt, axis=0))
         self._play("fold", folding)
 
@@ -598,7 +608,7 @@ class Harvest:
         q, _, _ = solve(
             self.planner.chain, self.machine.tool, np.linalg.inv(platform) @ tipped, self.q[3:]
         )
-        line = np.linspace(self.q[3:], q, 1 + int(np.abs(q - self.q[3:]).max() / 0.04))
+        line = joint_line(self.q[3:], q)
         self._play("tip", (line, np.gradient(line, self.planner.dt, axis=0)))
 
     def control(
