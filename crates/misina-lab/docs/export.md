@@ -86,7 +86,12 @@ which a solver that understands one turns into bodies of its own
 ([isaac-lab.md](isaac-lab.md#rods)). It replaces the mesh rather than
 standing in for it, so it is geometry and collider at once. What the organ
 is drawn with, and whatever hangs off it, rides a prim per segment that the
-importer adopts as that segment's body (`spawn_rod`). What hangs off it
+importer adopts as that segment's body (`spawn_rod`), at the segment's frame
+from `segment_frames`. The curve carries those frames as its `normals`, each
+segment's +Y, because the importer builds each body in the frame they give:
+left to frame the curve itself, it works in the world rather than the
+organ, and turns a body about its segment off its prim by as much as half a
+turn, carrying everything on the prim round with it. What hangs off it
 without being simulated, fruit say, weighs on it as the cable's `loads`. A
 collider authored under a segment's prim is imported static all the same,
 since the prim is no rigid body; `rods.carry_riders`, which the rod tuning
@@ -131,6 +136,6 @@ being the one part a scene has at most one of.
 
 - [`src/scene/doc.rs`](../src/scene/doc.rs): the document, and the conventions the builder relies on
 - [`src/scene/export.rs`](../src/scene/export.rs): the walk
-- [`src/scene/mod.rs`](../src/scene/mod.rs): the export directives; `UsdRoot`, `UsdReference`, `UsdAttributes`, `capsule`, `cable`, `z_up_to_y_up`
+- [`src/scene/mod.rs`](../src/scene/mod.rs): the export directives; `UsdRoot`, `UsdReference`, `UsdAttributes`, `capsule`, `cable`, `segment_frames`, `z_up_to_y_up`
 - [`misina_lab/usd/build.py`](../../../python/misina-lab/misina_lab/usd/build.py): the builder, and every USD rule
 - [`misina_lab/usd/ground.py`](../../../python/misina-lab/misina_lab/usd/ground.py): `Ground`

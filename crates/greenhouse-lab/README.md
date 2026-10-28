@@ -37,7 +37,7 @@ growers leave it, so the trusses in the harvest band hang off bare stem.
 | Rail | two heating pipes in every path, on a support every meter, each segment a capsule collider | gauge, pipe diameter, height, unevenness up to and past the 2° spec |
 | Gutter | a steel channel, hanging or standing, with stone wool slabs and a block at every plant | height, mount, plant spacing |
 | Wires | two crop wires over every gutter, for the V the stems are trained in | height, spread |
-| Stems | two to a plant, each grown up its twine to a hook on its wire and lowered along the gutter from then on; a leaf at every node and a truss in every third internode, the leaves stripped below the top few with a stub left at each | the crop's age, harvest height, trusses on a stem, leaves kept, extra stems, trusses turned to the path |
+| Stems | two to a plant, each grown up its twine to a hook on its wire and lowered along the gutter from then on; a leaf at every node and a truss in every third internode, the leaves stripped below the top few with a stub left at each; colliding as a chain of capsules along the axis | the crop's age, harvest height, trusses on a stem, leaves kept, extra stems, trusses turned to the path |
 | Leaves | a compound leaf: a petiole and a rachis with a terminal leaflet, three or four pairs of laterals and small leaflets between them, each leaflet outlined from its veins; small and upright at the head, drooping further down. Visual only, with no collider | length, droop, mesh detail |
 | Trusses | the peduncle bending over into a rachis that zigzags from fruit to fruit, kinking away from each pedicel and hanging nearer vertical toward its tip, and an arched pedicel to every fruit, with a `Cut` and a `Bend` frame; below a height, a rod a solver bends and a robot cuts, carrying its fruit | fruit count and diameter, branched, peduncle length, diameter and angle, missing fruit; the height trusses bend below, on the stems |
 | Fruit | every fruit its own prim with a collider round it, a calyx of five or six narrow sepals spreading off its shoulders, and a stage from fruit set to red: fruit grow toward the head, a stem ripens from the bottom up, a truss from its base to its tip, and a fruit from its blossom end | ripe trusses on a stem, the spread in a truss, the ripe colour, height to width, ribbing, jointed pedicels |
@@ -98,6 +98,7 @@ lists every parameter, with its default and range.
     /Plant_017
       /Stem_0
         /Tube  /Hook  /Twine
+        /Collision_00 …               a capsule along each straight span of the stem, root up
         /Leaf_00 …                    the lowest still on the stem first
         /Truss_00                     the lowest still on the stem
           /Peduncle  /Cut  /Bend

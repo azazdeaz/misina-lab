@@ -20,10 +20,21 @@ Two kinds of change break a project that worked on the release before:
 
 ## [Unreleased]
 
-Scene document format 10.
+Scene document format 11.
 
 ### Added
 
+- **greenhouse-lab**: Stems collide, as a chain of capsules along each
+  stem's axis, `Stem_n/Collision_00 …`, each straight from one of the
+  axis's points to another, none of the points between more than 3 mm off
+  it, and overlapping the next over their joint: a run along the gutter is
+  one capsule, the rise a few. A robot meets them, and so do the stem's own
+  plant's trusses.
+- **misina-lab**: `rods.let_rods_out_of_their_wood` lets each rod through
+  any of its own plant's wood colliders it is authored inside, which
+  `tune_rods` runs: a proxy can be fatter than the wood, and the segments
+  next to a held one start in it. A pair let through stays so, a piece cut
+  free included; the rod's other shapes still meet that wood.
 - **misina-lab**: `geometry::outline::creased_mesh` fills an outline with
   lines across it kept as edges, spaced as finely as the fill however
   finely they were traced, so a bend can fold the sheet sharply on them;
@@ -189,6 +200,15 @@ Scene document format 10.
 
 ### Fixed
 
+- **misina-lab**: Whatever rides a rod's segment stays where it was put
+  once the simulation runs. Newton framed each segment's body itself, in
+  the world, and turned it about the segment off the prim it drives by as
+  much as half a turn, carrying the prim's riders round with it: a bent
+  truss's fruit were drawn up to 6.5 cm from their colliders. A `Cable`
+  now carries its `normals`, one per point, the frames its segments' prims
+  are authored at, and the importer builds every body in them.
+  `segment_frames` turns each frame from the one before rather than from
+  +Z, so a rod's frames no longer twist along it. Scene document format 11.
 - **misina-lab**: A cut piece rests on the stub it was cut from. The two
   segments either side of a cut were the two a joint had tied, and Newton
   never pairs those, so the piece fell through the stub's top segment and

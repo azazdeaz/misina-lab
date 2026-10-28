@@ -15,7 +15,8 @@ import pytest
 
 import kinematics
 import pruner
-from pruner import BLADE_STEP, KEEP_BUDS, Bud, Cane, Cut, Tally, Vine
+from pruner import KEEP_BUDS, Bud, Cane, Cut, Tally, Vine
+from shear import BLADE_STEP, GRIP, SLACK, Shear, Stroke
 
 IDENTITY = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
 
@@ -81,14 +82,12 @@ def blade_slices() -> tuple[np.ndarray, np.ndarray]:
     """The moving blade's slices as `Shears.colliders` gives them: shape
     indices and rest poses in the blade's frame, tip first, since nothing
     promises the order."""
-    from bumblebee import Shear
-
-    shear = Shear()
-    rest = np.zeros((shear.slices, 7))
-    rest[:, :2] = shear.bypass, -shear.width / 2
-    rest[:, 2] = shear.spans.mean(axis=1)[::-1]
+    s = Shear()
+    rest = np.zeros((s.slices, 7))
+    rest[:, :2] = s.bypass, -s.width / 2
+    rest[:, 2] = s.spans.mean(axis=1)[::-1]
     rest[:, 6] = 1.0
-    return np.arange(shear.slices) + 10, rest
+    return np.arange(s.slices) + 10, rest
 
 
 class HeldCane:
@@ -250,7 +249,7 @@ def test_each_held_cane_stands_its_slices_while_the_blade_closes_through_it(out,
 
     points = [off_the_edge(out, HeldCane.RADIUS), *([off_the_edge(*other)] if other else [])]
     canes = HeldCane(*(placed(*point) for point in points))
-    stroke = pruner.Stroke(machine, canes)
+    stroke = Stroke(machine.shear, bumblebee.TOOL, canes)
 
     def stood(closing: bool) -> np.ndarray:
         """Each slice's angle, out from the pivot, once the blade has
@@ -270,7 +269,7 @@ def test_each_held_cane_stands_its_slices_while_the_blade_closes_through_it(out,
 
     angle, cut_at = shear.opening, {}
     shut = stood(closing=True)
-    radius = HeldCane.RADIUS + pruner.GRIP
+    radius = HeldCane.RADIUS + GRIP
     stands, pinches = np.zeros(shear.slices, dtype=bool), {}
     for (y, z), body, held in zip(points, canes.bodies, [True, cut], strict=False):
         if not held:
@@ -287,7 +286,7 @@ def test_each_held_cane_stands_its_slices_while_the_blade_closes_through_it(out,
         stands, pinches[pinch] = stands | along, along
     assert shut[0] == pytest.approx(shear.opening - BLADE_STEP), "each follows the blade at first"
     assert (np.diff(shut[1:], axis=0) <= 1e-9).all(), "shutting, none turns back open"
-    assert np.isnan(stroke.held[~stands]).all() and (shut[-1, ~stands] < pruner.SLACK).all(), (
+    assert np.isnan(stroke.held[~stands]).all() and (shut[-1, ~stands] < SLACK).all(), (
         "the rest close with the blade"
     )
 
@@ -343,7 +342,7 @@ def test_the_sequence_stands_off_closes_in_and_cuts_every_cane(monkeypatch, push
         pruner, "attached", lambda bud, shears, stage: bud.prim not in shears.removed
     )
     pieces = iter([True] * fouled)
-    monkeypatch.setattr(pruner.Stroke, "fouled", lambda self, hand: next(pieces, False))
+    monkeypatch.setattr(Stroke, "fouled", lambda self, hand: next(pieces, False))
     cuts = pruner.plan(Vine("/vine", np.zeros(3), canes), shears, np.array([0.0, 1.0, 0.0]))
     for cut in cuts:
         cut.push = np.array(push)

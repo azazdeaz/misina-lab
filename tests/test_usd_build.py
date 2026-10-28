@@ -463,12 +463,33 @@ def test_a_flexible_organ_is_a_curve_a_solver_can_recognise(stage: Usd.Stage):
     assert prim.GetAttribute("physics:thicknesses:elementType").Get() == "point"
 
 
-def test_a_cable_bounds_the_tube_it_is_drawn_as(stage: Usd.Stage):
-    """A `Boundable` bounds what it would draw, and a curve draws as a tube
-    around its centerline -- so the box has to clear the widths as well as the
-    points, which is what `ComputeExtent` adds and a box around the points
-    alone does not. Authored even though the cable is `guide`: it is what a
-    consumer showing guides culls against."""
+def test_a_flexible_organ_frames_its_segments_by_its_normals(stage: Usd.Stage, doc: dict):
+    """One normal per point, at `vertex` interpolation, as the document gives
+    them: the importer turns each segment's body to put its +Y on the normal
+    of the point the segment leaves, so a body starts in the frame its prim
+    was authored at. Any interpolation that is not one per point (`vertex`
+    or `varying`), or a count that is not one per point, and the importer
+    drops them and frames the curve in the world."""
+    curves = UsdGeom.BasisCurves(stage.GetPrimAtPath(CABLE))
+
+    def nodes(node: dict):
+        yield node
+        for child in node.get("children", ()):
+            yield from nodes(child)
+
+    (cable,) = [node["cable"] for node in nodes(doc["root"]) if node.get("cable")]
+    authored = [tuple(n) for n in curves.GetNormalsAttr().Get()]
+    assert authored == [pytest.approx(tuple(n)) for n in cable["normals"]]
+    assert curves.GetNormalsInterpolation() == UsdGeom.Tokens.vertex
+
+
+def test_a_cable_bounds_the_widths_it_is_drawn_at(stage: Usd.Stage):
+    """A `Boundable` bounds what it would draw, and a curve draws as wide as
+    its widths round its centerline -- a tube, or with normals a ribbon -- so
+    the box has to clear the widths as well as the points, which is what
+    `ComputeExtent` adds and a box around the points alone does not. Authored
+    even though the cable is `guide`: it is what a consumer showing guides
+    culls against."""
     curves = UsdGeom.BasisCurves(stage.GetPrimAtPath(CABLE))
     lo, hi = curves.GetExtentAttr().Get()
     reach = max(curves.GetWidthsAttr().Get()) / 2.0

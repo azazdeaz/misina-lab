@@ -2,19 +2,24 @@
 
 cuRobo plans the arm alone, from the platform out, while the trolley's three
 joints hold where `harvest` stations them. Its robot is
-`harvester.curobo_cfg`: the arm's and the cutter's shapes, each covered in
-spheres. Its world is every collider of the running Newton model within the
+`harvester.curobo_cfg`: the arm's and the shear's shapes, each covered in
+spheres, the shear held open. Its world is every collider of the running Newton model within the
 arm's reach but the arm's own, each as the box round it, placed where the
 simulation has it at the moment of planning: the trolley's chassis and mast,
-the rails, the floor, and the trusses and their fruit, bent or fallen. So the
-planner keeps off whatever the simulation would collide with, the robot's own
-trolley included.
+the crate on the platform, the rails, the floor, the stems, and the trusses
+and their fruit, bent or fallen. So the planner keeps off whatever the
+simulation would collide with, the robot's own trolley and crate included.
+An upright stem's box reaches back to the middle of its row, a fin, so the
+arm keeps to the path's side of the stems and meets the crop only between
+two, where the trusses hang: a stand-off reached round the back of a stem
+is one cuRobo finds no way back out of.
 
 A cut is planned the way cuRobo plans a grasp: of a set of cut poses it
-picks one it can reach, the cutter's own spheres off, since the cutter has to
-touch the truss at the end, and plans the move to a stand-off back along the
-cutter from it. From there the arm closes in on a straight line, solved
-point by point, and backs out the same way.
+picks one it can reach, the shear's own spheres off, since the shear has to
+touch the truss at the end, and plans the move to a stand-off back from it
+the way the mouth comes in (`harvester.Harvester.way_in`). From there the
+arm closes in on a straight line, solved point by point, and backs out the
+same way; `line` solves any other straight line of the mouth's the same way.
 
 Import this only once Kit is up: cuRobo loads Warp, and Newton brings `pxr`.
 """
@@ -36,17 +41,25 @@ from newton import GeoType, ShapeFlags
 
 import harvester
 from kinematics import solve, transform
+from shear import BLADE, FINGER, HEAD
 
 REACH = 1.3
 """How far from the platform's origin a collider is kept in the world, in
-meters: past the arm's reach with the cutter on it."""
+meters: past the arm's reach with the shear on it."""
 OBSTACLES = 1000
 """The most boxes the world holds; the nearest are kept. cuRobo checks every
 sphere against every box in one kernel launch, which caps their product."""
-GOALS = 6
+GOALS = 10
 """The most cut poses a cut is planned to at once."""
 SPEED = 0.4
 """How fast the mouth moves on the straight line in and out, in m/s."""
+INSIDE = 0.02
+"""How far inside cuRobo's joint range a straight line keeps the arm, in
+radians: cuRobo plans from no pose on the bound itself."""
+BESIDE = 0.2
+"""How near a cut, in meters, the stem it is made beside is left out of the
+world: the shear slides along it there, on the line in and out and at the
+stand-off, closer than the spheres it is covered in allow."""
 LINE_TOLERANCE = (0.002, 0.02)
 """How close to the straight line every point of it has to be solved, in
 meters and radians."""
@@ -63,32 +76,53 @@ class Cut:
 
 
 class Planner:
-    """cuRobo for `machine`, whose articulation is at `robot`.
+    """cuRobo for `machine`, whose articulation is at `robot`, in a crop
+    whose stems' colliders are `rows`, by model index, a list for each row.
 
     Build one after the first `SimulationContext.reset()`, once Newton's
     model exists. Two cuRobo planners are kept, one for the cuts and one for
-    the folds: cuRobo captures each kind of problem in CUDA graphs of its own
-    shape, and replaying one planner's graphs for the other kind fails.
+    the moves to joint positions, folding the arm or swinging a truss to the
+    crate: cuRobo captures each kind of problem in CUDA graphs of its own
+    shape, and replaying one planner's graphs for the other kind fails. The
+    move planner captures none; a move plans in a third of a second without.
+
+    It moves once before the cut planner captures its graphs. A move builds
+    a kernel of its own into a Warp module the cut planner's graphs launch
+    from, and Warp reloads a module that gains a kernel: a graph captured
+    before that runs code that is gone, and crashes once Kit's renderer has
+    reused its memory.
     """
 
-    def __init__(self, machine: harvester.Harvester, robot: str):
+    def __init__(self, machine: harvester.Harvester, robot: str, rows: list[list[int]]):
         self._machine = machine
         cfg = harvester.curobo_cfg(machine)
         cache = {"cuboid": OBSTACLES}
+        self._moving = MotionPlanner(
+            MotionPlannerCfg.create(robot=cfg, collision_cache=cache, use_cuda_graph=False)
+        )
+        home = np.array(harvester.ARM_HOME)
+        self._moving.plan_cspace(
+            self._state(self._moving, home), self._state(self._moving, home + 0.1)
+        )
         self._cutting = MotionPlanner(
             MotionPlannerCfg.create(robot=cfg, collision_cache=cache, max_goalset=GOALS)
         )
         self._cutting.warmup(enable_graph=True, num_warmup_iterations=2)
-        # Warmed up on its first fold: `warmup` plans poses, which would
-        # capture its graphs in the wrong shape.
-        self._folding = MotionPlanner(MotionPlannerCfg.create(robot=cfg, collision_cache=cache))
         self.dt = self._cutting.trajopt_solver.config.interpolation_dt
         """Seconds between two points of a planned trajectory."""
-        self._tool = transform((0.0, 0.0, -(harvester.HEAD + harvester.MOUTH)))
-        """The cutter's frame, which cuRobo poses, in the mouth's."""
+        clips = np.array(cfg["kinematics"]["cspace"]["position_limit_clip"]) + INSIDE
+        self.chain = tuple(
+            dataclasses.replace(joint, limits=(joint.limits[0] + clip, joint.limits[1] - clip))
+            for joint, clip in zip(machine.chain[3:], clips, strict=True)
+        )
+        """The arm's joints from the platform out, held inside the range
+        cuRobo plans in: a straight line solved within it ends where cuRobo
+        can plan on from."""
+        self._tool = np.linalg.inv(machine.tool) @ machine.shear_frame
+        """The shear's frame, which cuRobo poses, in the mouth's."""
 
         model = NewtonManager.get_model()
-        arm = set(harvester.arm_links())
+        arm = {*harvester.arm_links(), BLADE, FINGER}
         labels = model.body_label
         body = model.shape_body.numpy()
         kind = model.shape_type.numpy()
@@ -122,21 +156,42 @@ class Planner:
         self._shapes = np.array(shapes)
         self._body = body[self._shapes]
         self._kind = kind[self._shapes]
+        placed = model.shape_transform.numpy()
+        self._middle = np.full(len(shapes), np.nan)
+        """For a stem's collider, the world y of its row's middle, between the
+        row's two faces: the mean of the row's stems. NaN for any other."""
+        for row in rows:
+            self._middle[np.isin(self._shapes, row)] = placed[row, 1].mean()
 
     def cut(
-        self, q: np.ndarray, platform: np.ndarray, poses: list[np.ndarray], standoff: float, skip
+        self,
+        q: np.ndarray,
+        platform: np.ndarray,
+        poses: list[np.ndarray],
+        standoff: float,
+        skip,
+        beside,
     ) -> Cut | None:
         """A cut from arm joint positions `q` to one of the mouth's `poses`, in
-        the world, the platform at `platform`, the bodies in `skip` left out of
-        the world; or None if none is reachable.
+        the world, the platform at `platform`, the bodies in `skip` and the
+        stretch of the stem `beside` names left out of the world (`_world`);
+        or None if none is reachable. Its line in starts `standoff` back from
+        the pose along `Harvester.way_in`.
 
         cuRobo plans to the set as a whole first. Planning to a set it seeds
         no paths from its graph, so it can miss a pose it reaches alone, and
         each pose is tried alone after."""
         planner = self._cutting
-        self._world(planner, platform, skip)
+        self._world(planner, platform, skip, beside)
+        # The stand-off, in the mouth's frame at the cut. cuRobo backs off from
+        # the pose it is given along the shear's +Z alone, so it is given the
+        # cut pose moved the rest of the way.
+        back = -standoff * self._machine.way_in
+        moved = transform((0.0, back[1], 0.0))
         for chosen in (poses, *([pose] for pose in poses)):
-            goals = np.array([np.linalg.inv(platform) @ pose @ self._tool for pose in chosen])
+            goals = np.array(
+                [np.linalg.inv(platform) @ pose @ moved @ self._tool for pose in chosen]
+            )
             position = torch.tensor(goals[:, :3, 3], dtype=torch.float32, device="cuda")
             quaternion = Rotation.from_matrix(goals[:, :3, :3]).as_quat(scalar_first=True)
             quaternion = torch.tensor(quaternion, dtype=torch.float32, device="cuda")
@@ -147,38 +202,48 @@ class Planner:
                     quaternion=quaternion.view(1, 1, 1, len(chosen), 4),
                 ),
                 self._state(planner, q),
-                grasp_approach_offset=-standoff,
+                grasp_approach_offset=back[2],
                 plan_approach_to_grasp=False,
                 plan_grasp_to_lift=False,
-                disable_collision_links=[harvester.CUTTER],
+                disable_collision_links=[HEAD, BLADE],
             )
             if not result.success.any():
                 continue
-            pose = chosen[int(result.goalset_index.view(-1)[0])]
+            goal = chosen[int(result.goalset_index.view(-1)[0])]
+            pose = np.linalg.inv(platform) @ goal
             approach = _trajectory(
                 result.approach_interpolated_trajectory, result.approach_interpolated_last_tstep
             )
-            inward = self._line(approach[0][-1], np.linalg.inv(platform) @ pose, standoff)
+            inward = self._line(approach[0][-1], pose @ transform(back), pose)
             if inward is not None:
                 return Cut(approach, inward, (inward[0][::-1], -inward[1][::-1]))
         return None
 
-    def _line(
-        self, q: np.ndarray, pose: np.ndarray, standoff: float
+    def line(
+        self, q: np.ndarray, platform: np.ndarray, start: np.ndarray, end: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray] | None:
         """The arm's joint positions and velocities every `dt` taking the mouth
-        in to `pose`, in the platform's frame, from `standoff` back along its
-        +Z, on a straight line at `SPEED`; or None if the arm cannot follow it.
+        from world pose `start` to `end`, turned as `start` is, on a straight
+        line at `SPEED`, from arm joint positions `q` with the platform at
+        `platform`; or None if the arm cannot follow it."""
+        inverse = np.linalg.inv(platform)
+        return self._line(q, inverse @ start, inverse @ end)
+
+    def _line(
+        self, q: np.ndarray, start: np.ndarray, end: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray] | None:
+        """`line`, `start` and `end` in the platform's frame.
 
         cuRobo's own straight line is a cost it weighs against reaching the
         end, and it reaches the end round another branch of the arm as
-        readily. Here every point is solved from the one before, from where
-        the approach left the arm, so the line stays on its branch."""
-        chain, tool = self._machine.chain[3:], self._machine.tool
+        readily. Here every point is solved from the one before, from `q`,
+        so the line stays on the branch the arm is on."""
+        chain, tool = self.chain, self._machine.tool
+        length = np.linalg.norm(end[:3, 3] - start[:3, 3])
         positions = []
-        for depth in np.linspace(standoff, 0.0, math.ceil(standoff / (SPEED * self.dt)) + 1):
-            point = pose.copy()
-            point[:3, 3] -= depth * pose[:3, 2]
+        for share in np.linspace(0.0, 1.0, math.ceil(length / (SPEED * self.dt)) + 1):
+            point = start.copy()
+            point[:3, 3] += share * (end[:3, 3] - start[:3, 3])
             q, distance, angle = solve(chain, tool, point, q, iterations=50)
             if distance > LINE_TOLERANCE[0] or angle > LINE_TOLERANCE[1]:
                 return None
@@ -186,23 +251,26 @@ class Planner:
         positions = np.array(positions)
         return positions, np.gradient(positions, self.dt, axis=0)
 
-    def fold(
-        self, q: np.ndarray, platform: np.ndarray, skip
+    def move(
+        self, q: np.ndarray, goal, platform: np.ndarray, skip, beside
     ) -> tuple[np.ndarray, np.ndarray] | None:
-        """A move from arm joint positions `q` to `ARM_HOME`, the platform at
-        `platform`, the bodies in `skip` left out of the world; or None if
-        there is none."""
-        planner = self._folding
-        self._world(planner, platform, skip)
-        home = self._state(planner, harvester.ARM_HOME)
-        result = planner.plan_cspace(home, self._state(planner, q))
+        """A move from arm joint positions `q` to `goal`, the platform at
+        `platform`, the bodies in `skip` and the stretch of the stem `beside`
+        names left out of the world (`_world`); or None if there is none."""
+        planner = self._moving
+        self._world(planner, platform, skip, beside)
+        result = planner.plan_cspace(self._state(planner, goal), self._state(planner, q))
         if result is None or not result.success.any():
             return None
         return _trajectory(result.interpolated_trajectory, result.interpolated_last_tstep)
 
-    def _world(self, planner: MotionPlanner, platform: np.ndarray, skip) -> None:
+    def _world(self, planner: MotionPlanner, platform: np.ndarray, skip, beside) -> None:
         """Hand `planner` the colliders round the platform, at `platform` in
-        the world, as boxes in its frame."""
+        the world, as boxes in its frame, but those on the bodies in `skip`.
+        `beside` is a stem's colliders, capsules, and a point in the world: of
+        those only the stretches further than `BESIDE` from the point are
+        kept, each as a box of its own. An upright stem's box is a fin
+        reaching back to its row's middle."""
         model = NewtonManager.get_model()
         bodies = NewtonManager.get_state_0().body_q.numpy()
         placed = model.shape_transform.numpy()[self._shapes]
@@ -215,7 +283,6 @@ class Planner:
         frames[:, :3, :3] = Rotation.from_quat(bodies[self._body[moving], 3:]).as_matrix()
         frames[:, :3, 3] = bodies[self._body[moving], :3]
         poses[moving] = frames @ poses[moving]
-        poses = np.linalg.inv(platform) @ poses
 
         # The box round each: a box's own, and a round shape's along its z.
         radius, half = scale[:, 0], scale[:, 1]
@@ -232,13 +299,32 @@ class Planner:
                 middle, size[i] = self._offset[shape]
                 poses[i] = poses[i] @ transform(middle)
 
+        names = [f"shape_{shape}" for shape in self._shapes]
+        left = np.isin(self._body, list(skip))
+        middle = [*self._middle]
+        stem, point = beside
+        pieces, sizes = [], []
+        for i in np.flatnonzero(np.isin(self._shapes, list(stem))):
+            left[i] = True
+            for k, (a, b) in enumerate(_beyond(poses[i], half[i], point)):
+                pieces.append(poses[i] @ transform((0.0, 0.0, (a + b) / 2)))
+                sizes.append([2 * radius[i], 2 * radius[i], b - a + 2 * radius[i]])
+                names.append(f"{names[i]}_{k}")
+                middle.append(self._middle[i])
+        if pieces:
+            poses, size = np.concatenate([poses, pieces]), np.concatenate([size, sizes])
+            left = np.concatenate([left, np.zeros(len(pieces), dtype=bool)])
+
+        _fins(poses, size, np.array(middle))
+
+        poses = np.linalg.inv(platform) @ poses
         reach = np.linalg.norm(poses[:, :3, 3], axis=1) - np.linalg.norm(size, axis=1) / 2
-        kept = [i for i in np.argsort(reach) if reach[i] < REACH and self._body[i] not in skip]
+        kept = [i for i in np.argsort(reach) if reach[i] < REACH and not left[i]]
         kept = kept[:OBSTACLES]
         quaternions = Rotation.from_matrix(poses[kept, :3, :3]).as_quat(scalar_first=True)
         boxes = [
             Cuboid(
-                name=f"shape_{self._shapes[i]}",
+                name=names[i],
                 dims=size[i].tolist(),
                 pose=[*poses[i, :3, 3].tolist(), *quaternion.tolist()],
             )
@@ -250,6 +336,35 @@ class Planner:
     def _state(planner: MotionPlanner, q) -> JointState:
         position = torch.tensor([list(q)], dtype=torch.float32, device="cuda")
         return JointState.from_position(position, joint_names=planner.joint_names)
+
+
+def _beyond(pose: np.ndarray, half: float, point: np.ndarray) -> list[tuple[float, float]]:
+    """The stretches of the axis of a capsule at `pose`, from `-half` to
+    `half` along its +Z, that run further than `BESIDE` from `point`."""
+    along = (point - pose[:3, 3]) @ pose[:3, 2]
+    off = np.linalg.norm(point - pose[:3, 3] - along * pose[:3, 2])
+    if off >= BESIDE:
+        return [(-half, half)]
+    near = math.sqrt(BESIDE**2 - off**2)
+    stretches = ((-half, min(half, along - near)), (max(-half, along + near), half))
+    return [(a, b) for a, b in stretches if a < b]
+
+
+def _fins(poses: np.ndarray, size: np.ndarray, middle: np.ndarray) -> None:
+    """Sweep each of the boxes at `poses` in the world, of `size`, that is
+    round a stem within 60° of upright back from the stem, square to it, to
+    `middle`, the world y of its row's middle, NaN for any other box; in
+    place. The stems lowered along the gutter lie below anything the arm
+    reaches for, and some turn across the row there."""
+    fin = ~np.isnan(middle) & (np.abs(poses[:, 2, 2]) > 0.5)
+    along, depth = poses[fin, :3, 2], middle[fin] - poses[fin, 1, 3]
+    back = np.zeros_like(along)
+    back[:, 1] = np.copysign(1.0, depth)
+    back -= np.einsum("ij,ij->i", back, along)[:, None] * along
+    back /= np.linalg.norm(back, axis=1, keepdims=True)
+    poses[fin, :3, :3] = np.stack([np.cross(back, along), back, along], axis=2)
+    poses[fin, :3, 3] += back * np.abs(depth)[:, None] / 2
+    size[fin, 1] += np.abs(depth)
 
 
 def _trajectory(plan: JointState, last: torch.Tensor) -> tuple[np.ndarray, np.ndarray]:

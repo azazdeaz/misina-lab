@@ -141,6 +141,14 @@ A flexible organ is a curve and the material it bends by
     stiffly as the diameter at its point. Unauthored, every capsule is a
     millimetre across.
 
+    Each segment's body is framed by the curve's ``normals``, one per point at
+    ``vertex`` interpolation: the importer turns the body about its segment to
+    put its +Y on the normal of the point the segment leaves. The document's
+    normals are the frames the segments' own prims are authored at, so a body
+    starts where its prim is and whatever rides the prim stays where it was
+    put. Unauthored, the importer frames the curve in the world instead, and
+    twists a body off its prim by as much as half a turn.
+
     Only Newton's VBD solver simulates one. Under every other backend nothing
     drives the segment prims, so a flexible organ draws correctly at its rest
     shape and never moves.
@@ -191,7 +199,7 @@ from typing import Any
 
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
 
-FORMAT = 10
+FORMAT = 11
 """Document version this builder understands. See `crates/misina-lab/src/scene/doc.rs`."""
 
 PARTS = "parts"
@@ -683,10 +691,11 @@ def _author_cable(spec: Sdf.PrimSpec, cable: Mapping[str, Any]) -> None:
     delegate, so a flexible organ is drawn by a mesh on each of the rod segments
     the importer drives instead.
 
-    ``widths`` and ``displayColor`` are authored anyway, so the curve reads as
-    the organ it stands for when guides are turned on. The importer reads
-    neither, so the taper is authored a second time, as the rod's
-    ``physics:thicknesses``.
+    ``widths`` and ``displayColor`` are authored anyway, so the curve shows the
+    organ's taper and colour when guides are turned on: as a ribbon facing
+    each segment's +Y, since a curve with normals is imaged as one, not as a
+    tube. The importer reads neither, so the taper is authored a second time,
+    as the rod's ``physics:thicknesses``.
 
     What holds the curve in place is ``physics:masses``; see
     `_cable_point_masses`.
@@ -698,8 +707,8 @@ def _author_cable(spec: Sdf.PrimSpec, cable: Mapping[str, Any]) -> None:
         # One curve per prim: the importer builds a rod per curve, and a
         # multi-curve prim would weld into a single articulation.
         ("curveVertexCounts", Sdf.ValueTypeNames.IntArray, Vt.IntArray([len(points)])),
-        # A curve is drawn as a tube around its centerline, so the box has to
-        # clear the widths as well as the points -- which is what
+        # A curve is drawn as wide as its widths round its centerline, so the
+        # box has to clear the widths as well as the points -- which is what
         # `ComputeExtent` adds and a box around the points alone does not.
         (
             "extent",
@@ -716,6 +725,12 @@ def _author_cable(spec: Sdf.PrimSpec, cable: Mapping[str, Any]) -> None:
     taper = Sdf.AttributeSpec(spec, "widths", Sdf.ValueTypeNames.FloatArray)
     taper.default = widths
     taper.SetInfo("interpolation", UsdGeom.Tokens.vertex)
+
+    # One normal per point, the frame each segment's body is built in; see the
+    # module docstring. Per point, as the importer requires.
+    normals = Sdf.AttributeSpec(spec, "normals", Sdf.ValueTypeNames.Normal3fArray)
+    normals.default = Vt.Vec3fArray([tuple(n) for n in cable["normals"]])
+    normals.SetInfo("interpolation", UsdGeom.Tokens.vertex)
 
     # One colour for the whole curve, and one material, both carrying the
     # surface of the mesh this curve stands in for -- a rod drawn beside a
