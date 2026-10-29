@@ -33,10 +33,20 @@
 //! a sharp bend would crack it.
 //!
 //! A tomato's stem is sympodial: each truss ends a shoot, and the stem
-//! carries on from a side shoot below it, so the stem kinks at every truss.
-//! On the rise the kinks are level, so a node keeps its height, and the stem
-//! is straight from one truss to the next. A stem thickens as it ages, down
-//! from its head, and its girth and its ridges vary a little along it.
+//! carries on from a side shoot below it, so the stem kinks at every truss,
+//! and a little at every node, away from its leaf. On the rise the kinks are
+//! level, so a node keeps its height. A stem thickens as it ages, down from
+//! its head, thins to a point at its tip, and its girth undulates slowly
+//! along it.
+//!
+//! A stem swells at every node and every truss, the more on the side its leaf
+//! or its truss leaves, and the swelling runs on down the stem as a leaf's
+//! base does, which ridges it. What a stripped leaf or a picked truss leaves
+//! is a stub, or a scar where it was snapped off flush: at every node and
+//! truss of the stem, down its take-off and its lowered run to the block.
+//! How finely all this is meshed is `detail`'s: a stem's rings go where its
+//! shape needs them, and its tube strays no further from it than `detail`
+//! allows.
 //!
 //! A week's growth is set by the crop in full production: the live height
 //! from `harvest_height` to the head shared out between `trusses`, 0.34 m at
@@ -53,9 +63,8 @@
 //! in every third internode. A node is placed by the length of stem between
 //! it and the head, so it keeps its place on the stem as the stem is lowered.
 //! Growers strip all but the top `leaves_kept` leaves, and every leaf in the
-//! harvest band round the two trusses nearest their picking; a stripped leaf
-//! leaves a stub. A young crop has no trusses that old and keeps its lowest
-//! leaves.
+//! harvest band round the two trusses nearest their picking. A young crop has
+//! no trusses that old and keeps its lowest leaves.
 //!
 //! A stem collides from where it takes off up, as a chain of capsules along
 //! its axis, each straight from one of the axis's points to another, none of
@@ -86,7 +95,7 @@ use std::f32::consts::{FRAC_PI_2, PI, TAU};
 use bevy::prelude::*;
 use misina_lab::geometry::mesh::{MeshData, cylinder_mesh, merge_meshes};
 use misina_lab::geometry::par_map;
-use misina_lab::geometry::strand::{Bark, Strand, strand_mesh};
+use misina_lab::geometry::strand::{Bark, Bulge, Collar, Strand, sides_within, strand_mesh};
 use misina_lab::palette::{Response, srgb};
 use misina_lab::params::{Label, Slider};
 use misina_lab::rng::{Rng, salt};
@@ -95,10 +104,10 @@ use nalgebra::Point3;
 
 use super::gutter::{self, GutterParams};
 use super::layout::{GreenhouseLayout, Row};
-use super::leaf::{LeafConfig, LeafParams};
+use super::leaf::{LeafConfig, LeafParams, TOLERANCE};
 use super::truss::{Node, TrussConfig, TrussParams};
 use super::wire::WireParams;
-use super::{Grow, SceneParams, smooth};
+use super::{Grow, SceneParams, smooth, vector};
 
 /// The mesh-library prefixes: a tube and a twine for every stem, and one hook
 /// for them all.
@@ -111,9 +120,11 @@ const HOOK: &str = "Hook";
 const PLANT_STREAM: u64 = 0x9E37_79B9_7F4A_7C15;
 const STEM_STREAM: u64 = 0xBF58_476D_1CE4_E5B9;
 const LEAF_STREAM: u64 = 0x632B_E59B_D9B4_E019;
-/// How a stem lies and kinks, its girth and its ridges: off a stream of its
-/// own, so they leave its trusses and leaves as they were.
+/// How a stem lies and kinks, its girth and its nodes, and its ridges: off
+/// streams of their own, so they leave its trusses and leaves as they were.
 const LIE_STREAM: u64 = 0xA076_1D64_78BD_642F;
+const SURFACE_STREAM: u64 = 0xE703_7ED1_A0B4_28DB;
+const RIDGE_STREAM: u64 = 0x8EBC_6AF0_9C88_C6E3;
 
 /// Nodes per truss: a leaf at every node, and a truss in every third
 /// internode.
@@ -138,9 +149,34 @@ const EXTRA_START: f32 = 6.0;
 const DIVERGENCE: f32 = 2.4;
 const DIVERGENCE_JITTER: f64 = 0.1;
 
-/// The stub a stripped leaf leaves: its radius, its reach from the stem's
-/// axis, in meters, and its angle off the stem, in radians.
-const STUB: (f32, f32, f32) = (0.003, 0.025, 1.1);
+/// How much a node or a truss swells the stem all round, drawn per node, as
+/// a fraction of its radius, and how far up and down the stem it reaches, in
+/// meters: the stem 1.1–1.3 times as thick over 15–30 mm, the more on the
+/// stalk's side (est.).
+const NODE_SWELL: (f64, f64) = (0.08, 0.16);
+const NODE_WIDTH: f64 = 0.008;
+
+/// The stalk a leaf or a truss leaves the stem by, as thick as a fraction of
+/// the stem, and how far off the stem's axis a leaf's petiole and a truss's
+/// peduncle head, in radians (est.).
+const STALK: f32 = 0.5;
+const PETIOLE: f32 = 0.9;
+const PEDUNCLE: f32 = 1.2;
+
+/// How far past the stem's surface a stripped leaf's stub and a picked
+/// truss's reach, at most, in meters, the short ones the most often; one
+/// drawn shorter than `FLUSH` was snapped off flush and left only its scar,
+/// as most leaves are. How thick a dried stub is, as a fraction of its
+/// stalk, and how much thinner at its cut (est.).
+const STUB: f32 = 0.012;
+const PICKED: f32 = 0.025;
+const FLUSH: f32 = 0.004;
+const STUB_THIN: f32 = 0.9;
+const STUB_TAPER: f32 = 0.85;
+
+/// How thick a stalk a scar swells the stem as, as a fraction of the stalk
+/// it healed over: flatter than a leaf's base with its leaf on (est.).
+const SCAR: f32 = 0.5;
 
 /// The most stems a plant carries: two, and an extra one.
 const MAX_STEMS: usize = 3;
@@ -194,17 +230,25 @@ const JOIN_BELOW: f32 = 0.2;
 const CLIMB: f32 = 0.15;
 const TAKE_OFF_STEP: f32 = 0.08;
 
-/// How far each kink sets the stem off, in meters: level on the rise, and
-/// across and up, either way, on the run, at every week's growth of it.
+/// How far each kink sets the stem off, in meters: level on the rise, at
+/// every truss and, by at most `NODE_KINK`, at every node; and across and up,
+/// either way, on the run, at every week's growth of it.
 const KINK: (f64, f64) = (0.006, 0.016);
+const NODE_KINK: f64 = 0.002;
 const RUN_KINK: f64 = 0.015;
 
-/// How much thicker a stem is at its oldest, as a fraction, the stem down
-/// from the head it takes to get there, in meters, and how far its girth
-/// strays from point to point, as a fraction.
+/// How much thicker a stem is at its oldest, as a fraction, and the stem down
+/// from the head it takes to get there, in meters; and how much its girth
+/// undulates, as a fraction, in two waves, each between these lengths, in
+/// meters (est.).
 const OLD_GIRTH: f32 = 0.25;
 const OLD_REACH: f32 = 5.0;
-const GIRTH_JITTER: f64 = 0.06;
+const GIRTH_WAVE: f32 = 0.06;
+const GIRTH_WAVES: (f64, f64) = (0.5, 1.5);
+
+/// How much thinner still a stem is at its very tip, as a fraction, and over
+/// how much of it, in meters (est.).
+const TIP: (f32, f32) = (0.5, 0.08);
 
 /// How deep the ridges along a stem are, as a fraction of its radius.
 const RIDGES: f64 = 0.08;
@@ -254,11 +298,13 @@ const TWINE_STEP: f32 = 0.03;
 /// bowing further off the chord between them.
 const STRAY: f32 = 0.003;
 
-/// Vertices around a stem and round its twine, and rings per meter along
-/// both.
-const SIDES: usize = 8;
+/// The fewest vertices round a stem and its stubs, enough to turn a collar;
+/// round the twine, and rings per meter along it; and the least `detail`
+/// Python may set.
+const MIN_SIDES: usize = 6;
 const TWINE_SIDES: usize = 4;
 const DETAIL: f64 = 16.0;
+pub(crate) const MIN_DETAIL: f32 = 0.01;
 
 /// A green stem, matte from its hairs.
 const STEM_COLOR: u32 = 0x5F7F35;
@@ -323,6 +369,14 @@ pub struct StemParams {
     /// of simulating the crop.
     #[reflect(@Slider { min: 0.0, max: 5.5, step: 0.05 }, @Label("Trusses bend below"))]
     pub flexible_below: f32,
+    /// How finely the stems and the trusses' stems are meshed. At 1 a stem's
+    /// tube strays from its shape by about a pixel to a camera half a meter
+    /// away, as a leaf does at its own detail of 1; at 4 by a quarter of
+    /// that. Down to about 0.5 every node shows its swelling and the swelling
+    /// round its leaf or truss; lower is cheaper, and at 0.1 a stem is a
+    /// plain tube with its stubs.
+    #[reflect(@Slider { min: 0.1, max: 4.0, step: 0.05 }, @Label("Stem detail"))]
+    pub detail: f32,
 }
 
 impl Default for StemParams {
@@ -334,6 +388,7 @@ impl Default for StemParams {
             extra_stems: 0.0,
             turned_to_path: 0.8,
             flexible_below: 0.0,
+            detail: 0.5,
         }
     }
 }
@@ -453,6 +508,8 @@ struct Live {
     ends: (f32, f32),
     /// How high a truss's node may be and the truss still bend.
     flexible_below: f32,
+    /// How many leaves a stem keeps, down from its head.
+    leaves_kept: u32,
 }
 
 /// One stem, solved in the row frame: everything its meshes and its trusses
@@ -465,8 +522,9 @@ struct Stem {
     /// The point the stem takes off from its lowered run at, or the root's
     /// if it has none: the rise starts there, and so do the colliders.
     take_off: usize,
-    /// The ridges along the tube.
-    bark: Bark,
+    /// Where a leaf or a truss grows out of the stem, or did: at every node
+    /// and every truss, down to the block.
+    joints: Vec<Joint>,
     /// The twine's, from the reel down the rise.
     twine: Vec<Vec3>,
     /// The hook's place on its wire.
@@ -477,9 +535,56 @@ struct Stem {
     /// Each node of the rise, the head's first: its place on the stem's axis
     /// and the yaw its leaf faces.
     nodes: Vec<(Vec3, f32)>,
-    /// How many nodes from the head may keep their leaf: those above the
-    /// harvest band.
-    leafy: usize,
+    /// How many nodes from the head keep their leaf: up to `leaves_kept` of
+    /// those above the harvest band.
+    kept: usize,
+}
+
+/// Where a leaf or a truss grows out of a stem, or did.
+#[derive(Clone, Copy, Debug)]
+struct Joint {
+    /// How far along the tube's control points it is, in meters, and its
+    /// place on the stem's axis there.
+    at: f32,
+    on: Vec3,
+    /// The way its stalk heads off the axis, and how thick it is.
+    toward: Vec3,
+    radius: f32,
+    /// How much it swells the stem all round, as a fraction of its radius.
+    swell: f32,
+    /// The stub it left, from the axis to the cut, in meters: none while it
+    /// hangs, or where it was snapped off flush.
+    stub: f32,
+}
+
+/// The way a stalk heads off a stem heading `tangent`: `angle` off it, toward
+/// `side` round it.
+fn stalk(tangent: Vec3, side: Vec3, angle: f32) -> Vec3 {
+    let across = side
+        .reject_from_normalized(tangent)
+        .normalize_or(tangent.any_orthonormal_vector());
+    across * angle.sin() + tangent * angle.cos()
+}
+
+/// The swellings `joints` put on their stem, in the strand's terms.
+fn swellings(joints: &[Joint]) -> (Vec<Bulge>, Vec<Collar>) {
+    joints
+        .iter()
+        .map(|joint| {
+            let at = joint.at as f64;
+            let bulge = Bulge {
+                at,
+                width: NODE_WIDTH,
+                height: joint.swell as f64,
+            };
+            let collar = Collar {
+                at,
+                toward: vector(joint.toward),
+                radius: joint.radius as f64,
+            };
+            (bulge, collar)
+        })
+        .unzip()
 }
 
 /// The offset at `at` along a line kinked at `knots`, each a place along it
@@ -499,7 +604,7 @@ fn zigzag(knots: &[(f32, Vec2)], at: f32) -> Vec2 {
 
 /// Grows the stem rooted at `root` that starts round on `side`, `age` weeks
 /// after it was planted and lowered `more` further than its growth calls for,
-/// from its own two streams.
+/// from its own three streams.
 ///
 /// The *draw order* is part of this element's output. `rng` draws the
 /// radius, how far the run's length strays, where across and up the bundle
@@ -511,10 +616,13 @@ fn zigzag(knots: &[(f32, Vec2)], at: f32) -> Vec2 {
 /// drifts in, each's length and phase, and the take-off's lean; then for a
 /// lowered stem how far apart its run rests, the sag of each span back from
 /// the take-off and the kink at each week's growth back from it but the
-/// take-off's own, across then up; then the
-/// kink at each truss up the rise, hung or picked, its bearing first when no
-/// truss hangs there; then the girth at each point, head first; and last
-/// the ridges.
+/// take-off's own, across then up; then the kink at each truss up the rise,
+/// hung or picked, its bearing first when no truss hangs there; and last the
+/// kink at each node up the rise, head first. `surface` draws the two waves
+/// the girth undulates in, each's length and phase; then three at every
+/// node, head first, and then at every truss, youngest first, down to the
+/// block: how much it swells the stem, how far its stub would reach, and the
+/// side it leaves to where nothing on the stem says.
 #[allow(clippy::too_many_arguments)]
 fn grow(
     root: Vec3,
@@ -525,6 +633,7 @@ fn grow(
     live: Live,
     rng: &mut Rng,
     lie: &mut Rng,
+    surface: &mut Rng,
 ) -> Stem {
     let radius = rng.range(RADIUS.0, RADIUS.1) as f32;
     let stray = rng.range(1.0 - LOWERED_JITTER, 1.0 + LOWERED_JITTER) as f32;
@@ -687,8 +796,10 @@ fn grow(
     let reach = join.distance(tip);
 
     // A level kink at every truss up the rise, hung or picked, away from
-    // the truss while it hangs, and none at the head or the take-off.
+    // the truss while it hangs, and none at the head or the take-off; and
+    // the bearing each of those trusses leaves the stem at.
     let mut knots = vec![(0.0, Vec2::ZERO)];
+    let mut bearings = Vec::new();
     for (t, yaw) in flowered.iter().rev() {
         let d = weekly * t;
         if d > reach - weekly / 2.0 {
@@ -696,43 +807,177 @@ fn grow(
         }
         let away = yaw.map_or_else(|| lie.unit() as f32 * TAU, |yaw| yaw + PI);
         knots.push((d, Vec2::from_angle(away) * lie.range(KINK.0, KINK.1) as f32));
+        bearings.push(away - PI);
     }
     knots.push((reach, Vec2::ZERO));
-    // The rise at `d` of stem below the head: straight from the take-off to
-    // the head but for a bow pinned at both ends and the kinks. Both are
-    // level, so the nodes are as evenly spaced in height as along the stem.
-    let rise = |d: f32| {
-        let f = 1.0 - d / reach;
-        join.lerp(tip, f) + bow * (PI * f).sin() + zigzag(&knots, d).extend(0.0)
-    };
-    // Thinner near the head, thicker as it ages.
-    let girth = |d: f32| {
-        radius
-            * (1.0 - HEAD_TAPER * smooth(1.0 - d / HEAD_REACH))
-            * (1.0 + OLD_GIRTH * smooth(d / OLD_REACH))
-    };
 
-    // A node every `node` of stem down from the head to the take-off, half a
-    // node off the trusses, the newest grown out half a node or more below
-    // the head. A control point at each, and at the head itself.
+    // A node every `node` of stem down from the head, half a node off the
+    // trusses, the newest grown out half a node or more below the head.
+    // The leaves of the rise wind round the stem from the head down, and the
+    // stem kinks a little away from each.
     let newest = ((NODES_PER_TRUSS as f32 * age).fract() + 0.5) * node;
     let below: Vec<f32> = (0..)
         .map(|i| newest + i as f32 * node)
         .take_while(|d| *d < reach - node / 2.0)
         .collect();
+    let mut yaw = rng.unit() as f32 * TAU;
+    let yaws: Vec<f32> = below
+        .iter()
+        .map(|_| {
+            let at = yaw;
+            yaw += DIVERGENCE * rng.range(1.0 - DIVERGENCE_JITTER, 1.0 + DIVERGENCE_JITTER) as f32;
+            at
+        })
+        .collect();
+    let mut nodding = vec![(0.0, Vec2::ZERO)];
+    nodding.extend(below.iter().zip(&yaws).map(|(d, yaw)| {
+        (
+            *d,
+            Vec2::from_angle(yaw + PI) * lie.range(0.0, NODE_KINK) as f32,
+        )
+    }));
+    nodding.push((reach, Vec2::ZERO));
+    // The rise at `d` of stem below the head: straight from the take-off to
+    // the head but for a bow pinned at both ends and the kinks, the nodes'
+    // on the trusses'. All are level, so the nodes are as evenly spaced in
+    // height as along the stem.
+    let rise = |d: f32| {
+        let f = 1.0 - d / reach;
+        let kinked = zigzag(&knots, d) + zigzag(&nodding, d);
+        join.lerp(tip, f) + bow * (PI * f).sin() + kinked.extend(0.0)
+    };
+    // Thinner near the head and to a point at its tip, thicker as it ages,
+    // and undulating along it.
+    let waves: [(f32, f32); 2] = std::array::from_fn(|_| {
+        let length = surface.range(GIRTH_WAVES.0, GIRTH_WAVES.1) as f32;
+        (TAU / length, surface.unit() as f32 * TAU)
+    });
+    let girth = |d: f32| {
+        let undulating: f32 = waves.iter().map(|(n, phase)| (n * d + phase).sin()).sum();
+        radius
+            * (1.0 - HEAD_TAPER * smooth(1.0 - d / HEAD_REACH))
+            * (1.0 - TIP.0 * smooth(1.0 - d / TIP.1))
+            * (1.0 + OLD_GIRTH * smooth(d / OLD_REACH))
+            * (1.0 + GIRTH_WAVE * undulating / 2.0)
+    };
+
+    // A control point at the join, at each node and each kinked truss of the
+    // rise, and at the head.
+    let mut placed: Vec<f32> = flowered
+        .iter()
+        .map(|(t, _)| weekly * t)
+        .filter(|d| *d <= reach - weekly / 2.0)
+        .chain(below.iter().copied())
+        .collect();
+    placed.sort_by(|a, b| b.total_cmp(a));
+    let join_at = points.len();
     points.push(join);
-    for d in below.iter().rev().chain([&0.0]) {
-        points.push(rise(*d));
-    }
-    // Each point's girth by the stem between it and the head, give or take.
-    let mut radii = vec![0.0; points.len()];
-    let mut d = 0.0;
-    for i in (0..points.len()).rev() {
-        if let Some(next) = points.get(i + 1) {
-            d += points[i].distance(*next);
+    points.extend(placed.iter().chain([&0.0]).map(|d| rise(*d)));
+    // How far along the control points each is, in meters, and the stem
+    // between it and the head: up the rise, where it was placed, and below
+    // the rise, by the stem between it and the join.
+    let lengths: Vec<f32> = points
+        .iter()
+        .scan((0.0, points[0]), |(length, last), p| {
+            *length += last.distance(*p);
+            *last = *p;
+            Some(*length)
+        })
+        .collect();
+    let dists: Vec<f32> = (0..points.len())
+        .map(|i| match i.checked_sub(join_at) {
+            Some(0) => reach,
+            Some(k) => placed.get(k - 1).copied().unwrap_or(0.0),
+            None => reach + lengths[join_at] - lengths[i],
+        })
+        .collect();
+    // How far along the control points `d` of stem below the head is, its
+    // place on the axis there, and the way the stem heads.
+    let place = |d: f32| {
+        let i = dists.partition_point(|x| *x > d).clamp(1, dists.len() - 1);
+        let span = dists[i - 1] - dists[i];
+        let f = if span > 0.0 {
+            ((dists[i - 1] - d) / span).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        (
+            lengths[i - 1] + (lengths[i] - lengths[i - 1]) * f,
+            points[i - 1].lerp(points[i], f),
+            (points[i] - points[i - 1]).normalize_or(Vec3::Z),
+        )
+    };
+    let radii = dists.iter().map(|d| girth(*d)).collect();
+
+    // The harvest band: the stem below where a truss has `BARE_TRUSSES`
+    // weeks left before its picking. As many leaves above it as growers keep
+    // stay on.
+    let band = weekly * (live.trusses as f32 - BARE_TRUSSES as f32);
+    let kept = below
+        .iter()
+        .take_while(|d| **d < band)
+        .count()
+        .min(live.leaves_kept as usize);
+
+    // A joint at every node and every truss down to where the stem leaves
+    // its block, a stub on it once it is stripped or picked. A leaf of the
+    // rise and a truss there leave toward their bearing; below the rise the
+    // stem has turned as it was lowered, so to any side.
+    let last = dists[1];
+    let mut joint = |d: f32, bearing: Option<f32>, angle: f32, stub: Option<f32>| {
+        let swell = surface.range(NODE_SWELL.0, NODE_SWELL.1) as f32;
+        let past = surface.unit() as f32;
+        let side = surface.unit() as f32 * TAU;
+        let (at, on, tangent) = place(d);
+        let side = bearing.map_or_else(
+            || Quat::from_axis_angle(tangent, side) * Vec3::Z,
+            |bearing| Vec2::from_angle(bearing).extend(0.0),
+        );
+        let r = girth(d);
+        // Out through the stem, swollen and collared, and on to the cut; or
+        // snapped off flush, healed over.
+        let (stub, radius) = match stub.map(|most| most * past * past) {
+            Some(past) if past < FLUSH => (0.0, SCAR * STALK * r),
+            Some(past) => (r * (1.0 + swell + STALK) / angle.sin() + past, STALK * r),
+            None => (0.0, STALK * r),
+        };
+        Joint {
+            at,
+            on,
+            toward: stalk(tangent, side, angle),
+            radius,
+            swell,
+            stub,
         }
-        radii[i] = girth(d) * lie.range(1.0 - GIRTH_JITTER, 1.0 + GIRTH_JITTER) as f32;
-    }
+    };
+    let mut joints: Vec<Joint> = (0..)
+        .map(|k| (k, newest + k as f32 * node))
+        .take_while(|(_, d)| *d < last)
+        .map(|(k, d)| {
+            joint(
+                d,
+                yaws.get(k).copied(),
+                PETIOLE,
+                (k >= kept).then_some(STUB),
+            )
+        })
+        .collect();
+    joints.extend(
+        flowered
+            .iter()
+            .rev()
+            .enumerate()
+            .map(|(k, (t, yaw))| (k, weekly * t, yaw.is_none()))
+            .take_while(|(_, d, _)| *d < last)
+            .map(|(k, d, picked)| {
+                joint(
+                    d,
+                    bearings.get(k).copied(),
+                    PEDUNCLE,
+                    picked.then_some(PICKED),
+                )
+            }),
+    );
 
     let trusses = flowered
         .iter()
@@ -749,9 +994,9 @@ fn grow(
         .collect();
 
     // From the reel straight down to the head, then wound down the rise,
-    // just clear of the stem at its widest: its girth at its most, with a
-    // ridge on it.
-    let clear = (1.0 + GIRTH_JITTER as f32) * (1.0 + RIDGES as f32);
+    // just clear of the stem: of its girth with a ridge on it, and of
+    // whatever swells it there.
+    let (bulges, collars) = swellings(&joints);
     let axis = (top - join).normalize();
     let across = axis.cross(Vec3::X).normalize();
     let over = axis.cross(across);
@@ -763,45 +1008,46 @@ fn grow(
     let mut d = 0.0;
     while d < reach {
         let turn = TAU * d / TWINE_PITCH;
-        let out = (girth(d) * clear + TWINE_RADIUS) * (across * turn.cos() + over * turn.sin());
-        twine.push(rise(d) + out);
+        let out = across * turn.cos() + over * turn.sin();
+        let (m, r) = (place(d).0 as f64, girth(d) as f64);
+        let swollen: f64 = bulges.iter().map(|b| b.value(m)).sum::<f64>()
+            + collars
+                .iter()
+                .map(|c| c.swelling(vector(axis), r, m, &vector(out)))
+                .sum::<f64>();
+        let clear = r * (1.0 + RIDGES) * (1.0 + swollen);
+        twine.push(rise(d) + out * (clear as f32 + TWINE_RADIUS));
         d += TWINE_STEP;
     }
-
-    // The leaves wind round the stem from the head down.
-    let mut yaw = rng.unit() as f32 * TAU;
-    let nodes = below
-        .iter()
-        .map(|d| {
-            let at = (rise(*d), yaw);
-            yaw += DIVERGENCE * rng.range(1.0 - DIVERGENCE_JITTER, 1.0 + DIVERGENCE_JITTER) as f32;
-            at
-        })
-        .collect();
-    // The harvest band: the stem below where a truss has `BARE_TRUSSES`
-    // weeks left before its picking.
-    let band = weekly * (live.trusses as f32 - BARE_TRUSSES as f32);
 
     Stem {
         points,
         radii,
         take_off,
-        bark: Bark::new(lie, SIDES, RIDGES),
+        joints,
         twine,
         hook: top + Vec3::Z * HOOK_LENGTH,
         trusses,
-        nodes,
-        leafy: below.iter().take_while(|d| **d < band).count(),
+        nodes: below
+            .iter()
+            .zip(yaws)
+            .map(|(d, yaw)| (rise(*d), yaw))
+            .collect(),
+        kept,
     }
 }
 
-/// What stripping a leaf leaves on the stem, at its node `at`: a stub of the
-/// petiole, facing `yaw`.
-fn stub(at: Vec3, yaw: f32) -> MeshData {
-    let (radius, reach, angle) = STUB;
-    cylinder_mesh(radius, radius * 0.7, reach, 5).transformed(
-        &Transform::from_translation(at)
-            .with_rotation(Quat::from_rotation_z(yaw) * Quat::from_rotation_y(angle)),
+/// The stub `joint` left, `offset` into its plant's frame: its stalk, dried
+/// thinner, from the stem's axis to the cut.
+fn stub(joint: &Joint, offset: Vec3, sides: usize) -> Strand {
+    let (from, to) = (joint.on, joint.on + joint.toward * joint.stub);
+    let radius = joint.radius * STUB_THIN;
+    strand(
+        &[from, from.lerp(to, 0.5), to],
+        &[radius, radius, radius * STUB_TAPER],
+        offset,
+        sides,
+        Bark::none(),
     )
 }
 
@@ -856,9 +1102,9 @@ fn hook_mesh() -> MeshData {
     ])
 }
 
-/// One stem to build: its row, its plant, its index on the plant, and what it
-/// was solved to.
-type Planted = (Entity, usize, usize, Stem);
+/// One stem to build: its row, its plant, its index on the plant, the salt
+/// its streams are drawn with, and what it was solved to.
+type Planted = (Entity, usize, usize, u64, Stem);
 
 #[allow(clippy::too_many_arguments)]
 fn author(
@@ -893,6 +1139,7 @@ fn author(
         spread: wire.spread,
         ends: (RUN_TURN, (layout.length - RUN_TURN).max(RUN_TURN)),
         flexible_below: params.flexible_below,
+        leaves_kept: params.leaves_kept,
     };
     let week = scene.week.max(0.0);
 
@@ -931,43 +1178,52 @@ fn author(
                     live,
                     &mut Rng::new(scene.seed ^ STEM_STREAM ^ salted),
                     &mut Rng::new(scene.seed ^ LIE_STREAM ^ salted),
+                    &mut Rng::new(scene.seed ^ SURFACE_STREAM ^ salted),
                 );
-                stems.push((entity, plant, index, stem));
+                stems.push((entity, plant, index, salted, stem));
             }
         }
     }
 
-    // Each stem's tube, with a stub at every stripped node, and its twine,
-    // grown in parallel and registered serially: `Assets<Mesh>` takes one
-    // writer.
-    let kept = |stem: &Stem| (params.leaves_kept as usize).min(stem.leafy);
-    let meshes = par_map(&stems, |_, (_, plant, _, stem)| -> Result<(Mesh, Mesh)> {
-        let origin = Vec3::new(layout.plants[*plant], 0.0, root_z);
-        let mut tube = vec![strand_mesh(&strand(
-            &stem.points,
-            &stem.radii,
-            origin,
-            SIDES,
-            stem.bark.clone(),
-        ))?];
-        tube.extend(
-            stem.nodes[kept(stem)..]
-                .iter()
-                .map(|(at, yaw)| stub(*at - origin, *yaw)),
-        );
-        let twine = vec![TWINE_RADIUS; stem.twine.len()];
-        Ok((
-            merge_meshes(&tube).to_mesh(),
-            strand_mesh(&strand(
-                &stem.twine,
-                &twine,
-                origin,
-                TWINE_SIDES,
-                Bark::none(),
-            ))?
-            .to_mesh(),
-        ))
-    });
+    // Each stem's tube, swollen at its joints and with their stubs on it,
+    // meshed as finely as `detail` says, and its twine, grown in parallel and
+    // registered serially: `Assets<Mesh>` takes one writer.
+    let tolerance = TOLERANCE / params.detail.max(MIN_DETAIL) as f64;
+    let meshes = par_map(
+        &stems,
+        |_, (_, plant, _, salted, stem)| -> Result<(Mesh, Mesh)> {
+            let origin = Vec3::new(layout.plants[*plant], 0.0, root_z);
+            let thickest = stem.radii.iter().copied().fold(0.0, f32::max) as f64;
+            let sides = sides_within(thickest, tolerance).max(MIN_SIDES);
+            let ridges = Bark::new(
+                &mut Rng::new(scene.seed ^ RIDGE_STREAM ^ salted),
+                sides,
+                RIDGES,
+            );
+            let (bulges, collars) = swellings(&stem.joints);
+            let mut tube = vec![strand_mesh(&Strand {
+                bulges,
+                collars,
+                tolerance: Some(tolerance),
+                ..strand(&stem.points, &stem.radii, origin, sides, ridges)
+            })?];
+            for joint in stem.joints.iter().filter(|joint| joint.stub > 0.0) {
+                tube.push(strand_mesh(&stub(joint, origin, sides))?);
+            }
+            let twine = vec![TWINE_RADIUS; stem.twine.len()];
+            Ok((
+                merge_meshes(&tube).to_mesh(),
+                strand_mesh(&strand(
+                    &stem.twine,
+                    &twine,
+                    origin,
+                    TWINE_SIDES,
+                    Bark::none(),
+                ))?
+                .to_mesh(),
+            ))
+        },
+    );
 
     let (green, white) = (
         STEM_RESPONSE.surface(srgb(STEM_COLOR)),
@@ -975,7 +1231,7 @@ fn author(
     );
     let mut plant_prim = Entity::PLACEHOLDER;
     let (mut order, mut leaf_order) = (0u64, 0u64);
-    for (number, ((row, plant, index, stem), meshes)) in stems.iter().zip(meshes).enumerate() {
+    for (number, ((row, plant, index, _, stem), meshes)) in stems.iter().zip(meshes).enumerate() {
         let (tube, twine) = meshes?;
         let origin = Vec3::new(layout.plants[*plant], 0.0, root_z);
         // A plant's stems come one after another, the first opening its prim.
@@ -1019,7 +1275,7 @@ fn author(
                 // The leaves kept, the lowest first. Each draws off its stem
                 // and its rank from the head, so keeping more or fewer leaves
                 // re-rolls none of the rest; a stem has fewer than 256 nodes.
-                let kept = kept(stem);
+                let kept = stem.kept;
                 for (rank, (at, yaw)) in stem.nodes[..kept].iter().enumerate().rev() {
                     leaf_order += 1;
                     let seed = scene.seed ^ LEAF_STREAM ^ salt((number as u64) << 8 | rank as u64);
@@ -1184,7 +1440,11 @@ mod tests {
                         let n = (at.z - lowest.z) / node - 0.5;
                         assert!((n - n.round()).abs() < 1e-3, "{path} is off its node: {n}");
                         assert!(at.z > band, "{path} hangs in the harvest band");
-                        assert!(off_axis(*at, &axis) < 2e-3, "{path} is off the stem");
+                        let off = off_axis(*at, &axis);
+                        assert!(
+                            off < 2e-3 + NODE_KINK as f32,
+                            "{path} is {off} m off the stem"
+                        );
                         n.round() as u32
                     })
                     .collect();
@@ -1214,6 +1474,7 @@ mod tests {
             spread: 0.35,
             ends: (0.2, 39.8),
             flexible_below: 0.0,
+            leaves_kept: 16,
         };
         let weekly = (live.head - live.harvest) / live.trusses as f32;
         let root = Vec3::new(1.0, 0.0, 0.64);
@@ -1227,6 +1488,7 @@ mod tests {
                 live,
                 &mut Rng::new(3),
                 &mut Rng::new(4),
+                &mut Rng::new(7),
             )
         };
         // How much of the fruit at a truss's base has coloured.
@@ -1246,7 +1508,7 @@ mod tests {
                 young
                     .points
                     .iter()
-                    .all(|p| (p.x - root.x).abs() < (HOOK_JITTER + KINK.1) as f32 + BOW),
+                    .all(|p| (p.x - root.x).abs() < (HOOK_JITTER + KINK.1 + NODE_KINK) as f32 + BOW),
                 "week {age}: lowered"
             );
             assert!(head < live.head - 0.5, "week {age}: the head at {head}");
@@ -1295,6 +1557,7 @@ mod tests {
             spread: 0.35,
             ends: (0.2, 9.8),
             flexible_below: 0.0,
+            leaves_kept: 16,
         };
         let stem = grow(
             Vec3::new(9.0, 0.0, 0.64),
@@ -1305,6 +1568,7 @@ mod tests {
             live,
             &mut Rng::new(5),
             &mut Rng::new(6),
+            &mut Rng::new(8),
         );
         let spans = colliders(&stem);
         assert!(stem.take_off > 2, "not lowered");

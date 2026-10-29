@@ -137,6 +137,11 @@ pub fn cuboid(min: Vec3, max: Vec3) -> MeshData {
     box_mesh(1.0).transformed(&Transform::from_translation((min + max) / 2.0).with_scale(max - min))
 }
 
+/// `v` in nalgebra's terms, which the geometry kernels take.
+pub fn vector(v: Vec3) -> nalgebra::Vector3<f64> {
+    nalgebra::Vector3::new(v.x as f64, v.y as f64, v.z as f64)
+}
+
 /// `t` eased in and out over `0..1`.
 pub fn smooth(t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
@@ -254,6 +259,7 @@ mod tests {
             ("leaves kept", edited(|p| p.stem.leaves_kept = 12)),
             ("leaf length", edited(|p| p.leaf.length = 0.5)),
             ("leaf detail", edited(|p| p.leaf.detail = 0.5)),
+            ("stem detail", edited(|p| p.stem.detail = 2.0)),
             ("peduncle", edited(|p| p.truss.peduncle_length = 0.1)),
             ("bent trusses", edited(|p| p.stem.flexible_below = 1.8)),
             ("ripeness", edited(|p| p.fruit.ripe_trusses = 2.5)),

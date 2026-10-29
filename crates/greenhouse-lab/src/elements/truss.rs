@@ -73,7 +73,7 @@ use std::iter::once;
 use bevy::prelude::*;
 use misina_lab::geometry::mesh::{MeshData, merge_meshes};
 use misina_lab::geometry::par_map;
-use misina_lab::geometry::strand::{Bark, Strand, strand_mesh};
+use misina_lab::geometry::strand::{Bark, Bulge, Collar, Strand, sides_within, strand_mesh};
 use misina_lab::palette::{COLOR_STREAM, Response, shade, srgb};
 use misina_lab::params::{Label, Slider};
 use misina_lab::quantize::{Metric, farthest_first};
@@ -85,7 +85,8 @@ use misina_lab::scene::{
 use nalgebra::Point3;
 
 use super::fruit::{FruitConfig, FruitParams, Hung};
-use super::{Grow, SceneParams};
+use super::stem::{MIN_DETAIL, StemParams};
+use super::{Grow, SceneParams, vector};
 
 /// The mesh-library prefix the trusses register under.
 pub const PART: &str = "Truss";
@@ -100,8 +101,8 @@ const PEDICELS: &str = "Pedicels";
 /// The held segment of a bent truss's rod, from the stem's axis out along the
 /// peduncle, in meters: past the surface of the thickest stem, so a cut flush
 /// at `Cut` lands within a splinter of the first joint (`SPLINTER` in
-/// `misina_lab/isaaclab/cutting.py`).
-const HELD: f32 = 0.012;
+/// `misina_lab/isaaclab/cutting.py`) on the thinnest.
+const HELD: f32 = 0.0135;
 
 /// Length of one of the rod's moving segments, in meters: about ten to a
 /// medium truss, so the bend turns about 45° at a joint.
@@ -193,10 +194,22 @@ const MIN_RADIUS: f32 = 0.0005;
 const MIN_DIAMETER: f32 = 0.005;
 const ANGLE: (f32, f32) = (0.05, PI - RACHIS_TILT - MIN_TURN);
 
-/// Vertices around the peduncle and round a pedicel, and rings per meter.
+/// Vertices round a bent truss's segment tubes, and the fewest round any of
+/// its stems.
 const SIDES: usize = 6;
-const PEDICEL_SIDES: usize = 5;
-const DETAIL: f64 = 120.0;
+const MIN_SIDES: usize = 5;
+
+/// How far a truss's stems may stray from their shape at a stem `detail` of
+/// 1, in meters: four times closer than a stem, a truss being about that
+/// much thinner, and its meshes few.
+const TOLERANCE: f64 = 0.00015;
+
+/// How much a stalk swells where it leaves what it grows from, as a fraction
+/// of its radius, and over how far, in radii of what it leaves: a peduncle
+/// out of the stem, and a pedicel out of the rachis. How much the rachis
+/// swells at a node, and over how many of its own radii.
+const FLARE: (f64, f64) = (0.6, 1.5);
+const KNOT: (f64, f64) = (0.25, 1.5);
 
 /// A green peduncle.
 const COLOR: u32 = 0x6A8A34;
@@ -612,21 +625,51 @@ fn heading(angle: f32) -> Vec3 {
     Vec3::new(angle.sin(), 0.0, angle.cos())
 }
 
-fn strand(points: &[Vec3], radii: &[f32], sides: usize) -> Strand {
+/// A strand through `points`, swollen at `bulges` and collared at `collars`,
+/// meshed to `tolerance`.
+fn strand(
+    points: &[Vec3],
+    radii: &[f32],
+    tolerance: f64,
+    bulges: Vec<Bulge>,
+    collars: Vec<Collar>,
+) -> Strand {
+    let thickest = radii.iter().copied().fold(0.0, f32::max) as f64;
+    let sides = sides_within(thickest, tolerance).max(MIN_SIDES);
     let points = points
         .iter()
         .map(|p| Point3::new(p.x as f64, p.y as f64, p.z as f64))
         .collect();
     let radii = radii.iter().map(|r| *r as f64).collect();
-    Strand::new(points, radii, sides, DETAIL, Bark::none())
+    Strand {
+        bulges,
+        collars,
+        tolerance: Some(tolerance),
+        // Rings per meter go unread: the tolerance places the rings.
+        ..Strand::new(points, radii, sides, 0.0, Bark::none())
+    }
 }
 
-/// Builds one truss in its own frame: as one mesh if `whole`, and as a rod if
-/// `bent`.
+/// A stalk's flare where it leaves something `around` thick.
+fn flare(around: f32) -> Bulge {
+    Bulge {
+        at: 0.0,
+        width: FLARE.1 * around as f64,
+        height: FLARE.0,
+    }
+}
+
+/// Builds one truss in its own frame, its stems meshed to `tolerance`: as one
+/// mesh if `whole`, and as a rod if `bent`.
 ///
 /// Draws, off the config's own stream: the first rachis's kinks, then a
 /// branched truss's second rachis's.
-fn build_truss(config: &TrussConfig, whole: bool, bent: bool) -> Result<Built<Mesh>> {
+fn build_truss(
+    config: &TrussConfig,
+    tolerance: f64,
+    whole: bool,
+    bent: bool,
+) -> Result<Built<Mesh>> {
     let mut rng = Rng::new(config.seed);
     let axis = Axis::new(config, &mut rng);
     let (straight, fork) = (axis.straight, axis.fork());
@@ -670,6 +713,7 @@ fn build_truss(config: &TrussConfig, whole: bool, bent: bool) -> Result<Built<Me
             vec![base - hang * pitch * 0.5, base]
         };
         let mut radii = vec![r; points.len()];
+        let nodes = points.len();
         for (i, run) in runs.iter().enumerate() {
             points.push(run.from);
             radii.push(axis.radius_at(fork + i as f32 * pitch));
@@ -678,12 +722,21 @@ fn build_truss(config: &TrussConfig, whole: bool, bent: bool) -> Result<Built<Me
             points.push(last.from + last.along * axis.tip);
             radii.push(axis.radius_at(axis.length()));
         }
-        if arm == 0 {
-            main = Some(strand(&points, &radii, SIDES));
-        } else {
-            riders.push((fork, strand(&points, &radii, SIDES)));
-        }
+        // How far along its points each is.
+        let along: Vec<f32> = once(0.0)
+            .chain(points.windows(2).scan(0.0, |length, w| {
+                *length += w[0].distance(w[1]);
+                Some(*length)
+            }))
+            .collect();
 
+        // The peduncle flares out of the stem; the rachis swells at every
+        // node, round its pedicel, which flares out of it.
+        let mut bulges = Vec::new();
+        if arm == 0 {
+            bulges.push(flare(config.node.stem_radius));
+        }
+        let (mut collars, mut pedicels) = (Vec::new(), Vec::new());
         for (i, j) in fruits.into_iter().enumerate() {
             let run = runs[i];
             let tip = run.from + run.side * (PEDICEL.x * fruit) - Vec3::Z * (PEDICEL.y * fruit);
@@ -694,12 +747,32 @@ fn build_truss(config: &TrussConfig, whole: bool, bent: bool) -> Result<Built<Me
             if arm == 0 {
                 holds[j] = fork + i as f32 * pitch;
             }
-            riders.push((
+            let (at, around) = (along[nodes + i] as f64, radii[nodes + i]);
+            bulges.push(Bulge {
+                at,
+                width: KNOT.1 * around as f64,
+                height: KNOT.0,
+            });
+            collars.push(Collar {
+                at,
+                toward: vector(mid - run.from),
+                radius: thin as f64,
+            });
+            let pedicel = [run.from, mid, over, tip];
+            let flared = vec![flare(around)];
+            pedicels.push((
                 holds[j],
-                strand(&[run.from, mid, over, tip], &[thin; 4], PEDICEL_SIDES),
+                strand(&pedicel, &[thin; 4], tolerance, flared, Vec::new()),
             ));
             tips[j] = tip;
         }
+        let stem = strand(&points, &radii, tolerance, bulges, collars);
+        if arm == 0 {
+            main = Some(stem);
+        } else {
+            riders.push((fork, stem));
+        }
+        riders.extend(pedicels);
     }
 
     let main = main.expect("a truss has a first rachis");
@@ -764,6 +837,7 @@ pub(crate) fn build(
     mut library: Library,
     scene: Res<SceneParams>,
     params: Res<TrussParams>,
+    stem: Res<StemParams>,
     fruit_params: Res<FruitParams>,
     trusses: Query<(Entity, &Order, &TrussConfig)>,
 ) -> Result<()> {
@@ -795,8 +869,9 @@ pub(crate) fn build(
             way.0 = true;
         }
     }
+    let tolerance = TOLERANCE / stem.detail.max(MIN_DETAIL) as f64;
     let shapes = par_map(&book.representatives, |index, config| {
-        build_truss(config, ways[index].0, ways[index].1)
+        build_truss(config, tolerance, ways[index].0, ways[index].1)
     });
 
     // Tubes and pedicels are numbered across the whole layer, because how many
