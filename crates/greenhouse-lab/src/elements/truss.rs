@@ -79,8 +79,7 @@ use misina_lab::params::{Label, Slider};
 use misina_lab::quantize::{Metric, farthest_first};
 use misina_lab::rng::{Rng, salt};
 use misina_lab::scene::{
-    Library, Order, cable, configs_changed, rebase, segment_frames, segment_of, segment_tubes,
-    spawn_rod,
+    Library, Order, cable, configs_changed, rebase, segment_frames, segment_of, spawn_rod,
 };
 use nalgebra::Point3;
 
@@ -194,9 +193,7 @@ const MIN_RADIUS: f32 = 0.0005;
 const MIN_DIAMETER: f32 = 0.005;
 const ANGLE: (f32, f32) = (0.05, PI - RACHIS_TILT - MIN_TURN);
 
-/// Vertices round a bent truss's segment tubes, and the fewest round any of
-/// its stems.
-const SIDES: usize = 6;
+/// The fewest vertices round any of a truss's stems.
 const MIN_SIDES: usize = 5;
 
 /// How far a truss's stems may stray from their shape at a stem `detail` of
@@ -570,8 +567,17 @@ struct Rod<M> {
 
 impl Rod<Mesh> {
     /// The rod cut from `axis`, carrying each of `riders` on the segment at
-    /// its station. Its points are evenly spaced past the held segment.
-    fn new(axis: &Axis, riders: &[(f32, Strand)], holds: Vec<f32>, bend: f32) -> Result<Self> {
+    /// its station, its tubes meshed to `tolerance` and swollen where `main`,
+    /// the strand along the axis, is. Its points are evenly spaced past the
+    /// held segment.
+    fn new(
+        axis: &Axis,
+        main: &Strand,
+        riders: &[(f32, Strand)],
+        tolerance: f64,
+        holds: Vec<f32>,
+        bend: f32,
+    ) -> Result<Self> {
         let length = axis.length();
         let held = HELD.min(length / 2.0);
         let count = ((length - held) / SEGMENT).round().max(2.0) as usize;
@@ -581,6 +587,32 @@ impl Rod<Mesh> {
         let points: Vec<[f32; 3]> = stations.iter().map(|s| axis.at(*s).to_array()).collect();
         let widths: Vec<f32> = stations.iter().map(|s| 2.0 * axis.radius_at(*s)).collect();
         let frames = segment_frames(&points);
+        // Each tube runs straight along its segment and overruns both ends by
+        // its radius there, as a `segment_tubes` tube does, and swells where
+        // `main` does. `main`'s swellings sit at their distance along its
+        // points, under a millimeter short of their station past the bend.
+        let tubes = frames
+            .iter()
+            .enumerate()
+            .map(|(k, frame)| {
+                let (from, to) = (Vec3::from(points[k]), Vec3::from(points[k + 1]));
+                let (base, top) = (widths[k] / 2.0, widths[k + 1] / 2.0);
+                let run = (to - from).normalize();
+                let mut tube = strand(
+                    &[from - run * base, to + run * top],
+                    &[base, top],
+                    tolerance,
+                    main.bulges.clone(),
+                    main.collars.clone(),
+                );
+                // Measured from where the tube starts instead.
+                let start = (stations[k] - base) as f64;
+                tube.bulges.iter_mut().for_each(|b| b.at -= start);
+                tube.collars.iter_mut().for_each(|c| c.at -= start);
+                let into = rebase(frame, &Transform::IDENTITY);
+                Ok(strand_mesh(&tube)?.transformed(&into).to_mesh())
+            })
+            .collect::<Result<_>>()?;
         let mut carried = vec![Vec::new(); frames.len()];
         for (at, rider) in riders {
             let k = segment_of(&stations, *at);
@@ -588,10 +620,7 @@ impl Rod<Mesh> {
             carried[k].push(strand_mesh(rider)?.transformed(&into));
         }
         Ok(Self {
-            tubes: segment_tubes(&points, &widths, SIDES)
-                .iter()
-                .map(MeshData::to_mesh)
-                .collect(),
+            tubes,
             pedicels: carried
                 .iter()
                 .map(|meshes| (!meshes.is_empty()).then(|| merge_meshes(meshes).to_mesh()))
@@ -787,7 +816,7 @@ fn build_truss(
     };
     let middle = straight + (fork - straight) / 2.0;
     let rod = if bent {
-        Some(Rod::new(&axis, &riders, holds, middle)?)
+        Some(Rod::new(&axis, &main, &riders, tolerance, holds, middle)?)
     } else {
         None
     };
@@ -1174,6 +1203,47 @@ mod tests {
                 rods > 0 && rods < trusses.len(),
                 "branched {branched}: {rods} of {} bent",
                 trusses.len()
+            );
+        }
+    }
+
+    /// A bent truss's tubes swell as a rigid truss's stems do: the held one
+    /// flares out of the stem, and the one holding each pedicel swells round
+    /// it.
+    #[test]
+    fn a_bent_truss_swells_where_a_rigid_one_does() {
+        let node = Node {
+            stem_radius: 0.006,
+            rank: 0.0,
+            growth: 1.0,
+            flexible: true,
+        };
+        let config = TrussConfig::new(&TrussParams::default(), 0, 0, node);
+        let rod = build_truss(&config, TOLERANCE, false, true)
+            .unwrap()
+            .rod
+            .unwrap();
+        // How far tube `k` reaches off its segment's axis, as a fraction of
+        // the least radius it tapers between.
+        let swell = |k: usize| {
+            let points = rod.tubes[k]
+                .attribute(Mesh::ATTRIBUTE_POSITION)
+                .and_then(|a| a.as_float3())
+                .unwrap();
+            let widest = points.iter().map(|p| p[0].hypot(p[1])).fold(0.0, f32::max);
+            widest / (rod.widths[k].min(rod.widths[k + 1]) / 2.0) - 1.0
+        };
+        assert!(
+            swell(0) > FLARE.0 as f32 / 2.0,
+            "the held tube swells {}",
+            swell(0)
+        );
+        for hold in &rod.holds {
+            let k = segment_of(&rod.stations, *hold);
+            assert!(
+                swell(k) > KNOT.0 as f32 / 2.0,
+                "tube {k} swells {}",
+                swell(k)
             );
         }
     }
