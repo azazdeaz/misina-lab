@@ -652,10 +652,19 @@ fn grow(
     lie: &mut Rng,
     surface: &mut Rng,
 ) -> Stem {
-    // The radius from `HEAD_REACH` down, which its head at `HEAD_AT` is
-    // thinned from.
+    // The girth undulates along the stem in two waves.
+    let waves: [(f32, f32); 2] = std::array::from_fn(|_| {
+        let length = surface.range(GIRTH_WAVES.0, GIRTH_WAVES.1) as f32;
+        (TAU / length, surface.unit() as f32 * TAU)
+    });
+    let undulation = |d: f32| {
+        let sum: f32 = waves.iter().map(|(n, phase)| (n * d + phase).sin()).sum();
+        1.0 + GIRTH_WAVE * sum / 2.0
+    };
+    // The radius the stem is thinned and undulated from, so that its head at
+    // `HEAD_AT` is as thick as drawn.
     let drawn = rng.range(1.0 - HEAD_JITTER, 1.0 + HEAD_JITTER) as f32;
-    let radius = live.head_diameter / 2.0 * drawn / thinning(HEAD_AT);
+    let radius = live.head_diameter / 2.0 * drawn / (thinning(HEAD_AT) * undulation(HEAD_AT));
     let stray = rng.range(1.0 - LOWERED_JITTER, 1.0 + LOWERED_JITTER) as f32;
     let round = Round {
         from: live.ends.0,
@@ -867,14 +876,7 @@ fn grow(
         join.lerp(tip, f) + bow * (PI * f).sin() + kinked.extend(0.0)
     };
     // Thinned toward the head and undulating along it.
-    let waves: [(f32, f32); 2] = std::array::from_fn(|_| {
-        let length = surface.range(GIRTH_WAVES.0, GIRTH_WAVES.1) as f32;
-        (TAU / length, surface.unit() as f32 * TAU)
-    });
-    let girth = |d: f32| {
-        let undulating: f32 = waves.iter().map(|(n, phase)| (n * d + phase).sin()).sum();
-        radius * thinning(d) * (1.0 + GIRTH_WAVE * undulating / 2.0)
-    };
+    let girth = |d: f32| radius * thinning(d) * undulation(d);
 
     // A control point at the join, at each node and each kinked truss of the
     // rise, and at the head.
@@ -1472,6 +1474,60 @@ mod tests {
                     "{path}: a leaf at each of the top {count} nodes"
                 );
             }
+        }
+    }
+
+    /// A stem's head, `HEAD_AT` below its tip, is as thick as it was drawn
+    /// about `head_diameter`, however its girth undulates there.
+    #[test]
+    fn a_head_is_as_thick_as_its_diameter_says() {
+        let live = Live {
+            rim: 0.56,
+            head: 4.28,
+            harvest: 1.2,
+            trusses: 9,
+            spread: 0.35,
+            head_diameter: 0.01,
+            ends: (0.2, 39.8),
+            flexible_below: 0.0,
+            leaves_kept: 16,
+        };
+        let root = Vec3::new(1.0, 0.0, 0.64);
+        for seed in 0..32 {
+            // `rng` draws how thick the head is first.
+            let drawn = Rng::new(seed).range(1.0 - HEAD_JITTER, 1.0 + HEAD_JITTER) as f32;
+            let stem = grow(
+                root,
+                1.0,
+                12.0,
+                0.0,
+                0.8,
+                live,
+                &mut Rng::new(seed),
+                &mut Rng::new(seed + 100),
+                &mut Rng::new(seed + 200),
+            );
+            // The radius `HEAD_AT` down from the tip, between the control
+            // points either side of it, by their length back from the tip.
+            let back: Vec<(f32, f32)> = stem
+                .points
+                .iter()
+                .zip(&stem.radii)
+                .rev()
+                .scan(
+                    (0.0, *stem.points.last().unwrap()),
+                    |(length, last), (p, r)| {
+                        *length += last.distance(*p);
+                        *last = *p;
+                        Some((*length, *r))
+                    },
+                )
+                .collect();
+            let k = back.iter().position(|(d, _)| *d >= HEAD_AT).unwrap();
+            let ((d0, r0), (d1, r1)) = (back[k - 1], back[k]);
+            let head = 2.0 * (r0 + (r1 - r0) * (HEAD_AT - d0) / (d1 - d0));
+            let off = head / (live.head_diameter * drawn) - 1.0;
+            assert!(off.abs() < 0.01, "seed {seed}: head {head} m, {off} off");
         }
     }
 
