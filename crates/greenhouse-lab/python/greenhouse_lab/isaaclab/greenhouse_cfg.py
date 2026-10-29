@@ -133,13 +133,24 @@ class StemCfg:
 
     harvest_height: float = 1.2
     """Height above the floor of the lowest truss still on a stem once the crop is in
-    full production, in meters: where a harvesting arm reaches to. The stem below it
-    has been picked and stripped bare.
+    full production, in meters: where a harvesting arm reaches to. A stem's lowest
+    hangs up to a week's growth above it, the higher the sooner after its last
+    picking, and a stem that grows faster than the rest hangs it up to 5% of its live
+    height lower. The stem below it has been picked and stripped bare.
     """
     trusses: int = 9
     """Trusses on a stem in full production, from the lowest still on it up to the head.
     At a truss a week, also the weeks from a truss flowering at the head to its
     picking.
+    """
+    development_spread: float = 0.2
+    """How far stems drift apart in their development, in weeks: each truss comes a
+    little sooner or later than the last, so a stem `week` weeks old runs up to this
+    times √`week` ahead of the crop or behind it, its trusses hanging that much of
+    a week's growth lower or higher and ripening that much sooner or later. At 0.2,
+    up to 0.8 of a week at week 16; at 0 every stem keeps in step with the crop, and
+    its trusses stray from its neighbours' heights only as far as it grows up to 5%
+    faster or slower.
     """
     leaves_kept: int = 16
     """Leaves on a stem, counted down from the head. Growers strip the ones below, so
@@ -153,6 +164,13 @@ class StemCfg:
     turned_to_path: float = 0.8
     """Share of trusses turned to face the path. The rest face anywhere, into the crop
     as often as not, where a harvester has to skip them.
+    """
+    head_diameter: float = 0.01
+    """Diameter of a stem's head, in meters: how thick it is 20 cm below its tip, where
+    growers measure it. About 10 mm on a balanced crop; under 8 mm the plant is spent
+    on its fruit, over 12 mm it grows leaf, and beefsteak stems run thicker than
+    cherry. Each stem draws its own about it, and is half as thick again from 0.8 m
+    below its tip down.
     """
     flexible_below: float = 0.0
     """Height above the floor, in meters, below which a truss bends: one whose node is
@@ -257,8 +275,8 @@ class FruitCfg:
     """
 
     ripe_trusses: float = 1.0
-    """Trusses per stem that have coloured in full production, counted up from the
-    lowest: a fraction is the next one part way.
+    """Trusses per stem that have coloured in full production, on average, counted up
+    from the lowest: a fraction is the next one part way.
     """
     spread: float = 0.2
     """How far a truss's tip fruit lags behind its base fruit, as a share of the

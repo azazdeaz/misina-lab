@@ -12,7 +12,7 @@
 //!         ┬   the hook on the wire, its twine reel HOOK below
 //!         │   the head, tied under the reel once it has grown that tall
 //!         │   a leaf at each node down from the head, `leaves_kept` of them
-//!         ╲   a truss every third internode, the lowest at `harvest_height`;
+//!         ╲   a truss every third internode, the lowest about `harvest_height`;
 //!         │   the stem kinks at each one, away from it
 //!       ╭─╯   the take-off, out of the bundle up to below the lowest truss
 //!  ~~~~~╯     the lowered run: all of the stem the wire is too low for
@@ -35,9 +35,9 @@
 //! A tomato's stem is sympodial: each truss ends a shoot, and the stem
 //! carries on from a side shoot below it, so the stem kinks at every truss,
 //! and a little at every node, away from its leaf. On the rise the kinks are
-//! level, so a node keeps its height. A stem thickens as it ages, down from
-//! its head, thins to a point at its tip, and its girth undulates slowly
-//! along it.
+//! level, so a node keeps its height. A stem thickens over its first 0.8 m
+//! down from its head to half as thick again as its head, thins to a point
+//! at its tip, and its girth undulates slowly along it.
 //!
 //! A stem swells at every node and every truss, the more on the side its leaf
 //! or its truss leaves, and the swelling runs on down the stem as a leaf's
@@ -52,12 +52,19 @@
 //! from `harvest_height` to the head shared out between `trusses`, 0.34 m at
 //! the defaults, inside the 25–35 cm a week growers measure. A plant goes in
 //! [`TRANSPLANT`] tall with its first truss flowering at its head. A truss
-//! flowers at the head every week, sets its fruit a week later, by then a
-//! week's growth down the stem, and is picked `trusses` weeks after it
-//! flowered. So a young crop carries green fruit only, and its first trusses
-//! colour about the week its heads reach the wire, the ninth at the defaults.
-//! How far a truss's fruit have grown and how ripe they are follow from its
-//! age.
+//! flowers at the head every week, sets its fruit within the week, and is
+//! picked `trusses` weeks after it flowered, by then that many weeks' growth
+//! down the stem. So a young crop carries green fruit only, and its first
+//! trusses colour about the week its heads reach the wire, the ninth at the
+//! defaults. How far a truss's fruit have grown and how ripe they are follow
+//! from its age.
+//!
+//! No two stems keep in step. Each truss comes a little sooner or later than
+//! the last, so the stems drift apart as the crop ages: each runs ahead of
+//! the crop or behind it by up to `development_spread` times the square root
+//! of its age, in weeks, and grows up to [`GROWTH_JITTER`] faster or slower.
+//! Its trusses hang that much higher or lower than its neighbours', and
+//! ripen that much later or sooner.
 //!
 //! A leaf grows at every node, the leaves winding round the stem, and a truss
 //! in every third internode. A node is placed by the length of stem between
@@ -187,11 +194,16 @@ const HOOK_LENGTH: f32 = 0.22;
 const HOOK_RADIUS: f32 = 0.002;
 const REEL: Vec2 = Vec2::new(0.018, 0.02);
 
-/// A stem's radius, in meters, drawn per stem: 12 to 20 mm across.
-const RADIUS: (f64, f64) = (0.006, 0.010);
+/// Where a stem's head is measured, in meters below its tip, as growers
+/// measure it 15–25 cm down; and how far a stem's head strays from
+/// `head_diameter`, as a fraction.
+const HEAD_AT: f32 = 0.2;
+const HEAD_JITTER: f64 = 0.15;
 
 /// How much thinner a stem is at its head, as a fraction, and over how much of
-/// the rise below the head it thins, in meters.
+/// the rise below the head it thins, in meters: at `HEAD_AT` two thirds as
+/// thick as from `HEAD_REACH` down, a 10 mm head over the 13–16 mm measured
+/// at the lowest trusses.
 const HEAD_TAPER: f32 = 0.4;
 const HEAD_REACH: f32 = 0.8;
 
@@ -237,12 +249,8 @@ const KINK: (f64, f64) = (0.006, 0.016);
 const NODE_KINK: f64 = 0.002;
 const RUN_KINK: f64 = 0.015;
 
-/// How much thicker a stem is at its oldest, as a fraction, and the stem down
-/// from the head it takes to get there, in meters; and how much its girth
-/// undulates, as a fraction, in two waves, each between these lengths, in
-/// meters (est.).
-const OLD_GIRTH: f32 = 0.25;
-const OLD_REACH: f32 = 5.0;
+/// How much a stem's girth undulates, as a fraction, in two waves, each
+/// between these lengths, in meters (est.).
 const GIRTH_WAVE: f32 = 0.06;
 const GIRTH_WAVES: (f64, f64) = (0.5, 1.5);
 
@@ -259,6 +267,10 @@ const RUN_TURN: f32 = 0.2;
 /// How far a run's length varies about what its stem has grown past the
 /// wire, as a fraction.
 const LOWERED_JITTER: f64 = 0.15;
+
+/// How much faster or slower a stem grows than the crop, as a fraction, so
+/// how much further apart or nearer its trusses hang (est.).
+const GROWTH_JITTER: f64 = 0.05;
 
 /// How much further an extra stem is lowered, in meters, so that it rises
 /// between its plant's two rather than beside one of them, from the week it
@@ -339,7 +351,10 @@ const PLASTIC: Response = Response {
 pub struct StemParams {
     /// Height above the floor of the lowest truss still on a stem once the
     /// crop is in full production, in meters: where a harvesting arm reaches
-    /// to. The stem below it has been picked and stripped bare.
+    /// to. A stem's lowest hangs up to a week's growth above it, the higher
+    /// the sooner after its last picking, and a stem that grows faster than
+    /// the rest hangs it up to 5% of its live height lower. The stem below it
+    /// has been picked and stripped bare.
     #[reflect(@Slider { min: 0.8, max: 1.8, step: 0.05 })]
     pub harvest_height: f32,
     /// Trusses on a stem in full production, from the lowest still on it up
@@ -347,6 +362,16 @@ pub struct StemParams {
     /// at the head to its picking.
     #[reflect(@Slider { min: 6.0, max: 12.0, step: 1.0 })]
     pub trusses: u32,
+    /// How far stems drift apart in their development, in weeks: each truss
+    /// comes a little sooner or later than the last, so a stem `week` weeks
+    /// old runs up to this times √`week` ahead of the crop or behind it, its
+    /// trusses hanging that much of a week's growth lower or higher and
+    /// ripening that much sooner or later. At 0.2, up to 0.8 of a week at
+    /// week 16; at 0 every stem keeps in step with the crop, and its trusses
+    /// stray from its neighbours' heights only as far as it grows up to 5%
+    /// faster or slower.
+    #[reflect(@Slider { min: 0.0, max: 0.5, step: 0.01 })]
+    pub development_spread: f32,
     /// Leaves on a stem, counted down from the head. Growers strip the ones
     /// below, so the stem under them is bare, and the two trusses nearest
     /// their picking always hang on bare stem however many are kept.
@@ -360,6 +385,13 @@ pub struct StemParams {
     /// the crop as often as not, where a harvester has to skip them.
     #[reflect(@Slider { min: 0.0, max: 1.0, step: 0.05 }, @Label("Trusses turned to the path"))]
     pub turned_to_path: f32,
+    /// Diameter of a stem's head, in meters: how thick it is 20 cm below its
+    /// tip, where growers measure it. About 10 mm on a balanced crop; under
+    /// 8 mm the plant is spent on its fruit, over 12 mm it grows leaf, and
+    /// beefsteak stems run thicker than cherry. Each stem draws its own about
+    /// it, and is half as thick again from 0.8 m below its tip down.
+    #[reflect(@Slider { min: 0.006, max: 0.014, step: 0.0005 })]
+    pub head_diameter: f32,
     /// Height above the floor, in meters, below which a truss bends: one
     /// whose node is lower is exported as a rod a physics engine bends and a
     /// robot can cut, carrying its fruit, rather than as a static mesh. 0
@@ -384,9 +416,11 @@ impl Default for StemParams {
         Self {
             harvest_height: 1.2,
             trusses: 9,
+            development_spread: 0.2,
             leaves_kept: 16,
             extra_stems: 0.0,
             turned_to_path: 0.8,
+            head_diameter: 0.01,
             flexible_below: 0.0,
             detail: 0.5,
         }
@@ -503,7 +537,12 @@ struct Live {
     /// The lowest truss's height in full production.
     harvest: f32,
     trusses: u32,
+    /// How far a stem's development strays from the crop's, in weeks, times
+    /// the square root of its age.
+    development_spread: f32,
     spread: f32,
+    /// How thick a stem's head is, about which each stem draws its own.
+    head_diameter: f32,
     /// Where along the row the runs turn round the gutter.
     ends: (f32, f32),
     /// How high a truss's node may be and the truss still bend.
@@ -602,12 +641,19 @@ fn zigzag(knots: &[(f32, Vec2)], at: f32) -> Vec2 {
     }
 }
 
+/// How thick a stem is `d` below its tip, as a fraction of how thick it is
+/// from `HEAD_REACH` down: thinner toward its head, and to a point at its tip.
+fn thinning(d: f32) -> f32 {
+    (1.0 - HEAD_TAPER * smooth(1.0 - d / HEAD_REACH)) * (1.0 - TIP.0 * smooth(1.0 - d / TIP.1))
+}
+
 /// Grows the stem rooted at `root` that starts round on `side`, `age` weeks
 /// after it was planted and lowered `more` further than its growth calls for,
 /// from its own three streams.
 ///
-/// The *draw order* is part of this element's output. `rng` draws the
-/// radius, how far the run's length strays, where across and up the bundle
+/// The *draw order* is part of this element's output. `rng` draws how thick
+/// its head is, how far its development runs ahead, how much faster it grows,
+/// how far the run's length strays, where across and up the bundle
 /// the run lies, the hook's place along the wire, the bow's bearing and the
 /// ripening offset, then three per hung truss — whether it was turned to the
 /// path, how far it wanders off it, and the bearing it faces when it was not
@@ -635,7 +681,24 @@ fn grow(
     lie: &mut Rng,
     surface: &mut Rng,
 ) -> Stem {
-    let radius = rng.range(RADIUS.0, RADIUS.1) as f32;
+    // The girth undulates along the stem in two waves.
+    let waves: [(f32, f32); 2] = std::array::from_fn(|_| {
+        let length = surface.range(GIRTH_WAVES.0, GIRTH_WAVES.1) as f32;
+        (TAU / length, surface.unit() as f32 * TAU)
+    });
+    let undulation = |d: f32| {
+        let sum: f32 = waves.iter().map(|(n, phase)| (n * d + phase).sin()).sum();
+        1.0 + GIRTH_WAVE * sum / 2.0
+    };
+    // The radius the stem is thinned and undulated from, so that its head at
+    // `HEAD_AT` is as thick as drawn.
+    let drawn = rng.range(1.0 - HEAD_JITTER, 1.0 + HEAD_JITTER) as f32;
+    let radius = live.head_diameter / 2.0 * drawn / (thinning(HEAD_AT) * undulation(HEAD_AT));
+    // How far its development runs ahead of the crop's, the further the
+    // older it is, so how old it is as a stem; and how much faster it grows.
+    let ahead = live.development_spread * age.sqrt() * rng.range(-1.0, 1.0) as f32;
+    let age = (age + ahead).max(0.0);
+    let growth = rng.range(1.0 - GROWTH_JITTER, 1.0 + GROWTH_JITTER) as f32;
     let stray = rng.range(1.0 - LOWERED_JITTER, 1.0 + LOWERED_JITTER) as f32;
     let round = Round {
         from: live.ends.0,
@@ -650,9 +713,12 @@ fn grow(
 
     // A week's growth: the live height in full production, from the lowest
     // truss to the head, shared out between the trusses on it, one a week.
+    // A stem that grows faster spaces them further apart, so hangs its lowest
+    // lower.
     let bundle = live.rim + radius + BUNDLE.y;
     let head = live.head.max(bundle + CLIMB + 2.0 * MIN_LIVE);
     let harvest = live.harvest.clamp(bundle + CLIMB, head - MIN_LIVE);
+    let harvest = head - (head - harvest) * growth;
     let weekly = (head - harvest) / live.trusses as f32;
     let node = weekly / NODES_PER_TRUSS as f32;
     // How tall it would stand, so how much of it the wire is too low for.
@@ -668,12 +734,13 @@ fn grow(
     };
 
     // A truss flowers at the head every week, the transplant's first, and
-    // `t` weeks on hangs `t` weeks' growth below it: hung once it has set its
-    // fruit, a week on, and picked `trusses` weeks on. The oldest, the
-    // lowest, first, each with the yaw it faces while it hangs.
+    // `t` weeks on hangs `t` weeks' growth below it: hung from then on, its
+    // fruit set within the week, and picked `trusses` weeks on, so a stem in
+    // full production carries `trusses` of them whatever the day. The
+    // oldest, the lowest, first, each with the yaw it faces while it hangs.
     let flowered: Vec<(f32, Option<f32>)> = (0..)
         .map(|f| age - f as f32)
-        .take_while(|t| *t >= 1.0)
+        .take_while(|t| *t > 0.0)
         .map(|t| {
             let hung = t <= live.trusses as f32;
             let yaw = hung.then(|| {
@@ -796,8 +863,9 @@ fn grow(
     let reach = join.distance(tip);
 
     // A level kink at every truss up the rise, hung or picked, away from
-    // the truss while it hangs, and none at the head or the take-off; and
-    // the bearing each of those trusses leaves the stem at.
+    // the truss while it hangs, fading out over the top node and none at the
+    // head or the take-off; and the bearing each of those trusses leaves the
+    // stem at.
     let mut knots = vec![(0.0, Vec2::ZERO)];
     let mut bearings = Vec::new();
     for (t, yaw) in flowered.iter().rev() {
@@ -806,7 +874,8 @@ fn grow(
             break;
         }
         let away = yaw.map_or_else(|| lie.unit() as f32 * TAU, |yaw| yaw + PI);
-        knots.push((d, Vec2::from_angle(away) * lie.range(KINK.0, KINK.1) as f32));
+        let kink = lie.range(KINK.0, KINK.1) as f32 * smooth(d / node);
+        knots.push((d, Vec2::from_angle(away) * kink));
         bearings.push(away - PI);
     }
     knots.push((reach, Vec2::ZERO));
@@ -846,20 +915,8 @@ fn grow(
         let kinked = zigzag(&knots, d) + zigzag(&nodding, d);
         join.lerp(tip, f) + bow * (PI * f).sin() + kinked.extend(0.0)
     };
-    // Thinner near the head and to a point at its tip, thicker as it ages,
-    // and undulating along it.
-    let waves: [(f32, f32); 2] = std::array::from_fn(|_| {
-        let length = surface.range(GIRTH_WAVES.0, GIRTH_WAVES.1) as f32;
-        (TAU / length, surface.unit() as f32 * TAU)
-    });
-    let girth = |d: f32| {
-        let undulating: f32 = waves.iter().map(|(n, phase)| (n * d + phase).sin()).sum();
-        radius
-            * (1.0 - HEAD_TAPER * smooth(1.0 - d / HEAD_REACH))
-            * (1.0 - TIP.0 * smooth(1.0 - d / TIP.1))
-            * (1.0 + OLD_GIRTH * smooth(d / OLD_REACH))
-            * (1.0 + GIRTH_WAVE * undulating / 2.0)
-    };
+    // Thinned toward the head and undulating along it.
+    let girth = |d: f32| radius * thinning(d) * undulation(d);
 
     // A control point at the join, at each node and each kinked truss of the
     // rise, and at the head.
@@ -909,10 +966,11 @@ fn grow(
     };
     let radii = dists.iter().map(|d| girth(*d)).collect();
 
-    // The harvest band: the stem below where a truss has `BARE_TRUSSES`
-    // weeks left before its picking. As many leaves above it as growers keep
-    // stay on.
-    let band = weekly * (live.trusses as f32 - BARE_TRUSSES as f32);
+    // The harvest band: the stem below the oldest truss with `BARE_TRUSSES`
+    // weeks or more left before its picking, or below where it will hang. As
+    // many leaves above it as growers keep stay on.
+    let due = live.trusses as f32 - BARE_TRUSSES as f32;
+    let band = weekly * (due - (due - age).rem_euclid(1.0));
     let kept = below
         .iter()
         .take_while(|d| **d < band)
@@ -1136,7 +1194,9 @@ fn author(
         head: wire.height - HOOK_LENGTH,
         harvest: params.harvest_height,
         trusses: params.trusses.max(1),
+        development_spread: params.development_spread,
         spread: wire.spread,
+        head_diameter: params.head_diameter,
         ends: (RUN_TURN, (layout.length - RUN_TURN).max(RUN_TURN)),
         flexible_below: params.flexible_below,
         leaves_kept: params.leaves_kept,
@@ -1326,15 +1386,18 @@ mod tests {
     }
 
     /// On every stem in full production the lowest truss hangs less than a
-    /// week's growth above the harvest height and the rest a week's growth
-    /// apart above it, 25 to 35 cm at the defaults, and every truss carries
-    /// its peduncle and the two frames a gripper takes it by. A leaf hangs at
-    /// each of the top `leaves_kept` nodes, on the stem's axis half a node off
-    /// the trusses, a childless prim that references its mesh, and none in
-    /// the harvest band round the two trusses nearest their picking. The
-    /// stem's colliders chain straight through every joint between them. At
-    /// the defaults with an extra stem on half the plants, on a low gutter
-    /// under a high wire, and on a stem too short for the leaves asked for.
+    /// week's growth above the harvest height, give or take how much faster
+    /// the stem grows, and the rest a week's growth apart above it, 34 cm at
+    /// the defaults give or take the same, and every truss carries its
+    /// peduncle and the two frames a gripper takes it by. The stems are out
+    /// of step, so their lowest trusses hang over most of a week's growth. A
+    /// leaf hangs at each of the top `leaves_kept` nodes down from the newest,
+    /// on the stem's axis half a node off the trusses, a childless prim that
+    /// references its mesh, and none in the harvest band round the two
+    /// trusses nearest their picking. The stem's colliders chain straight
+    /// through every joint between them. At the defaults with an extra stem
+    /// on half the plants, on a low gutter under a high wire, and on a stem
+    /// too short for the leaves asked for.
     #[test]
     fn trusses_and_leaves_hang_at_the_stems_nodes() {
         let extra: fn(&mut GreenhouseParams) = |p| p.stem.extra_stems = 0.5;
@@ -1343,7 +1406,7 @@ mod tests {
             (p.stem.harvest_height, p.stem.trusses) = (0.8, 12);
         };
         let short: fn(&mut GreenhouseParams) = |p| (p.stem.trusses, p.stem.leaves_kept) = (6, 21);
-        for (edit, growth) in [(extra, 0.25..=0.35), (tall, 0.0..=1.0), (short, 0.0..=1.0)] {
+        for (edit, growth) in [(extra, 0.32..=0.36), (tall, 0.0..=1.0), (short, 0.0..=1.0)] {
             let mut params = small();
             edit(&mut params);
             let stem = params.stem.clone();
@@ -1387,6 +1450,10 @@ mod tests {
                 stems.entry(on).or_default()[0].push((path, node));
             }
             assert!(!stems.is_empty());
+            // How far into its week each stem is, as the share of a week's
+            // growth its lowest truss hangs below where it would at the
+            // week's start.
+            let mut phases = Vec::new();
             for (on, [mut trusses, leaves]) in stems {
                 trusses.sort_by(|a, b| a.0.cmp(&b.0));
                 let (path, lowest) = &trusses[0];
@@ -1394,8 +1461,10 @@ mod tests {
                 assert_eq!(trusses.len(), stem.trusses as usize, "{path}");
                 let per = lowest.distance(top) / (trusses.len() - 1) as f32;
                 assert!(growth.contains(&per), "{path}: {per} m of stem a truss");
+                let faster = GROWTH_JITTER as f32 * per * stem.trusses as f32;
                 assert!(
-                    (stem.harvest_height..stem.harvest_height + per).contains(&lowest.z),
+                    (stem.harvest_height - faster..stem.harvest_height + per + faster)
+                        .contains(&lowest.z),
                     "{path} hangs at {}",
                     lowest.z
                 );
@@ -1433,7 +1502,12 @@ mod tests {
                 let axis: Vec<Vec3> = trusses.iter().map(|(_, at)| *at).chain([head]).collect();
                 let nodes = NODES_PER_TRUSS * stem.trusses;
                 let node = (top.z - lowest.z) / (nodes - NODES_PER_TRUSS) as f32;
+                phases.push(
+                    (head.z - lowest.z) / node / NODES_PER_TRUSS as f32 - (stem.trusses - 1) as f32,
+                );
                 let band = lowest.z + (BARE_TRUSSES * NODES_PER_TRUSS) as f32 * node;
+                // The newest node, half a node to a node and a half below the head.
+                let newest = ((head.z - lowest.z) / node - 1.0 + 1e-3).floor() as u32;
                 let mut kept: Vec<u32> = leaves
                     .iter()
                     .map(|(path, at)| {
@@ -1449,13 +1523,74 @@ mod tests {
                     })
                     .collect();
                 kept.sort();
-                let count = stem.leaves_kept.min(nodes - BARE_TRUSSES * NODES_PER_TRUSS);
+                let count = stem
+                    .leaves_kept
+                    .min(newest + 1 - BARE_TRUSSES * NODES_PER_TRUSS);
                 assert_eq!(
                     kept,
-                    (nodes - count..nodes).collect::<Vec<_>>(),
+                    (newest + 1 - count..=newest).collect::<Vec<_>>(),
                     "{path}: a leaf at each of the top {count} nodes"
                 );
             }
+            let (first, last) = phases
+                .iter()
+                .fold((f32::MAX, f32::MIN), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
+            assert!(last - first > 0.5, "in step: {first} to {last} of a week");
+        }
+    }
+
+    /// A stem's head, `HEAD_AT` below its tip, is as thick as it was drawn
+    /// about `head_diameter`, however its girth undulates there.
+    #[test]
+    fn a_head_is_as_thick_as_its_diameter_says() {
+        let live = Live {
+            rim: 0.56,
+            head: 4.28,
+            harvest: 1.2,
+            trusses: 9,
+            development_spread: 0.0,
+            spread: 0.35,
+            head_diameter: 0.01,
+            ends: (0.2, 39.8),
+            flexible_below: 0.0,
+            leaves_kept: 16,
+        };
+        let root = Vec3::new(1.0, 0.0, 0.64);
+        for seed in 0..32 {
+            // `rng` draws how thick the head is first.
+            let drawn = Rng::new(seed).range(1.0 - HEAD_JITTER, 1.0 + HEAD_JITTER) as f32;
+            let stem = grow(
+                root,
+                1.0,
+                12.0,
+                0.0,
+                0.8,
+                live,
+                &mut Rng::new(seed),
+                &mut Rng::new(seed + 100),
+                &mut Rng::new(seed + 200),
+            );
+            // The radius `HEAD_AT` down from the tip, between the control
+            // points either side of it, by their length back from the tip.
+            let back: Vec<(f32, f32)> = stem
+                .points
+                .iter()
+                .zip(&stem.radii)
+                .rev()
+                .scan(
+                    (0.0, *stem.points.last().unwrap()),
+                    |(length, last), (p, r)| {
+                        *length += last.distance(*p);
+                        *last = *p;
+                        Some((*length, *r))
+                    },
+                )
+                .collect();
+            let k = back.iter().position(|(d, _)| *d >= HEAD_AT).unwrap();
+            let ((d0, r0), (d1, r1)) = (back[k - 1], back[k]);
+            let head = 2.0 * (r0 + (r1 - r0) * (HEAD_AT - d0) / (d1 - d0));
+            let off = head / (live.head_diameter * drawn) - 1.0;
+            assert!(off.abs() < 0.01, "seed {seed}: head {head} m, {off} off");
         }
     }
 
@@ -1463,7 +1598,8 @@ mod tests {
     /// reaches the wire, about week 9, when its lowest truss colours. From
     /// then on it is lowered: its hook slides along the wire about a week's
     /// growth a week, and its lowest truss hangs less than a week's growth
-    /// above the harvest height whatever the week.
+    /// above the harvest height whatever the week, give or take how much
+    /// faster it grows.
     #[test]
     fn a_stem_grows_up_its_twine_and_is_lowered() {
         let live = Live {
@@ -1471,12 +1607,15 @@ mod tests {
             head: 4.28,
             harvest: 1.2,
             trusses: 9,
+            development_spread: 0.0,
             spread: 0.35,
+            head_diameter: 0.01,
             ends: (0.2, 39.8),
             flexible_below: 0.0,
             leaves_kept: 16,
         };
         let weekly = (live.head - live.harvest) / live.trusses as f32;
+        let faster = GROWTH_JITTER as f32 * (live.head - live.harvest);
         let root = Vec3::new(1.0, 0.0, 0.64);
         let stem = |age: f32| {
             grow(
@@ -1530,15 +1669,15 @@ mod tests {
             let lowered = stem(age);
             let lowest = lowered.trusses[0].0.z;
             assert!(
-                (live.harvest..live.harvest + weekly).contains(&lowest),
+                (live.harvest - faster..live.harvest + weekly + 2.0 * faster).contains(&lowest),
                 "week {age}: the lowest truss at {lowest}"
             );
             lowered.hook.x
         });
         let slid = hooks[2] - hooks[0];
-        let about = LOWERED_JITTER as f32 * weekly;
+        let (g, l) = (GROWTH_JITTER as f32, LOWERED_JITTER as f32);
         assert!(
-            (weekly - about..=weekly + about).contains(&slid),
+            (weekly * (1.0 - g) * (1.0 - l)..=weekly * (1.0 + g) * (1.0 + l)).contains(&slid),
             "slid {slid} m in a week, grew {weekly} m"
         );
     }
@@ -1554,7 +1693,9 @@ mod tests {
             head: 4.28,
             harvest: 1.2,
             trusses: 9,
+            development_spread: 0.0,
             spread: 0.35,
+            head_diameter: 0.01,
             ends: (0.2, 9.8),
             flexible_below: 0.0,
             leaves_kept: 16,

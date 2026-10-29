@@ -98,9 +98,12 @@ const TUBE: &str = "TrussTube";
 const PEDICELS: &str = "Pedicels";
 
 /// The held segment of a bent truss's rod, from the stem's axis out along the
-/// peduncle, in meters: past the surface of the thickest stem, so a cut flush
-/// at `Cut` lands within a splinter of the first joint (`SPLINTER` in
-/// `misina_lab/isaaclab/cutting.py`) on the thinnest.
+/// peduncle, in meters: past the surface of the thickest stem a
+/// `head_diameter` of up to 14 mm grows, and short enough that a cut flush at
+/// `Cut` lands within a splinter of the first joint (`SPLINTER` in
+/// `misina_lab/isaaclab/cutting.py`) on the thinnest a 6 mm head grows from
+/// `HEAD_REACH` down. Nearer the head of one under 8 mm it lands a millimeter
+/// or so further out, and is made at that joint all the same.
 const HELD: f32 = 0.0135;
 
 /// Length of one of the rod's moving segments, in meters: about ten to a
