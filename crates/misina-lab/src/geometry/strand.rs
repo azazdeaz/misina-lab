@@ -446,9 +446,9 @@ pub fn strand_mesh(strand: &Strand) -> anyhow::Result<MeshData> {
         })
         .collect();
 
-    // Evenly along the rail, or finely for the tolerance to pick from, and
-    // across every swelling: each stop a parameter and how far along the
-    // strand it is, as a fraction.
+    // Evenly along the rail, or for the tolerance to pick from finely and on
+    // every control point, where the radius turns; and across every swelling:
+    // each stop a parameter and how far along the strand it is, as a fraction.
     let mut stops: Vec<(f64, f64)> = match strand.tolerance {
         None => {
             let count = strand.stations.clamp(MIN_STATIONS, MAX_STATIONS);
@@ -459,10 +459,9 @@ pub fn strand_mesh(strand: &Strand) -> anyhow::Result<MeshData> {
             let mean = strand.radii.iter().sum::<f64>() / strand.radii.len() as f64;
             let count = ((total / (FINE * mean)).ceil() as usize + 1).clamp(MIN_STATIONS, MAX_FINE);
             (0..count)
-                .map(|i| {
-                    let t = i as f64 / (count - 1) as f64;
-                    (t, t)
-                })
+                .map(|i| i as f64 / (count - 1) as f64)
+                .chain(anchors.iter().copied())
+                .map(|t| (t, t))
                 .collect()
         }
     };
@@ -1187,9 +1186,27 @@ mod tests {
     }
 
     /// Meshed to a tolerance, a straight even tube keeps few rings and a
-    /// swelling gathers them, closer the less the tolerance.
+    /// swelling gathers them, closer the less the tolerance. A radius that
+    /// turns at control points closer together than the fine sampling still
+    /// shows.
     #[test]
     fn a_strand_meshed_to_a_tolerance_rings_where_its_shape_changes() {
+        let spike = Strand {
+            points: [0.0, 0.5009, 0.501, 0.5011, 1.0]
+                .map(|z| Point3::new(0.0, 0.0, z))
+                .to_vec(),
+            radii: vec![0.01, 0.01, 0.02, 0.01, 0.01],
+            tolerance: Some(1e-4),
+            ..upright(12, 5, Bark::none())
+        };
+        let widest = strand_mesh(&spike)
+            .unwrap()
+            .points
+            .iter()
+            .map(|p| p[0].hypot(p[1]))
+            .fold(0.0, f32::max);
+        assert!((widest - 0.02).abs() < 1e-4, "the spike is {widest} m out");
+
         let rings = |strand: Strand| strand_mesh(&strand).unwrap().points.len() / strand.sides;
         let plain = Strand {
             tolerance: Some(2e-4),
