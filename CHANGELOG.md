@@ -126,7 +126,8 @@ Scene document format 11.
   square root of the crop's age ahead of it or behind it, in weeks, and grows
   up to 5% faster or slower, so its trusses hang higher or lower than its
   neighbours' and ripen later or sooner, where every stem's hung level. 0.2
-  by default; 0 grows the stems in step. `harvest_height` is now where a
+  by default; 0 keeps the stems in step, their trusses apart only by how
+  much faster or slower each grows. `harvest_height` is now where a
   stem's lowest truss hangs about: up to a week's growth above it, and up to
   5% of the stem's live height below it on a stem that grows faster. A stem
   carries `trusses` trusses whatever the day, where it carried one fewer

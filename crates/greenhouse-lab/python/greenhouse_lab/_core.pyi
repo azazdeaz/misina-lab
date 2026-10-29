@@ -182,8 +182,9 @@ class StemParams:
     little sooner or later than the last, so a stem `week` weeks old runs up to this
     times √`week` ahead of the crop or behind it, its trusses hanging that much of
     a week's growth lower or higher and ripening that much sooner or later. At 0.2,
-    up to 0.8 of a week at week 16; at 0 every stem grows in step and its trusses
-    hang level with its neighbours'.
+    up to 0.8 of a week at week 16; at 0 every stem keeps in step with the crop, and
+    its trusses stray from its neighbours' heights only as far as it grows up to 5%
+    faster or slower.
     """
     leaves_kept: int
     """Leaves on a stem, counted down from the head. Growers strip the ones below, so
