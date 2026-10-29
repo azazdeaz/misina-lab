@@ -188,6 +188,13 @@ class StemParams:
     """Share of trusses turned to face the path. The rest face anywhere, into the crop
     as often as not, where a harvester has to skip them.
     """
+    head_diameter: float
+    """Diameter of a stem's head, in meters: how thick it is 20 cm below its tip, where
+    growers measure it. About 10 mm on a balanced crop; under 8 mm the plant is spent
+    on its fruit, over 12 mm it grows leaf, and beefsteak stems run thicker than
+    cherry. Each stem draws its own about it, and is half as thick again from 0.8 m
+    below its tip down.
+    """
     flexible_below: float
     """Height above the floor, in meters, below which a truss bends: one whose node is
     lower is exported as a rod a physics engine bends and a robot can cut, carrying
@@ -209,6 +216,7 @@ class StemParams:
         leaves_kept: int = 16,
         extra_stems: float = 0.0,
         turned_to_path: float = 0.8,
+        head_diameter: float = 0.01,
         flexible_below: float = 0.0,
         detail: float = 0.5,
     ) -> None: ...

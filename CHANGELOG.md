@@ -117,6 +117,10 @@ Scene document format 11.
 - **greenhouse-lab**: `StemParams.detail`, how finely the stems and the
   trusses' stems are meshed: at 1 as finely as a leaf at its own detail of
   1, at 0.1 a plain tube. 0.5 by default.
+- **greenhouse-lab**: `StemParams.head_diameter`, how thick a stem is
+  20 cm below its tip, where growers measure it: 10 mm by default, as on a
+  balanced crop. A stem is half as thick again from 0.8 m below its tip
+  down, about 15 mm by default, where it was 12–20 mm.
 
 ### Changed
 
@@ -126,8 +130,8 @@ Scene document format 11.
   meter or so and sags between, a few in deep loops, and kinks at each old
   truss. A stem takes off from where it last rests, climbing along the row
   to its twine a little below its lowest truss, where it bent straight up
-  in 15 cm. Every stem kinks at each truss, away from it, is up to a
-  quarter thicker where it is oldest, and is a little ridged. Trusses and
+  in 15 cm. Every stem kinks at each truss, away from it, and is a little
+  ridged. Trusses and
   leaves keep their heights and the way they face.
 - **greenhouse-lab**: A stem swells at every node and every truss, more on
   the side its leaf or truss leaves, the swelling running on down the stem

@@ -35,9 +35,9 @@
 //! A tomato's stem is sympodial: each truss ends a shoot, and the stem
 //! carries on from a side shoot below it, so the stem kinks at every truss,
 //! and a little at every node, away from its leaf. On the rise the kinks are
-//! level, so a node keeps its height. A stem thickens as it ages, down from
-//! its head, thins to a point at its tip, and its girth undulates slowly
-//! along it.
+//! level, so a node keeps its height. A stem thickens over its first 0.8 m
+//! down from its head to half as thick again as its head, thins to a point
+//! at its tip, and its girth undulates slowly along it.
 //!
 //! A stem swells at every node and every truss, the more on the side its leaf
 //! or its truss leaves, and the swelling runs on down the stem as a leaf's
@@ -187,11 +187,16 @@ const HOOK_LENGTH: f32 = 0.22;
 const HOOK_RADIUS: f32 = 0.002;
 const REEL: Vec2 = Vec2::new(0.018, 0.02);
 
-/// A stem's radius, in meters, drawn per stem: 12 to 20 mm across.
-const RADIUS: (f64, f64) = (0.006, 0.010);
+/// Where a stem's head is measured, in meters below its tip, as growers
+/// measure it 15–25 cm down; and how far a stem's head strays from
+/// `head_diameter`, as a fraction.
+const HEAD_AT: f32 = 0.2;
+const HEAD_JITTER: f64 = 0.15;
 
 /// How much thinner a stem is at its head, as a fraction, and over how much of
-/// the rise below the head it thins, in meters.
+/// the rise below the head it thins, in meters: at `HEAD_AT` two thirds as
+/// thick as from `HEAD_REACH` down, a 10 mm head over the 13–16 mm measured
+/// at the lowest trusses.
 const HEAD_TAPER: f32 = 0.4;
 const HEAD_REACH: f32 = 0.8;
 
@@ -237,12 +242,8 @@ const KINK: (f64, f64) = (0.006, 0.016);
 const NODE_KINK: f64 = 0.002;
 const RUN_KINK: f64 = 0.015;
 
-/// How much thicker a stem is at its oldest, as a fraction, and the stem down
-/// from the head it takes to get there, in meters; and how much its girth
-/// undulates, as a fraction, in two waves, each between these lengths, in
-/// meters (est.).
-const OLD_GIRTH: f32 = 0.25;
-const OLD_REACH: f32 = 5.0;
+/// How much a stem's girth undulates, as a fraction, in two waves, each
+/// between these lengths, in meters (est.).
 const GIRTH_WAVE: f32 = 0.06;
 const GIRTH_WAVES: (f64, f64) = (0.5, 1.5);
 
@@ -360,6 +361,13 @@ pub struct StemParams {
     /// the crop as often as not, where a harvester has to skip them.
     #[reflect(@Slider { min: 0.0, max: 1.0, step: 0.05 }, @Label("Trusses turned to the path"))]
     pub turned_to_path: f32,
+    /// Diameter of a stem's head, in meters: how thick it is 20 cm below its
+    /// tip, where growers measure it. About 10 mm on a balanced crop; under
+    /// 8 mm the plant is spent on its fruit, over 12 mm it grows leaf, and
+    /// beefsteak stems run thicker than cherry. Each stem draws its own about
+    /// it, and is half as thick again from 0.8 m below its tip down.
+    #[reflect(@Slider { min: 0.006, max: 0.014, step: 0.0005 })]
+    pub head_diameter: f32,
     /// Height above the floor, in meters, below which a truss bends: one
     /// whose node is lower is exported as a rod a physics engine bends and a
     /// robot can cut, carrying its fruit, rather than as a static mesh. 0
@@ -387,6 +395,7 @@ impl Default for StemParams {
             leaves_kept: 16,
             extra_stems: 0.0,
             turned_to_path: 0.8,
+            head_diameter: 0.01,
             flexible_below: 0.0,
             detail: 0.5,
         }
@@ -504,6 +513,8 @@ struct Live {
     harvest: f32,
     trusses: u32,
     spread: f32,
+    /// How thick a stem's head is, about which each stem draws its own.
+    head_diameter: f32,
     /// Where along the row the runs turn round the gutter.
     ends: (f32, f32),
     /// How high a truss's node may be and the truss still bend.
@@ -602,12 +613,18 @@ fn zigzag(knots: &[(f32, Vec2)], at: f32) -> Vec2 {
     }
 }
 
+/// How thick a stem is `d` below its tip, as a fraction of how thick it is
+/// from `HEAD_REACH` down: thinner toward its head, and to a point at its tip.
+fn thinning(d: f32) -> f32 {
+    (1.0 - HEAD_TAPER * smooth(1.0 - d / HEAD_REACH)) * (1.0 - TIP.0 * smooth(1.0 - d / TIP.1))
+}
+
 /// Grows the stem rooted at `root` that starts round on `side`, `age` weeks
 /// after it was planted and lowered `more` further than its growth calls for,
 /// from its own three streams.
 ///
-/// The *draw order* is part of this element's output. `rng` draws the
-/// radius, how far the run's length strays, where across and up the bundle
+/// The *draw order* is part of this element's output. `rng` draws how thick
+/// its head is, how far the run's length strays, where across and up the bundle
 /// the run lies, the hook's place along the wire, the bow's bearing and the
 /// ripening offset, then three per hung truss — whether it was turned to the
 /// path, how far it wanders off it, and the bearing it faces when it was not
@@ -635,7 +652,10 @@ fn grow(
     lie: &mut Rng,
     surface: &mut Rng,
 ) -> Stem {
-    let radius = rng.range(RADIUS.0, RADIUS.1) as f32;
+    // The radius from `HEAD_REACH` down, which its head at `HEAD_AT` is
+    // thinned from.
+    let drawn = rng.range(1.0 - HEAD_JITTER, 1.0 + HEAD_JITTER) as f32;
+    let radius = live.head_diameter / 2.0 * drawn / thinning(HEAD_AT);
     let stray = rng.range(1.0 - LOWERED_JITTER, 1.0 + LOWERED_JITTER) as f32;
     let round = Round {
         from: live.ends.0,
@@ -846,19 +866,14 @@ fn grow(
         let kinked = zigzag(&knots, d) + zigzag(&nodding, d);
         join.lerp(tip, f) + bow * (PI * f).sin() + kinked.extend(0.0)
     };
-    // Thinner near the head and to a point at its tip, thicker as it ages,
-    // and undulating along it.
+    // Thinned toward the head and undulating along it.
     let waves: [(f32, f32); 2] = std::array::from_fn(|_| {
         let length = surface.range(GIRTH_WAVES.0, GIRTH_WAVES.1) as f32;
         (TAU / length, surface.unit() as f32 * TAU)
     });
     let girth = |d: f32| {
         let undulating: f32 = waves.iter().map(|(n, phase)| (n * d + phase).sin()).sum();
-        radius
-            * (1.0 - HEAD_TAPER * smooth(1.0 - d / HEAD_REACH))
-            * (1.0 - TIP.0 * smooth(1.0 - d / TIP.1))
-            * (1.0 + OLD_GIRTH * smooth(d / OLD_REACH))
-            * (1.0 + GIRTH_WAVE * undulating / 2.0)
+        radius * thinning(d) * (1.0 + GIRTH_WAVE * undulating / 2.0)
     };
 
     // A control point at the join, at each node and each kinked truss of the
@@ -1137,6 +1152,7 @@ fn author(
         harvest: params.harvest_height,
         trusses: params.trusses.max(1),
         spread: wire.spread,
+        head_diameter: params.head_diameter,
         ends: (RUN_TURN, (layout.length - RUN_TURN).max(RUN_TURN)),
         flexible_below: params.flexible_below,
         leaves_kept: params.leaves_kept,
@@ -1472,6 +1488,7 @@ mod tests {
             harvest: 1.2,
             trusses: 9,
             spread: 0.35,
+            head_diameter: 0.01,
             ends: (0.2, 39.8),
             flexible_below: 0.0,
             leaves_kept: 16,
@@ -1555,6 +1572,7 @@ mod tests {
             harvest: 1.2,
             trusses: 9,
             spread: 0.35,
+            head_diameter: 0.01,
             ends: (0.2, 9.8),
             flexible_below: 0.0,
             leaves_kept: 16,
