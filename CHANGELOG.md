@@ -107,6 +107,13 @@ Scene document format 11.
   Kit's viewport on the scene, where `P` prints the camera in the same terms.
 - **greenhouse-lab**: A web playground, the viewer in the browser, at
   [azazdeaz.github.io/misina-lab/playground/greenhouse](https://azazdeaz.github.io/misina-lab/playground/greenhouse/).
+- **misina-lab**: A strand swells all round at its `bulges` and, at its
+  `collars`, toward the stalk of an organ leaving it, the swelling running
+  on down the strand. Given a `tolerance`, a strand keeps only the rings
+  that hold its mesh that close to its surface, bunched at a swelling or a
+  bend and spread out where it runs straight, rather than evenly spaced
+  ones. `sides_within` gives the fewest sides that hold a ring to a
+  tolerance.
 
 ### Changed
 

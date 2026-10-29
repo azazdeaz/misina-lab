@@ -1,9 +1,18 @@
 //! Strands — the woody members plants are built from.
 //!
 //! A *strand* is a polyline of control points, each carrying a radius, skinned
-//! into a closed tube. A trunk is a strand; so are a branch and a twig.
-//! Callers place control points where the shape is and add more where the
-//! shape needs resolving; nothing here knows any botany.
+//! into a closed tube. A trunk is a strand; so are a branch, a twig and a
+//! green stem. Callers place control points where the shape is and add more
+//! where the shape needs resolving; nothing here knows any botany.
+//!
+//! A strand may swell: all round at a [`Bulge`], a node or a graft union, and
+//! on one side at a [`Collar`], where an organ's stalk leaves it. Each is given
+//! by where it sits along the strand, and the skinning puts rings across it.
+//!
+//! A strand is ringed evenly unless it has a [`tolerance`](Strand::tolerance).
+//! Then it is sampled finely and keeps only the rings that hold its mesh that
+//! close to its surface: they bunch at a swelling and round a bend and spread
+//! out where it runs straight, so a stem meters long can swell at every node.
 //!
 //! # Why the surface is hand-skinned
 //!
@@ -24,10 +33,10 @@
 //! [`try_divide_by_count`]: curvo::prelude::NurbsCurve::try_divide_by_count
 //! [`compute_frenet_frames`]: curvo::prelude::NurbsCurve::compute_frenet_frames
 
-use std::f64::consts::TAU;
+use std::f64::consts::{PI, TAU};
 
 use curvo::prelude::*;
-use nalgebra::Point3;
+use nalgebra::{Point3, Vector3};
 
 use super::mesh::MeshData;
 use crate::rng::Rng;
@@ -51,17 +60,26 @@ const MAX_SIDES: usize = 24;
 /// interpolation divides by exactly that — the whole curve comes back NaN.
 const MERGE_DISTANCE: f64 = 1e-6;
 
+/// A strand meshed to a tolerance is first sampled this far apart, in its
+/// mean radii, at most this many times, and keeps a ring at least every so
+/// many samples, which bounds what picking the rings costs.
+const FINE: f64 = 0.5;
+const MAX_FINE: usize = 8192;
+const MAX_SPAN: usize = 64;
+
 // ─── Bulges ─────────────────────────────────────────────────────────
 
 /// A local swelling on a strand's radius.
 ///
-/// A graft union and a branch knuckle are the same shape at different scales,
-/// so they are the same type. `height` is a fraction of the strand's nominal
-/// radius, added on top of whatever taper the caller is already applying.
+/// A graft union, a branch knuckle and a node are the same shape at different
+/// scales, so they are the same type. `height` is a fraction of the strand's
+/// nominal radius, added on top of whatever taper the caller is already
+/// applying.
 #[derive(Clone, Copy, Debug)]
 pub struct Bulge {
-    /// Where the swelling sits, in whatever coordinate the caller is walking
-    /// (height up a trunk, distance out along a branch).
+    /// Where the swelling sits: in meters along the control points for one of
+    /// a strand's [`bulges`](Strand::bulges), and in whatever coordinate the
+    /// caller is walking for one it samples into the radii itself.
     pub at: f64,
     /// Standard deviation of the falloff, in the same coordinate.
     pub width: f64,
@@ -88,6 +106,118 @@ impl Bulge {
     pub fn detail_positions(&self) -> [f64; 3] {
         [self.at - self.width, self.at, self.at + self.width]
     }
+
+    /// Whether it adds anything worth a ring at `x`.
+    fn reaches(&self, x: f64) -> bool {
+        (x - self.at).abs() < 3.0 * self.width
+    }
+}
+
+// ─── Collars ────────────────────────────────────────────────────────
+
+/// Where an organ leaves a strand: its stalk starts on the strand's axis `at`
+/// meters along the control points, heads `toward`, and is `radius` thick.
+///
+/// The strand swells toward the stalk round where it comes out through the
+/// surface, so the stalk grows out of the strand rather than poking through
+/// it, and the swelling runs on down the strand, as a leaf's base does.
+#[derive(Clone, Copy, Debug)]
+pub struct Collar {
+    pub at: f64,
+    pub toward: Vector3<f64>,
+    pub radius: f64,
+}
+
+impl Collar {
+    /// The radius this collar adds `m` along a strand on the side `out`
+    /// faces, as a fraction of the strand's: what anything wound round the
+    /// strand has to clear. The strand heads `tangent` and is `radius` thick
+    /// where the stalk leaves it.
+    pub fn swelling(&self, tangent: Vector3<f64>, radius: f64, m: f64, out: &Vector3<f64>) -> f64 {
+        Lobe::new(self, tangent, radius).map_or(0.0, |lobe| lobe.value(m, out))
+    }
+}
+
+/// A collar's height on its stalk's side, in the stalk's radii; how much
+/// wider round the strand it reaches than the stalk does; and how far down the
+/// strand it runs, in the stalk's radii.
+const COLLAR_HEIGHT: f64 = 0.8;
+const COLLAR_SPREAD: f64 = 1.3;
+const DECURRENT: f64 = 6.0;
+
+/// The least share of a stalk's heading that crosses the strand: a stalk
+/// nearer along it than this comes out of no one side, and has no collar.
+const MIN_ACROSS: f64 = 0.3;
+
+/// A collar as it shapes its strand.
+#[derive(Clone, Copy, Debug)]
+struct Lobe {
+    /// Where along the strand it peaks, in meters, and the side it faces.
+    peak: f64,
+    side: Vector3<f64>,
+    /// The radius it adds at its peak, as a fraction of the strand's.
+    height: f64,
+    /// How far down and up the strand it reaches, in meters, and `1 - cos` of
+    /// how far round it, each to where it has fallen to 1/e.
+    below: f64,
+    above: f64,
+    spread: f64,
+}
+
+impl Lobe {
+    /// `collar` on a strand heading `tangent` and `radius` thick where the
+    /// stalk leaves it.
+    fn new(collar: &Collar, tangent: Vector3<f64>, radius: f64) -> Option<Self> {
+        let toward = collar.toward.try_normalize(1e-12)?;
+        let along = toward.dot(&tangent);
+        let across = toward - tangent * along;
+        let out = across.norm();
+        if out < MIN_ACROSS {
+            return None;
+        }
+        Some(Self {
+            // The stalk comes out through the surface `radius` off the axis,
+            // by when it has come this far along the strand, and its edge
+            // reaches its radius over `out` further.
+            peak: collar.at + radius * along / out,
+            side: across / out,
+            height: COLLAR_HEIGHT * collar.radius / radius,
+            below: DECURRENT * collar.radius,
+            above: collar.radius / out,
+            spread: 1.0 - (COLLAR_SPREAD * (collar.radius / radius).min(1.0).asin()).cos(),
+        })
+    }
+
+    /// Whether it adds anything worth a ring `m` along the strand.
+    fn reaches(&self, m: f64) -> bool {
+        (self.peak - 3.0 * self.below..=self.peak + 3.0 * self.above).contains(&m)
+    }
+
+    /// The radius it adds `m` along the strand on the side `out` faces, as a
+    /// fraction of the strand's.
+    fn value(&self, m: f64, out: &Vector3<f64>) -> f64 {
+        let reach = if m < self.peak {
+            self.below
+        } else {
+            self.above
+        };
+        let z = (m - self.peak) / reach;
+        self.height * (-z * z - (1.0 - out.dot(&self.side)) / self.spread).exp()
+    }
+}
+
+/// Where along the strand, in meters, its swellings need rings: across each,
+/// every half of its reach out to twice it, so a swelling narrower than the
+/// rings' spacing isn't stepped over.
+fn seeds(bulges: &[Bulge], lobes: &[Lobe]) -> Vec<f64> {
+    let across = |at: f64, below: f64, above: f64| {
+        (-4..=4).map(move |k| at + k as f64 / 2.0 * if k < 0 { below } else { above })
+    };
+    bulges
+        .iter()
+        .flat_map(|b| across(b.at, b.width, b.width))
+        .chain(lobes.iter().flat_map(|l| across(l.peak, l.below, l.above)))
+        .collect()
 }
 
 // ─── Bark ───────────────────────────────────────────────────────────
@@ -209,9 +339,18 @@ pub struct Strand {
     pub radii: Vec<f64>,
     /// Ring subdivisions around the tube. Drives the silhouette.
     pub sides: usize,
-    /// Rings along the tube; there are `stations - 1` quad bands between them.
+    /// Evenly spaced rings along the tube, with more across each swelling.
+    /// Not read when the strand has a [`tolerance`](Self::tolerance).
     pub stations: usize,
     pub bark: Bark,
+    /// Swellings all round it, `at` and `width` in meters along its control
+    /// points.
+    pub bulges: Vec<Bulge>,
+    /// Where organs' stalks leave it.
+    pub collars: Vec<Collar>,
+    /// How far its mesh may stray from its surface, in meters, if its rings go
+    /// only where its shape needs them rather than evenly.
+    pub tolerance: Option<f64>,
 }
 
 impl Strand {
@@ -242,8 +381,19 @@ impl Strand {
             sides,
             stations,
             bark,
+            bulges: Vec::new(),
+            collars: Vec::new(),
+            tolerance: None,
         }
     }
+}
+
+/// The fewest sides round a ring that keep it within `tolerance` of a circle
+/// of `radius`, which a side strays `radius (1 - cos(π / sides))` off at its
+/// middle; no fewer and no more than a strand may have.
+pub fn sides_within(radius: f64, tolerance: f64) -> usize {
+    let sides = PI / (1.0 - (tolerance / radius).min(1.0)).acos();
+    (sides.ceil() as usize).clamp(MIN_SIDES, MAX_SIDES)
 }
 
 /// Drops control points that sit on top of their predecessor, carrying their
@@ -264,8 +414,8 @@ fn merge_coincident(points: Vec<Point3<f64>>, radii: Vec<f64>) -> (Vec<Point3<f6
     (kept_points, kept_radii)
 }
 
-/// Skins `strand` into a closed tube: `stations` rings of `sides` vertices,
-/// stitched into quad bands and capped at both ends.
+/// Skins `strand` into a closed tube: rings of `sides` vertices, stitched into
+/// quad bands and capped at both ends.
 pub fn strand_mesh(strand: &Strand) -> anyhow::Result<MeshData> {
     anyhow::ensure!(
         strand.points.len() >= 2,
@@ -280,12 +430,50 @@ pub fn strand_mesh(strand: &Strand) -> anyhow::Result<MeshData> {
     );
 
     let sides = strand.sides.clamp(MIN_SIDES, MAX_SIDES);
-    let count = strand.stations.clamp(MIN_STATIONS, MAX_STATIONS);
-
     let degree = DEGREE.min(strand.points.len() - 1);
     let rail = NurbsCurve3D::interpolate(&strand.points, degree)?;
     let anchors = chord_parameters(&strand.points);
-    let (parameters, fractions) = stations(&rail, count);
+    let total: f64 = strand.points.windows(2).map(|w| (w[1] - w[0]).norm()).sum();
+    // The rail's parameter `m` meters along the control points.
+    let on_rail = |m: f64| (m / total).clamp(0.0, 1.0);
+    let lobes: Vec<Lobe> = strand
+        .collars
+        .iter()
+        .filter_map(|collar| {
+            let t = on_rail(collar.at);
+            let radius = radius_at(&anchors, &strand.radii, t);
+            Lobe::new(collar, rail.tangent_at(t).normalize(), radius)
+        })
+        .collect();
+
+    // Evenly along the rail, or finely for the tolerance to pick from, and
+    // across every swelling: each stop a parameter and how far along the
+    // strand it is, as a fraction.
+    let mut stops: Vec<(f64, f64)> = match strand.tolerance {
+        None => {
+            let count = strand.stations.clamp(MIN_STATIONS, MAX_STATIONS);
+            let (parameters, fractions) = stations(&rail, count);
+            parameters.into_iter().zip(fractions).collect()
+        }
+        Some(_) => {
+            let mean = strand.radii.iter().sum::<f64>() / strand.radii.len() as f64;
+            let count = ((total / (FINE * mean)).ceil() as usize + 1).clamp(MIN_STATIONS, MAX_FINE);
+            (0..count)
+                .map(|i| {
+                    let t = i as f64 / (count - 1) as f64;
+                    (t, t)
+                })
+                .collect()
+        }
+    };
+    stops.extend(seeds(&strand.bulges, &lobes).into_iter().map(|m| {
+        let t = on_rail(m);
+        (t, t)
+    }));
+    stops.sort_by(|a, b| a.0.total_cmp(&b.0));
+    stops.dedup_by(|next, kept| (next.0 - kept.0) * total < MERGE_DISTANCE);
+
+    let parameters: Vec<f64> = stops.iter().map(|(t, _)| *t).collect();
     let frames = rail.compute_frenet_frames(&parameters);
     anyhow::ensure!(
         frames.len() == parameters.len(),
@@ -293,18 +481,34 @@ pub fn strand_mesh(strand: &Strand) -> anyhow::Result<MeshData> {
         frames.len(),
         parameters.len()
     );
+    let rings: Vec<Vec<Point3<f64>>> = frames
+        .iter()
+        .zip(&stops)
+        .map(|(frame, (t, fraction))| {
+            let radius = radius_at(&anchors, &strand.radii, *t);
+            ring(strand, &lobes, frame, t * total, radius, *fraction, sides)
+        })
+        .collect();
+    let kept: Vec<usize> = match strand.tolerance {
+        Some(tolerance) => {
+            let along: Vec<f64> = parameters.iter().map(|t| t * total).collect();
+            let tangents: Vec<Vector3<f64>> = frames.iter().map(|f| *f.tangent()).collect();
+            decimate(&rings, &along, &tangents, tolerance)
+        }
+        None => (0..rings.len()).collect(),
+    };
 
-    let mut points = Vec::with_capacity(count * sides);
-    for ((frame, parameter), fraction) in frames.iter().zip(&parameters).zip(&fractions) {
-        let radius = radius_at(&anchors, &strand.radii, *parameter);
-        push_ring(frame, radius, &strand.bark, *fraction, sides, &mut points);
-    }
+    let points: Vec<[f32; 3]> = kept
+        .iter()
+        .flat_map(|k| &rings[*k])
+        .map(|p| [p.x as f32, p.y as f32, p.z as f32])
+        .collect();
     anyhow::ensure!(
         points.iter().flatten().all(|c| c.is_finite()),
         "the strand's centerline degenerated"
     );
 
-    let (face_vertex_counts, face_vertex_indices) = tube_faces(count, sides);
+    let (face_vertex_counts, face_vertex_indices) = tube_faces(kept.len(), sides);
     Ok(MeshData {
         points,
         face_vertex_counts,
@@ -415,7 +619,9 @@ fn stations(rail: &NurbsCurve3D<f64>, count: usize) -> (Vec<f64>, Vec<f64>) {
     (parameters, fractions)
 }
 
-/// Appends one ring of `sides` vertices around `frame`'s origin.
+/// The ring of `sides` vertices round `frame`'s origin, `m` meters along the
+/// strand: `radius` there, ridged by the strand's bark and swollen by each of
+/// its bulges and collars that reaches it.
 ///
 /// The ring is authored in the frame's **local XY plane at z = 0**, which is
 /// the cross-section perpendicular to the strand. That is worth stating
@@ -425,22 +631,72 @@ fn stations(rail: &NurbsCurve3D<f64>, count: usize) -> (Vec<f64>, Vec<f64>) {
 /// tangent, +Y is the normal, and +X is the negated binormal. Authoring the
 /// ring in XZ or YZ, the reflex from classical Frenet frames, would slice the
 /// tube lengthwise instead of across.
-fn push_ring(
+fn ring(
+    strand: &Strand,
+    lobes: &[Lobe],
     frame: &FrenetFrame<f64>,
+    m: f64,
     radius: f64,
-    bark: &Bark,
     fraction: f64,
     sides: usize,
-    out: &mut Vec<[f32; 3]>,
-) {
+) -> Vec<Point3<f64>> {
     let placement = frame.matrix();
-    for j in 0..sides {
-        let angle = TAU * j as f64 / sides as f64;
-        let r = radius * bark.at(j, fraction);
-        let local = Point3::new(r * angle.cos(), r * angle.sin(), 0.0);
-        let p = placement * local;
-        out.push([p.x as f32, p.y as f32, p.z as f32]);
+    let swell: f64 = strand
+        .bulges
+        .iter()
+        .filter(|b| b.reaches(m))
+        .map(|b| b.value(m))
+        .sum();
+    let lobes: Vec<&Lobe> = lobes.iter().filter(|l| l.reaches(m)).collect();
+    (0..sides)
+        .map(|j| {
+            let angle = TAU * j as f64 / sides as f64;
+            let (x, y) = (angle.cos(), angle.sin());
+            let out = placement * Vector3::new(x, y, 0.0);
+            let lobe: f64 = lobes.iter().map(|l| l.value(m, &out)).sum();
+            let r = radius * strand.bark.at(j, fraction) * (1.0 + swell + lobe);
+            placement * Point3::new(r * x, r * y, 0.0)
+        })
+        .collect()
+}
+
+/// Which of `rings` to keep: the first and the last, and between them the
+/// fewest, picked greedily from the start, that hold every ring dropped within
+/// `tolerance` of the band the kept ones either side of it span, measured
+/// across the strand. `along` is where each ring is along the strand and
+/// `tangents` the way the strand heads there.
+fn decimate(
+    rings: &[Vec<Point3<f64>>],
+    along: &[f64],
+    tangents: &[Vector3<f64>],
+    tolerance: f64,
+) -> Vec<usize> {
+    let fits = |a: usize, b: usize| {
+        (a + 1..b).all(|k| {
+            let f = (along[k] - along[a]) / (along[b] - along[a]);
+            let t = &tangents[k];
+            rings[k]
+                .iter()
+                .zip(&rings[a])
+                .zip(&rings[b])
+                .all(|((p, from), to)| {
+                    let off = p.coords - from.coords.lerp(&to.coords, f);
+                    (off - t * off.dot(t)).norm() <= tolerance
+                })
+        })
+    };
+    let last = rings.len() - 1;
+    let mut kept = vec![0];
+    let mut a = 0;
+    while a < last {
+        let mut b = a + 1;
+        while b < last && b - a < MAX_SPAN && fits(a, b + 1) {
+            b += 1;
+        }
+        kept.push(b);
+        a = b;
     }
+    kept
 }
 
 /// The faces of a tube of `stations` rings of `sides` vertices, in USD's
@@ -515,11 +771,35 @@ mod tests {
             sides,
             stations,
             bark,
+            bulges: Vec::new(),
+            collars: Vec::new(),
+            tolerance: None,
         }
     }
 
     fn bark(depth: f64) -> Bark {
         Bark::new(&mut Rng::new(42), 8, depth)
+    }
+
+    /// The upright tube a centimeter thick, ringed every quarter meter or
+    /// meshed to `tolerance`, with a node's bulge half way up and, a quarter of
+    /// the way up, the collar of a stalk leaving toward +X at 45°.
+    fn swollen(tolerance: Option<f64>) -> Strand {
+        Strand {
+            radii: vec![0.01; 3],
+            bulges: vec![Bulge {
+                at: 0.5,
+                width: 0.01,
+                height: 0.3,
+            }],
+            collars: vec![Collar {
+                at: 0.25,
+                toward: Vector3::new(1.0, 0.0, 1.0),
+                radius: 0.005,
+            }],
+            tolerance,
+            ..upright(12, 5, Bark::none())
+        }
     }
 
     /// A bent rail, for the cases where a straight one would pass trivially:
@@ -563,28 +843,32 @@ mod tests {
     }
 
     /// Every face must wind counter-clockwise seen from outside, or the tube
-    /// renders inside-out under USD's default right-handed orientation.
+    /// renders inside-out under USD's default right-handed orientation: a
+    /// barked tube, and a swollen one meshed to a tolerance.
     #[test]
     fn strand_faces_wind_outward() {
-        let mesh = strand_mesh(&upright(8, 6, bark(0.14))).unwrap();
+        for strand in [upright(8, 6, bark(0.14)), swollen(Some(2e-4))] {
+            let mesh = strand_mesh(&strand).unwrap();
+            let barrel = mesh.face_vertex_counts.len() - 2;
 
-        for (face, corners) in faces(&mesh).enumerate() {
-            let normal = face_normal(&mesh, corners);
-            let centroid = face_centroid(&mesh, corners);
+            for (face, corners) in faces(&mesh).enumerate() {
+                let normal = face_normal(&mesh, corners);
+                let centroid = face_centroid(&mesh, corners);
 
-            if face < 5 * 8 {
-                // A side face points away from the axis, which for this
-                // strand is the Z axis: compare against the centroid's own
-                // radial direction.
-                let radial = Vec3::new(centroid.x, centroid.y, 0.0);
-                assert!(
-                    normal.dot(radial) > 0.0,
-                    "side face {face} faces away from the axis"
-                );
-            } else if face == 5 * 8 {
-                assert!(normal.z < 0.0, "the start cap faces back down the tube");
-            } else {
-                assert!(normal.z > 0.0, "the end cap faces along the tube");
+                if face < barrel {
+                    // A side face points away from the axis, which for this
+                    // strand is the Z axis: compare against the centroid's
+                    // own radial direction.
+                    let radial = Vec3::new(centroid.x, centroid.y, 0.0);
+                    assert!(
+                        normal.dot(radial) > 0.0,
+                        "side face {face} faces away from the axis"
+                    );
+                } else if face == barrel {
+                    assert!(normal.z < 0.0, "the start cap faces back down the tube");
+                } else {
+                    assert!(normal.z > 0.0, "the end cap faces along the tube");
+                }
             }
         }
     }
@@ -595,10 +879,14 @@ mod tests {
     /// make a poor collider in a simulation.
     #[test]
     fn a_strand_mesh_is_watertight() {
-        let mesh = strand_mesh(&upright(8, 6, bark(0.14))).unwrap();
+        for strand in [upright(8, 6, bark(0.14)), swollen(Some(2e-4))] {
+            assert_watertight(&strand_mesh(&strand).unwrap());
+        }
+    }
 
+    fn assert_watertight(mesh: &MeshData) {
         let mut directed: HashMap<(i32, i32), usize> = HashMap::new();
-        for corners in faces(&mesh) {
+        for corners in faces(mesh) {
             for i in 0..corners.len() {
                 let edge = (corners[i], corners[(i + 1) % corners.len()]);
                 *directed.entry(edge).or_default() += 1;
@@ -861,5 +1149,92 @@ mod tests {
         assert_eq!(at(1.0), 21);
         assert!(at(0.05) == MIN_STATIONS, "a 5 cm twig bottoms out");
         assert!(at(100.0) == MAX_STATIONS, "and a runaway one is capped");
+    }
+
+    /// A bulge swells the strand all round to its height at its middle, and a
+    /// collar on its stalk's side only, where the stalk comes out through the
+    /// surface: a radius up the strand from where it leaves the axis, at 45°.
+    /// Both show though the even rings are a quarter meter apart, and both
+    /// within the tolerance of a strand meshed to one.
+    #[test]
+    fn a_strand_swells_at_its_bulges_and_toward_its_collars() {
+        for tolerance in [None, Some(2e-4)] {
+            let mesh = strand_mesh(&swollen(tolerance)).unwrap();
+            let slack = tolerance.unwrap_or(0.0) as f32 + 1e-5;
+            let near = |z: f32| mesh.points.iter().filter(move |p| (p[2] - z).abs() < 0.005);
+            let widest = near(0.5).map(|p| p[0].hypot(p[1])).fold(0.0, f32::max);
+            assert!(
+                (widest - 0.013).abs() < slack,
+                "{tolerance:?}: the bulge is {widest} m out"
+            );
+
+            let toward = mesh
+                .points
+                .iter()
+                .max_by(|a, b| a[0].total_cmp(&b[0]))
+                .unwrap();
+            let height = 0.01 + COLLAR_HEIGHT as f32 * 0.005;
+            assert!(
+                (toward[2] - 0.26).abs() < 0.003 && (toward[0] - height).abs() < slack,
+                "{tolerance:?}: the collar peaks at {toward:?}"
+            );
+            let away = near(0.26).map(|p| -p[0]).fold(0.0, f32::max);
+            assert!(
+                away < 0.01 + slack,
+                "{tolerance:?}: {away} m out the far side"
+            );
+        }
+    }
+
+    /// Meshed to a tolerance, a straight even tube keeps few rings and a
+    /// swelling gathers them, closer the less the tolerance.
+    #[test]
+    fn a_strand_meshed_to_a_tolerance_rings_where_its_shape_changes() {
+        let rings = |strand: Strand| strand_mesh(&strand).unwrap().points.len() / strand.sides;
+        let plain = Strand {
+            tolerance: Some(2e-4),
+            radii: vec![0.01; 3],
+            ..upright(12, 5, Bark::none())
+        };
+        let (even, coarse, fine) = (
+            rings(plain),
+            rings(swollen(Some(5e-4))),
+            rings(swollen(Some(1e-4))),
+        );
+        assert!(
+            even <= 6 && even < coarse && coarse < fine,
+            "rings: {even} even, {coarse} and {fine} swollen"
+        );
+
+        let mesh = strand_mesh(&swollen(Some(2e-4))).unwrap();
+        let heights: Vec<f32> = mesh
+            .points
+            .chunks(12)
+            .map(|ring| ring.iter().map(|p| p[2]).sum::<f32>() / 12.0)
+            .collect();
+        let gap = |from: f32, to: f32| {
+            heights
+                .windows(2)
+                .filter(|w| (from..to).contains(&w[0]))
+                .map(|w| w[1] - w[0])
+                .fold(0.0, f32::max)
+        };
+        let (bulge, beyond) = (gap(0.49, 0.51), gap(0.7, 1.0));
+        assert!(
+            bulge * 4.0 < beyond,
+            "{bulge} m apart at the bulge, {beyond} m past it"
+        );
+    }
+
+    #[test]
+    fn sides_within_hold_a_ring_to_its_tolerance_and_no_closer() {
+        let strays = |radius: f64, sides: usize| radius * (1.0 - (PI / sides as f64).cos());
+        for (radius, tolerance) in [(0.01, 6e-4), (0.005, 1e-4), (0.002, 5e-4)] {
+            let sides = sides_within(radius, tolerance);
+            assert!(strays(radius, sides) <= tolerance);
+            assert!(sides == MIN_SIDES || strays(radius, sides - 1) > tolerance);
+        }
+        assert_eq!(sides_within(0.01, 1.0), MIN_SIDES);
+        assert_eq!(sides_within(0.01, 0.0), MAX_SIDES);
     }
 }
