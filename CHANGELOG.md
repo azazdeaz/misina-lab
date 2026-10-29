@@ -121,6 +121,18 @@ Scene document format 11.
   20 cm below its tip, where growers measure it: 10 mm by default, as on a
   balanced crop. A stem is half as thick again from 0.8 m below its tip
   down, about 15 mm by default, where it was 12–20 mm.
+- **greenhouse-lab** (**cfg**): `StemParams.development_spread`, how far
+  stems drift apart in their development: a stem runs up to this times the
+  square root of the crop's age ahead of it or behind it, in weeks, and grows
+  up to 5% faster or slower, so its trusses hang higher or lower than its
+  neighbours' and ripen later or sooner, where every stem's hung level. 0.2
+  by default; 0 grows the stems in step. `harvest_height` is now where a
+  stem's lowest truss hangs about: up to a week's growth above it, and up to
+  5% of the stem's live height below it on a stem that grows faster. A stem
+  carries `trusses` trusses whatever the day, where it carried one fewer
+  between whole weeks, the newest flowering near its head. `ripe_trusses`
+  is an average over the stems: a stem's lowest truss runs from breaking,
+  just after a picking, to red, where at a whole week every stem's was red.
 
 ### Changed
 

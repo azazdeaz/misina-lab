@@ -86,8 +86,9 @@ Each stem grows a truss a week from planting, up its twine to a hook on the wire
 
 | Parameter | Type | Default | Slider range | Description |
 |---|---|---|---|---|
-| `harvest_height` | float | `1.2` | 0.8 to 1.8 | Height above the floor of the lowest truss still on a stem once the crop is in full production, in meters: where a harvesting arm reaches to. The stem below it has been picked and stripped bare. |
+| `harvest_height` | float | `1.2` | 0.8 to 1.8 | Height above the floor of the lowest truss still on a stem once the crop is in full production, in meters: where a harvesting arm reaches to. A stem's lowest hangs up to a week's growth above it, the higher the sooner after its last picking, and a stem that grows faster than the rest hangs it up to 5% of its live height lower. The stem below it has been picked and stripped bare. |
 | `trusses` | int | `9` | 6 to 12 | Trusses on a stem in full production, from the lowest still on it up to the head. At a truss a week, also the weeks from a truss flowering at the head to its picking. |
+| `development_spread` | float | `0.2` | 0 to 0.5 | How far stems drift apart in their development, in weeks: each truss comes a little sooner or later than the last, so a stem `week` weeks old runs up to this times √`week` ahead of the crop or behind it, its trusses hanging that much of a week's growth lower or higher and ripening that much sooner or later. At 0.2, up to 0.8 of a week at week 16; at 0 every stem grows in step and its trusses hang level with its neighbours'. |
 | `leaves_kept` | int | `16` | 10 to 21 | Leaves on a stem, counted down from the head. Growers strip the ones below, so the stem under them is bare, and the two trusses nearest their picking always hang on bare stem however many are kept. |
 | `extra_stems` | float | `0.0` | 0 to 0.5 | Share of plants grown on with a third stem, which growers keep to raise the stem density. |
 | `turned_to_path` | float | `0.8` | 0 to 1 | Share of trusses turned to face the path. The rest face anywhere, into the crop as often as not, where a harvester has to skip them. |
@@ -141,7 +142,7 @@ Every fruit draws its own lobe count, its five or six sepals and how each curls,
 
 | Parameter | Type | Default | Slider range | Description |
 |---|---|---|---|---|
-| `ripe_trusses` | float | `1.0` | 0 to 3 | Trusses per stem that have coloured in full production, counted up from the lowest: a fraction is the next one part way. |
+| `ripe_trusses` | float | `1.0` | 0 to 3 | Trusses per stem that have coloured in full production, on average, counted up from the lowest: a fraction is the next one part way. |
 | `spread` | float | `0.2` | 0 to 1 | How far a truss's tip fruit lags behind its base fruit, as a share of the ripening from breaker to red: 0 colours a truss all at once. |
 | `color` | str | `"red"` | `red`, `orange`, `yellow`, `brown` | The colour a ripe fruit turns: `red`, `orange`, `yellow` or `brown`. |
 | `aspect` | float | `0.9` | 0.5 to 1.8 | Height of a fruit over its width: under 1 is oblate, as round truss tomatoes and beefsteaks are, and over 1 elongated, as plum tomatoes are. Each fruit draws a little either side. |

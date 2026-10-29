@@ -355,8 +355,8 @@ impl Metric<FruitConfig> for FruitMetric {
     pyo3::pyclass(get_all, set_all, skip_from_py_object)
 )]
 pub struct FruitParams {
-    /// Trusses per stem that have coloured in full production, counted up
-    /// from the lowest: a fraction is the next one part way.
+    /// Trusses per stem that have coloured in full production, on average,
+    /// counted up from the lowest: a fraction is the next one part way.
     #[reflect(@Slider { min: 0.0, max: 3.0, step: 0.1 })]
     pub ripe_trusses: f32,
     /// How far a truss's tip fruit lags behind its base fruit, as a share of
@@ -986,9 +986,10 @@ mod tests {
         }
     }
 
-    /// At one ripe truss a stem, every stem's lowest truss has coloured and
-    /// its third is still green, every truss is ripest at its base, and each
-    /// fruit says so on its prim.
+    /// At one ripe truss a stem, the lowest truss has coloured on most stems,
+    /// one just picked hanging its next still breaking, and every stem's third
+    /// is still green; every truss is ripest at its base, and each fruit says
+    /// so on its prim.
     #[test]
     fn a_stem_ripens_from_the_bottom_and_a_truss_from_its_base() {
         let mut app = grown(small());
@@ -1008,12 +1009,21 @@ mod tests {
                 stages.windows(2).all(|w| w[0] >= w[1]),
                 "{truss}: {stages:?}"
             );
-            if truss.ends_with("Truss_00") {
-                assert!(stages.iter().all(|s| *s >= BREAKER), "{truss}: {stages:?}");
-            } else if truss.ends_with("Truss_02") {
+            if truss.ends_with("Truss_02") {
                 assert!(stages.iter().all(|s| *s < BREAKER), "{truss}: {stages:?}");
             }
         }
+        let lowest: Vec<&Vec<f32>> = trusses
+            .iter()
+            .filter(|(truss, _)| truss.ends_with("Truss_00"))
+            .map(|(_, stages)| stages)
+            .collect();
+        let coloured = lowest.iter().filter(|stages| stages[0] >= BREAKER).count();
+        assert!(
+            4 * coloured >= 3 * lowest.len(),
+            "{coloured} of {} lowest trusses coloured",
+            lowest.len()
+        );
 
         let mut labelled = world.query::<(&FruitConfig, &UsdAttributes)>();
         for (config, attributes) in labelled.iter(world) {
