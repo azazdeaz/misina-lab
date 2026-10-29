@@ -25,11 +25,13 @@ Scene document format 11.
 ### Added
 
 - **greenhouse-lab**: Stems collide, as a chain of capsules along each
-  stem's axis, `Stem_n/Collision_00 …`, each straight from one of the
-  axis's points to another, none of the points between more than 3 mm off
-  it, and overlapping the next over their joint: a run along the gutter is
-  one capsule, the rise a few. A robot meets them, and so do the stem's own
-  plant's trusses.
+  stem's axis from where it takes off from the lowered bundle,
+  `Stem_n/Collision_00 …`, each straight from one of the axis's points to
+  another, none of the points between more than 3 mm off it, and
+  overlapping the next over their joint: a capsule from truss to truss and
+  one over each kink. A robot meets them, and so do the stem's own plant's
+  trusses. The lowered runs, below anything a robot reaches for, do not
+  collide.
 - **misina-lab**: `rods.let_rods_out_of_their_wood` lets each rod through
   any of its own plant's wood colliders it is authored inside, which
   `tune_rods` runs: a proxy can be fatter than the wood, and the segments
@@ -105,8 +107,38 @@ Scene document format 11.
   Kit's viewport on the scene, where `P` prints the camera in the same terms.
 - **greenhouse-lab**: A web playground, the viewer in the browser, at
   [azazdeaz.github.io/misina-lab/playground/greenhouse](https://azazdeaz.github.io/misina-lab/playground/greenhouse/).
+- **misina-lab**: A strand swells all round at its `bulges` and, at its
+  `collars`, toward the stalk of an organ leaving it, the swelling running
+  on down the strand. Given a `tolerance`, a strand keeps only the rings
+  that hold its mesh that close to its surface, bunched at a swelling or a
+  bend and spread out where it runs straight, rather than evenly spaced
+  ones. `sides_within` gives the fewest sides that hold a ring to a
+  tolerance.
+- **greenhouse-lab**: `StemParams.detail`, how finely the stems and the
+  trusses' stems are meshed: at 1 as finely as a leaf at its own detail of
+  1, at 0.1 a plain tube. 0.5 by default.
 
 ### Changed
+
+- **greenhouse-lab**: Lowered stems lie in a loose bundle along each side
+  of the gutter, where they were packed into one straight cable: each run
+  drifts across and up the bundle, crossing the others, rests every half
+  meter or so and sags between, a few in deep loops, and kinks at each old
+  truss. A stem takes off from where it last rests, climbing along the row
+  to its twine a little below its lowest truss, where it bent straight up
+  in 15 cm. Every stem kinks at each truss, away from it, is up to a
+  quarter thicker where it is oldest, and is a little ridged. Trusses and
+  leaves keep their heights and the way they face.
+- **greenhouse-lab**: A stem swells at every node and every truss, more on
+  the side its leaf or truss leaves, the swelling running on down the stem
+  as a leaf's base does. A stripped leaf or a picked truss leaves a short
+  stub, or more often a scar, all the way down the lowered run as well as
+  on the rise. A stem kinks a little at every node too, thins to a point at
+  its tip, and its girth undulates slowly along it. A leaf's petiole flares
+  out of the stem; a truss's peduncle flares out of it too, its rachis
+  swells at every pedicel, and each pedicel arches smoothly and flares out
+  of the rachis. A bent truss's held segment reaches 13.5 mm along its
+  peduncle, past the thickest stem's surface.
 
 - **vinery-lab**: Leaves are built from their veins rather than traced: five
   main veins from the petiole's junction, a lobe at the end of each, sinuses
