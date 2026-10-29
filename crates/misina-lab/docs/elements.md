@@ -49,7 +49,9 @@ whatever was missed.
 ## What an element is built from
 
 The geometry kernels know nothing about what they are shaping. `strand`
-skins a polyline of radii into a tube, `outline` fills a closed ring,
+skins a polyline of radii into a tube, swollen at its nodes and round the
+stalks leaving it, its rings evenly spaced or placed where its shape needs
+them to stay within a tolerance; `outline` fills a closed ring,
 `shapes` builds outlines in code and folds them, `scatter` spreads
 points over a band of ground, and `mesh` holds the type they all produce.
 `palette` turns a hex colour linear, jitters it per mesh and pairs it with a

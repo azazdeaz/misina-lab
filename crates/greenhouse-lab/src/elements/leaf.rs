@@ -40,7 +40,7 @@ use bevy::prelude::*;
 use misina_lab::geometry::mesh::{MeshData, merge_meshes};
 use misina_lab::geometry::par_map;
 use misina_lab::geometry::shapes::bent;
-use misina_lab::geometry::strand::{Bark, Strand, strand_mesh};
+use misina_lab::geometry::strand::{Bark, Bulge, Strand, strand_mesh};
 use misina_lab::palette::{COLOR_STREAM, Response, shade, srgb};
 use misina_lab::params::{Label, Slider};
 use misina_lab::quantize::{Metric, farthest_first};
@@ -133,6 +133,10 @@ const SECONDARY_SPREAD: f32 = 60.0;
 /// length, and the rachis's at the terminal leaflet, as a fraction of that.
 const RADIUS: f32 = 0.008;
 const TAPER: f32 = 0.3;
+
+/// How much the petiole flares where it leaves the stem, as a fraction of
+/// its radius, and over how far, in its radii, out past the stem's surface.
+const FLARE: (f64, f64) = (0.6, 3.0);
 
 /// The power the rachis's turn grows by along it: over 1 keeps the petiole
 /// straight and bends the far end most.
@@ -487,13 +491,15 @@ fn leaf_mesh(config: &LeafConfig, detail: f32) -> Result<MeshData> {
             (Point3::new(p.x as f64, p.y as f64, p.z as f64), r as f64)
         })
         .unzip();
-    sheets.push(strand_mesh(&Strand::new(
-        points,
-        radii,
-        SIDES,
-        RINGS * detail,
-        Bark::none(),
-    ))?);
+    let flare = Bulge {
+        at: 0.0,
+        width: FLARE.1 * (RADIUS * length) as f64,
+        height: FLARE.0,
+    };
+    sheets.push(strand_mesh(&Strand {
+        bulges: vec![flare],
+        ..Strand::new(points, radii, SIDES, RINGS * detail, Bark::none())
+    })?);
     Ok(merge_meshes(&sheets))
 }
 
@@ -546,11 +552,11 @@ mod tests {
     use super::*;
 
     /// Every leaf the defaults call for builds at the coarsest, the default
-    /// and the finest detail the panel offers, hangs from the stem's axis and
-    /// reaches about its length; it costs fewer triangles the coarser it is,
-    /// and stays inside a budget at the default; and a young leaf at the head
-    /// is shorter, more upright and less drooping than an old one, on average
-    /// over the seeds.
+    /// and the finest detail the panel offers, hangs from the stem's axis by
+    /// its flared petiole and reaches about its length; it costs fewer
+    /// triangles the coarser it is, and stays inside a budget at the default;
+    /// and a young leaf at the head is shorter, more upright and less
+    /// drooping than an old one, on average over the seeds.
     #[test]
     fn a_leaf_hangs_from_its_node_and_settles_as_it_ages() {
         let params = LeafParams::default();
@@ -577,10 +583,8 @@ mod tests {
                                 (near.min(d), far.max(d))
                             });
                     let at = format!("seed {seed}, rank {rank}, detail {detail}");
-                    assert!(
-                        near <= RADIUS * config.length + 1e-5,
-                        "{at}: {near} m off the axis"
-                    );
+                    let flared = RADIUS * config.length * (1.0 + FLARE.0 as f32);
+                    assert!(near <= flared + 1e-5, "{at}: {near} m off the axis");
                     assert!(
                         (0.75..=1.0).contains(&(far / config.length)),
                         "{at}: reaches {far} m of {}",

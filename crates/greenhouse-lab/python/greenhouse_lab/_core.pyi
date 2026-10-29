@@ -193,6 +193,13 @@ class StemParams:
     lower is exported as a rod a physics engine bends and a robot can cut, carrying
     its fruit, rather than as a static mesh. 0 bends none.
     """
+    detail: float
+    """How finely the stems and the trusses' stems are meshed. At 1 a stem's tube strays
+    from its shape by about a pixel to a camera half a meter away, as a leaf does at
+    its own detail of 1; at 4 by a quarter of that. Down to about 0.5 every node
+    shows its swelling and the swelling round its leaf or truss; lower is cheaper,
+    and at 0.1 a stem is a plain tube with its stubs.
+    """
 
     def __init__(
         self,
@@ -203,6 +210,7 @@ class StemParams:
         extra_stems: float = 0.0,
         turned_to_path: float = 0.8,
         flexible_below: float = 0.0,
+        detail: float = 0.5,
     ) -> None: ...
     def __repr__(self) -> str: ...
 

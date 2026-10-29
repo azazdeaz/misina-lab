@@ -107,6 +107,16 @@ Scene document format 11.
   Kit's viewport on the scene, where `P` prints the camera in the same terms.
 - **greenhouse-lab**: A web playground, the viewer in the browser, at
   [azazdeaz.github.io/misina-lab/playground/greenhouse](https://azazdeaz.github.io/misina-lab/playground/greenhouse/).
+- **misina-lab**: A strand swells all round at its `bulges` and, at its
+  `collars`, toward the stalk of an organ leaving it, the swelling running
+  on down the strand. Given a `tolerance`, a strand keeps only the rings
+  that hold its mesh that close to its surface, bunched at a swelling or a
+  bend and spread out where it runs straight, rather than evenly spaced
+  ones. `sides_within` gives the fewest sides that hold a ring to a
+  tolerance.
+- **greenhouse-lab**: `StemParams.detail`, how finely the stems and the
+  trusses' stems are meshed: at 1 as finely as a leaf at its own detail of
+  1, at 0.1 a plain tube. 0.5 by default.
 
 ### Changed
 
@@ -119,6 +129,16 @@ Scene document format 11.
   in 15 cm. Every stem kinks at each truss, away from it, is up to a
   quarter thicker where it is oldest, and is a little ridged. Trusses and
   leaves keep their heights and the way they face.
+- **greenhouse-lab**: A stem swells at every node and every truss, more on
+  the side its leaf or truss leaves, the swelling running on down the stem
+  as a leaf's base does. A stripped leaf or a picked truss leaves a short
+  stub, or more often a scar, all the way down the lowered run as well as
+  on the rise. A stem kinks a little at every node too, thins to a point at
+  its tip, and its girth undulates slowly along it. A leaf's petiole flares
+  out of the stem; a truss's peduncle flares out of it too, its rachis
+  swells at every pedicel, and each pedicel arches smoothly and flares out
+  of the rachis. A bent truss's held segment reaches 13.5 mm along its
+  peduncle, past the thickest stem's surface.
 
 - **vinery-lab**: Leaves are built from their veins rather than traced: five
   main veins from the petiole's junction, a lobe at the end of each, sinuses
