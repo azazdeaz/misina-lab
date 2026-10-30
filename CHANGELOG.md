@@ -32,6 +32,9 @@ Scene document format 11.
   one over each kink. A robot meets them, and so do the stem's own plant's
   trusses. The lowered runs, below anything a robot reaches for, do not
   collide.
+- **misina-lab**: `Shears.hold(body, frame)` holds a rod body where it lies
+  in a frame and carries it as the frame moves, kinematic, the rest of its
+  rod hanging from it, until it is let go: a hand's hold on a piece it cut.
 - **misina-lab**: `rods.let_rods_out_of_their_wood` lets each rod through
   any of its own plant's wood colliders it is authored inside, which
   `tune_rods` runs: a proxy can be fatter than the wood, and the segments

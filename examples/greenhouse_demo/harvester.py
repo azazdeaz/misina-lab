@@ -14,20 +14,19 @@ same joints for `kinematics`.
 The cutter is the pruning demo's bypass shear, `shear.Shear`, made to cut
 and hold: on the side the truss hangs, a rubber jaw beside the hook and a
 sprung rubber finger riding the cutting blade press the peduncle between
-them as the blade cuts it, and friction holds the truss there until the
+them as the blade cuts it, and `harvest` holds the truss there until the
 shear opens. Its head, both blades, the jaw and the finger collide, and
 `shear.Stroke` closes it and cuts what it closes on, a control tick at a
 time.
 
 The robot collides with itself. Its colliders are the trolley's chassis and
-mast, the crate's boxes, Menagerie's capsules on the arm and the shear; the
-platform's deck has none, the arm's base standing flush on it. The arm's are
-each a `Shape`, and so is the box round each part of the shear: `urdf`
-writes the arm's for Isaac Sim's importer, the shear's own pieces going with
-`shear.urdf`, and `curobo_cfg` hands cuRobo the spheres that cover each, so
-a pose cuRobo finds clear is clear in the simulation. The trolley's and the
-crate's reach cuRobo with the rest of the world, from the simulation itself
-(see `planner`).
+mast, the platform's deck, the crate's boxes, Menagerie's capsules on the arm
+and the shear. The arm's are each a `Shape`, and so is the box round each
+part of the shear: `urdf` writes the arm's for Isaac Sim's importer, the
+shear's own pieces going with `shear.urdf`, and `curobo_cfg` hands cuRobo
+the spheres that cover each, so a pose cuRobo finds clear is clear in the
+simulation. The trolley's, the deck's and the crate's reach cuRobo with the
+rest of the world, from the simulation itself (see `planner`).
 """
 
 from __future__ import annotations
@@ -479,6 +478,9 @@ def curobo_cfg(machine: Harvester) -> dict:
             "collision_spheres": covers,
             "self_collision_ignore": ignore,
             "self_collision_buffer": {},
+            # The shoulder's cover reaches into the deck it stands on, the
+            # only collider it can turn into; shrunk clear of it.
+            "collision_sphere_buffer": {"shoulder_link": -0.01},
             "cspace": {
                 "joint_names": arm_joints(),
                 "default_joint_position": list(ARM_HOME),
@@ -733,8 +735,8 @@ def urdf(machine: Harvester, open_shear: bool = False) -> str:
     the trolley's mast; the arm and the crate stand on the platform through
     fixed joints the importer merges away, so the crate's colliders are the
     platform's, and the shear's head on the last wrist through another. The
-    trolley's chassis and mast collide, the crate, the arm and the shear; the
-    platform's own deck and the wheels are drawn only.
+    trolley's chassis and mast collide, the platform's deck, the crate, the
+    arm and the shear; the wheels are drawn only.
     """
     m = machine
     aisle, rail, lift, *_ = m.chain
@@ -781,7 +783,7 @@ def urdf(machine: Harvester, open_shear: bool = False) -> str:
   </link>
 {_joint(lift, "trolley", "platform")}
   <link name="platform">
-{_box(((rear + front) / 2, 0.0, -0.02), (front - rear, 0.5, 0.04), "steel")}
+{_box(((rear + front) / 2, 0.0, -0.02), (front - rear, 0.5, 0.04), "steel", BOTH)}
 {_inertial(25.0, _box_inertia(25.0, front - rear, 0.5, 0.04), ((rear + front) / 2, 0, -0.02))}
   </link>
   <joint name="crate_mount" type="fixed">

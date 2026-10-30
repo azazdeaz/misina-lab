@@ -122,14 +122,14 @@ The plan comes from the scene's own ground truth, not from a camera:
    back to the stand-off and 20 cm across the path, clear of the crop
    wall, rising as it goes until the jaws are 42 cm above the crate's
    floor. The arm swings it round its base from there to over the crate's
-   middle, the mouth turning about the upright alone, so the truss hangs
-   in the jaws as it did when cut: turned so that its weight pulls toward
-   the mouth's entrance, it slides out of them. The shear opens over the
-   crate and the truss drops into it. One still lying on the open finger
-   is tipped off it. The
+   middle, or 12 cm along the crate from it where the middle is past the
+   shoulder's range, the mouth turning about the upright alone, so the
+   truss hangs in the jaws as it did when cut, its weight pulling away
+   from the mouth's entrance. The shear opens over the crate and the truss
+   drops into it. One still lying on the open finger is tipped off it. The
    forearm, the wrists, the shear and the crate collide with the trusses
-   they meet, and the arm, the shear, the crate and the trolley's chassis
-   and mast with each other.
+   they meet, and the arm, the shear, the crate, the platform's deck and
+   the trolley's chassis and mast with each other.
 
 The tally counts the trusses due on the paths worked, how many the arm
 reaches, how many of those only by brushing a truss, how many it cuts,
@@ -163,24 +163,27 @@ a radius and a millimetre off its edge, halfway along the blade, where
 the cutting blade is widest: one the blade does not quite lift onto the
 hook is still between the blades as they meet, and is cut then.
 
-The cut is a rule; the hold is the simulation's own. The finger meets the
-peduncle as the blade does and stops there, while the blade closes on
-through and its spring winds up, so the peduncle is pressed between the
-finger and the jaw, with about 10 N once the shear is shut, and friction
-there carries the truss once it is cut. The finger is one of the robot's
-bodies the solver bending the trusses sees, as the blades are, so the
-peduncle pushes it back as it would a real one. The shear opening swings
-the finger down and away from under the peduncle, and the truss drops; one
-the rubber still holds up on the finger's slope is tipped off by turning
-the blades down about the peduncle, as the pruning demo tips out a piece
-of cane.
+The cut is a rule, and so is the hold. The finger meets the peduncle as
+the blade does and stops there, while the blade closes on through and its
+spring winds up, so the peduncle is pressed between the finger and the
+jaw, with about 10 N once the shear is shut. The finger is one of the
+robot's bodies the solver bending the trusses sees, as the blades are, so
+the peduncle pushes it back as it would a real one. Friction there alone
+lets a truss slide out of the jaws on its way to the crate: that solver
+meets the jaws as copies of the robot's bodies, posed anew from the arm
+every step. So once the shear is shut, the segment of the cut peduncle
+between the jaws is held where it lies in them and carried with the hand,
+`Shears.hold`, the rest of the truss hanging from it. The shear opening
+lets it go and swings the finger down and away from under the peduncle,
+and the truss drops; one the rubber still holds up on the finger's slope
+is tipped off by turning the blades down about the peduncle, as the
+pruning demo tips out a piece of cane.
 
 The blade crosses the peduncle half a centimetre past its rod's first
 joint, and `Shears.cut` makes the cut at the joint. Now and then the
 peduncle shifts under the closing blade far enough that the cut lands a
-centimetre or more past the joint, in the segment the jaws hold; that
-truss slips out of them and falls where it is cut. Over four runs of the
-demo, 6 of the 106 trusses cut were lost from the jaws.
+centimetre or more past the joint, and the segment the jaws hold is the
+next one, stretched back to the cut.
 
 ## Planning with cuRobo
 
@@ -197,18 +200,19 @@ station. What it collides with is what the simulation collides with:
   shear's own pieces, and hands cuRobo the spheres that cover each shape,
   spaced along a capsule no farther apart than its radius and grown to
   cover the dips between them, so a pose cuRobo finds clear is clear in
-  the simulation too, the robot's collisions with itself included. cuRobo
-  plans with the shear held open and the finger against its blade.
+  the simulation too, the robot's collisions with itself included. The
+  shoulder's are a centimetre smaller, clear of the deck it stands on.
+  cuRobo plans with the shear held open and the finger against its blade.
 - **The world.** `planner.py` reads every collider of the running Newton
   model within the arm's reach, but the arm's own, and hands cuRobo the box
   round each where the simulation has it at that moment: the trolley's
-  chassis and mast, the crate, the rails, the floor, the stems, and the
-  trusses and their fruit, bent or fallen. An upright stem's box reaches
-  back to the middle of its row, a fin, so the arm keeps to the path's side
-  of the stems and meets the crop only between two, where the trusses
-  hang: a stand-off reached round the back of a stem is one cuRobo finds
-  no way back out of. A stretch of stem left out by a cut leaves its fin
-  out with it.
+  chassis and mast, the platform's deck, the crate, the rails, the floor,
+  the stems, and the trusses and their fruit, bent or fallen. An upright
+  stem's box reaches back to the middle of its row, a fin, so the arm
+  keeps to the path's side of the stems and meets the crop only between
+  two, where the trusses hang: a stand-off reached round the back of a
+  stem is one cuRobo finds no way back out of. A stretch of stem left out
+  by a cut leaves its fin out with it.
 
 Bent trusses crowd the crop: a truss's fruit hang just below its cut and
 the next truss up a few centimeters above. A cut is planned clear of every
