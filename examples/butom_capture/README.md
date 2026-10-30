@@ -76,8 +76,9 @@ about 10% on each. What the greenhouse differs in:
   generator's stand in stone wool on a steel gutter, with lowered stem along
   it. Its trusses hang as longer strings of fruit, and its stems are thicker.
 - **The building.** Rows 1 and 6 of the real house have the glass wall and
-  its heating pipes behind them; here a bright, even sky stands in for the
-  glass, and two pipes along every row for the heating.
+  its heating pipes behind them; here a plain white wall a row's pitch past
+  each outer row stands in for the glass, a bright, even sky lights the
+  crop, and two pipes along every row stand in for the heating.
 - **The sensor.** The depth is exact, where a D435i's is noisy and has holes,
   and the colour has no motion blur, noise or auto exposure.
 - **BUTom's depth unit.** The real depth PNGs are taken to be millimetres,
