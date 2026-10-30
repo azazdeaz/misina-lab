@@ -33,6 +33,10 @@ capsule's new length, and whatever hangs off the shortened segment past the
 cut -- a leaf -- is hidden, since a prim cannot move to the piece that carries
 on without it.
 
+A piece can be held: one of its bodies turned kinematic and moved with a
+frame, a hand's, the rest of the piece hanging from it on its joints, until
+it is let go.
+
 A piece that falls meets its own plant's stub, rods and wood, the trellis and
 the ground, and passes through every other plant (see `rods.PLANT_GROUPS`).
 VBD has no rolling friction, so a straight one on a slope can roll on
@@ -138,10 +142,9 @@ class Shears:
         # the coupled solver's entries' own. See the module docstring.
         solver = NewtonManager._solver
         entries = solver.entry_names() if hasattr(solver, "entry_names") else ()
+        self._views = [solver.view(name) for name in entries]
         self._shape_copies = [model] + [
-            view
-            for view in (solver.view(name) for name in entries)
-            if view.shape_scale.ptr != model.shape_scale.ptr
+            view for view in self._views if view.shape_scale.ptr != model.shape_scale.ptr
         ]
         if any(len(copy.shape_scale) != len(model.shape_scale) for copy in self._shape_copies):
             raise ValueError(
@@ -163,6 +166,8 @@ class Shears:
 
         self.loose = np.zeros(len(self.bodies), dtype=bool)
         """Which bodies are cut free of their rod, in `bodies` order."""
+        # The body `hold` holds, and its pose in the frame it is held in.
+        self._held: tuple[int, np.ndarray] | None = None
 
     def cut(self, body: int, at: float) -> bool:
         """Cut rod body `body` at `at`, a fraction of its capsule's length, and
@@ -252,6 +257,34 @@ class Shears:
         rotation in one array of 7. A prim authored under the body's segment
         follows it: its world placement is this pose applied to its own."""
         return self._manager.get_state_0().body_q.numpy()[body]
+
+    def hold(self, body: int | None, frame: np.ndarray) -> None:
+        """Hold rod body `body` where it lies in `frame`, a world pose as a
+        position and (x, y, z, w) rotation in one array of 7, and carry it
+        there as the frame moves: call it before every step, with the frame
+        where it is then. The body turns kinematic, so nothing else moves it,
+        and the rest of its rod hangs from it on its joints. A call with
+        another body, or with None, first lets the one held go: dynamic again,
+        and moving as it was carried."""
+        import warp as wp
+        from newton import BodyFlags
+
+        held = self._held[0] if self._held is not None else None
+        if body != held:
+            if held is not None:
+                self._flag(held, BodyFlags.DYNAMIC)
+            self._held = None
+            if body is not None:
+                self._flag(body, BodyFlags.KINEMATIC)
+                into = wp.transform_inverse(wp.transform(*frame))
+                self._held = (
+                    body,
+                    np.array(wp.transform_multiply(into, wp.transform(*self.pose(body)))),
+                )
+        if self._held is not None:
+            body, offset = self._held
+            pose = np.array(wp.transform_multiply(wp.transform(*frame), wp.transform(*offset)))
+            _write([self._manager.get_state_0().body_q], body, lambda _: pose)
 
     def capsules(self) -> tuple[np.ndarray, np.ndarray]:
         """Each rod body's capsule axis in world coordinates, as its end nearer
@@ -362,6 +395,24 @@ class Shears:
             if (joint := self._tip_joint.get(body)) is None:
                 return
             body = int(self._child[joint])
+
+    def _flag(self, body: int, flag: int) -> None:
+        """Write body `body`'s flag into the model and every solver's copy:
+        the solver bending the rods keeps its own, to mark the proxies of the
+        bodies another steps. A copy compacted to an entry's own bodies takes
+        the model's anew on the change notified here."""
+        from newton import ModelFlags
+
+        model = self._model
+        copies = {
+            each.ptr: each
+            for each in [model.body_flags, *(view.body_flags for view in self._views)]
+            if len(each) == len(model.body_flags)
+        }
+        _write(copies.values(), body, lambda _: int(flag))
+        # A flag is a body property, but that change has MuJoCo rebuild the
+        # robot's bodies; VBD reads its kinematic bodies anew on this one too.
+        self._manager.add_model_change(ModelFlags.BODY_INERTIAL_PROPERTIES)
 
     def _disable(self, joint: int) -> None:
         from newton import ModelFlags
