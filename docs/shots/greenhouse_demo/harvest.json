@@ -1,6 +1,6 @@
 {
   "size": [2400, 1072],
   "harvest": [1],
-  "warmup": 25.2,
-  "camera": {"focus": [1.80, 0.30, 1.00], "yaw": 71.6, "pitch": 17.6, "radius": 2.65, "fov": 45.0}
+  "warmup": 6.3,
+  "camera": {"focus": [1.21, 0.47, 1.23], "yaw": -39.1, "pitch": 34.2, "radius": 1.25, "fov": 45.0}
 }

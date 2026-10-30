@@ -61,6 +61,11 @@ needed.
 
 ## Harvesting
 
+> [!WARNING]
+> **Work in progress.** The harvest shows what the robot can do, not a
+> finished controller: some trusses are not cut, and some are dropped short
+> of the crate.
+
 https://github.com/user-attachments/assets/6853635e-f1da-40b4-ba06-eb8d8e289957
 
 The robot has the layout of eternal.ag's Harvester and most robots of its
@@ -239,8 +244,9 @@ Turned while still out, it would sweep along the crop wall into the stems.
 ./record.sh
 ```
 
-films the harvester cutting Path_01's due trusses, the first three close up,
-in Isaac Sim's RTX renderer and headless, and writes
+films the harvester cutting Path_01's due trusses, the first three close up
+and the rest from a camera riding along with the trolley, in Isaac Sim's RTX
+renderer and headless, and writes
 `target/video/harvest.mp4` at the repo root, captioned and small enough to
 upload, and a contact sheet beside it. Its storyboard -- the shots, the takes,
 the pacing -- is the top of `video.py`, and the run fails if a take's truss
