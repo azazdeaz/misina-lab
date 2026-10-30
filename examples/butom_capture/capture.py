@@ -55,7 +55,9 @@ GREENHOUSE_CFG = GreenhouseCfg(
     # A crop thick with leaves from its head down past the lower camera,
     # where its ripe trusses hang. The generator strips the stem below the
     # kept leaves, and always the two trusses nearest the harvest height.
-    stem=StemCfg(harvest_height=1.0, leaves_kept=21, extra_stems=0.3),
+    # Meshed finer than the default for cameras a meter off: 9 to 13 sides
+    # round a stem rather than 6 or 7.
+    stem=StemCfg(harvest_height=1.0, leaves_kept=21, extra_stems=0.3, detail=1.5),
     leaf=LeafCfg(length=0.5),
     truss=TrussCfg(fruit_diameter=0.05),
 )
@@ -64,6 +66,11 @@ RADIATORS = (1.65, 1.95)
 """Heights, in meters, of the two heating pipes along every row's
 centreline, between the two faces its stems are trained to: behind the face
 the cameras film, from either path."""
+
+WALL_HEIGHT = 7.0
+"""Height, in meters, of the white walls along the house's two sides: from
+the path by an outer row, a camera sees wall to the top of its picture, so
+its depth has no empty band past the rows."""
 
 ROBOT = "/World/PATHoBot"
 CAMERAS = ("cam_1", "cam_2")
@@ -135,9 +142,28 @@ def row_y(layout, row: int) -> float:
     return (row - (layout.rows - 1) / 2) * layout.pitch
 
 
+def trolley():
+    """The transform op that places the trolley, the only one on its prim."""
+    from pxr import UsdGeom
+
+    robot = UsdGeom.Xformable(sim_utils.get_current_stage().GetPrimAtPath(ROBOT))
+    robot.ClearXformOpOrder()
+    return robot.AddTransformOp()
+
+
+def stand(pose, layout, row: int, face: int, x: float) -> None:
+    """Stands the trolley at `x` on the path by `face` of `row`, its cameras
+    on the row, through `pose`, the transform op on its prim."""
+    from pxr import Gf
+
+    # Turned to face the row, since the cameras look to the trolley's right.
+    turn = Gf.Rotation(Gf.Vec3d(0, 0, 1), 0.0 if face == 1 else 180.0)
+    at = Gf.Vec3d(float(x), row_y(layout, row) + face * layout.pitch / 2, 0.0)
+    pose.Set(Gf.Matrix4d().SetRotate(turn).SetTranslateOnly(at))
+
+
 def design_scene() -> None:
-    # The glasshouse's whitewashed glass: a bright, even sky, which the
-    # crop's gaps show as the real pictures do, blown out.
+    # The glasshouse's whitewashed glass: a bright, even sky over the crop.
     sky = sim_utils.DomeLightCfg(intensity=2500.0, color=(1.0, 0.98, 0.94))
     sky.func("/World/Light", sky)
     layout = GREENHOUSE_CFG.layout
@@ -157,6 +183,26 @@ def design_scene() -> None:
         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.3, 0.27, 0.22)),
     )
     ground.func("/World/Ground", ground, translation=(0.0, 0.0, -0.06))
+    # The house's side walls, where one more row would stand past each outer
+    # one, from the main path to the rows' far end. They cast no shadows, so
+    # the sky lights the crop as if they were not there.
+    from pxr import Sdf, Usd, UsdGeom
+
+    wall = sim_utils.CuboidCfg(
+        size=(layout.row_length + layout.main_path + 1.0, 0.1, WALL_HEIGHT),
+        visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.9, 0.9, 0.88)),
+    )
+    for k, side in enumerate((-1, 1)):
+        path = f"/World/Walls/Side_{k}"
+        y = side * (layout.rows + 1) / 2 * layout.pitch
+        wall.func(
+            path, wall, translation=((layout.row_length - layout.main_path) / 2, y, WALL_HEIGHT / 2)
+        )
+        for prim in Usd.PrimRange(sim_utils.get_current_stage().GetPrimAtPath(path)):
+            if prim.IsA(UsdGeom.Gprim):
+                UsdGeom.PrimvarsAPI(prim).CreatePrimvar(
+                    "doNotCastShadows", Sdf.ValueTypeNames.Bool
+                ).Set(True)
     GREENHOUSE_CFG.func("/World/Greenhouse", GREENHOUSE_CFG)
     robot = sim_utils.UsdFileCfg(usd_path=str(HERE / "pathobot.usda"))
     robot.func(ROBOT, robot)
@@ -186,12 +232,10 @@ def sensor(name: str):
 def record(sim: sim_utils.SimulationContext, cameras: list, args: argparse.Namespace) -> None:
     import yaml
     from PIL import Image
-    from pxr import Gf, Usd, UsdGeom
+    from pxr import Usd, UsdGeom
 
     stage = sim_utils.get_current_stage()
-    robot = UsdGeom.Xformable(stage.GetPrimAtPath(ROBOT))
-    robot.ClearXformOpOrder()
-    pose = robot.AddTransformOp()
+    pose = trolley()
     lenses = [UsdGeom.Xformable(stage.GetPrimAtPath(f"{ROBOT}/{name}")) for name in CAMERAS]
 
     out = args.out
@@ -217,9 +261,6 @@ def record(sim: sim_utils.SimulationContext, cameras: list, args: argparse.Names
 
     for _ in range(args.passes):
         row, face, xs = plan(rng, layout, args.frames)
-        path_y = row_y(layout, row) + face * layout.pitch / 2
-        # Turned to face the row, since the cameras look to the trolley's right.
-        turn = Gf.Rotation(Gf.Vec3d(0, 0, 1), 0.0 if face == 1 else 180.0)
         names = [f"{taken + i:03d}" for i in range(len(CAMERAS))]
         taken += len(names)
         for name in names:
@@ -231,9 +272,7 @@ def record(sim: sim_utils.SimulationContext, cameras: list, args: argparse.Names
             flush=True,
         )
         for k, x in enumerate(xs):
-            pose.Set(
-                Gf.Matrix4d().SetRotate(turn).SetTranslateOnly(Gf.Vec3d(float(x), path_y, 0.0))
-            )
+            stand(pose, layout, row, face, x)
             # Headless, a frame is drawn by the cameras' update, once per render.
             for _ in range(SUBFRAMES):
                 sim.render()

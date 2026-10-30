@@ -24,6 +24,7 @@ repository. `tests/test_docs.py` fails on a link to a picture no shot renders.
 | `docs/shots/greenhouse-lab/editor.json` | the greenhouse's viewer | the top of `crates/greenhouse-lab/README.md` |
 | `docs/shots/greenhouse_demo/rows.json` | `examples/greenhouse_demo/shot.py` | the top of `crates/greenhouse-lab/README.md`, and its section of `README.md` |
 | `docs/shots/greenhouse_demo/harvest.json` | `examples/greenhouse_demo/shot.py` | the top of `examples/greenhouse_demo/README.md` |
+| `docs/shots/butom_capture/compare.json` | `examples/butom_capture/shot.py`, beside BUTom-ST21's frames | "How close it is" in `examples/butom_capture/README.md` |
 
 ## Render them
 
@@ -37,7 +38,9 @@ repository is, as WebP. The folder a shot is in names what renders it: an
 example with a `shot.py` renders it in Isaac Sim, headless, in a few minutes
 on an RTX GPU; any other folder is a crate whose viewer renders it, in a
 window that opens on the desktop at the shot's size for about ten seconds.
-Look at every picture before publishing.
+`butom_capture`'s sets its frames beside the real dataset's, so it needs
+`BUTOM` set to the folder BUTom-ST21's `rgb.tar.gz` unpacks its sequences
+into. Look at every picture before publishing.
 
 ## Publish them
 

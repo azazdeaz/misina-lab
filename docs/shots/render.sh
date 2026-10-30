@@ -9,7 +9,7 @@
 # rendered by what its folder is named after: an example with a shot.py, in
 # Isaac Sim, or else a crate's viewer, which plays the shot as a storyboard.
 # Needs cargo, uv and ffmpeg, a display for the viewer and an RTX GPU for
-# Isaac Sim.
+# Isaac Sim, and for butom_capture's, BUTOM: see its shot.py.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
