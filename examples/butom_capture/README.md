@@ -95,15 +95,16 @@ about 10% on each. What the greenhouse differs in:
 
 ## Experiments
 
-### Cosmos3-Nano: the frames as photos
+### Cosmos3-Nano video transfer: the frames as photos
 
 https://github.com/user-attachments/assets/035f7bc1-4830-47a9-a822-e779cb1decb2
 
 [Cosmos3-Nano](https://huggingface.co/nvidia/Cosmos3-Nano), NVIDIA's world
-model, redraws 12 s of the lower camera's pass as a video, guided by three
-hints rendered with it: depth, a segmentation painted in each class's mean
-colour in the render, and edges. It runs in FP8 on a 16 GB RTX 5070 Ti,
-in about 40 minutes for the 181 frames at 480 x 848. Above, the render and
+model, redraws 12 s of the lower camera's pass as a video in its
+[video transfer](https://github.com/NVIDIA/cosmos-framework/tree/main/.agents/skills/cookbooks/cosmos3/generator/transfer)
+mode, guided by three hints rendered with it: depth, a segmentation painted
+in each class's mean colour in the render, and edges. It runs in FP8 on a
+16 GB RTX 5070 Ti, in about 40 minutes for the 181 frames at 480 x 848. Above, the render and
 the result; below, the hints.
 
 The fruit keeps its ripeness, the stems and leaves stay where they are, and
