@@ -11,7 +11,7 @@ tooling written for the real dataset reads them too.
 
 **Contents:** [Requirements](#requirements) · [Running it](#running-it) ·
 [What it writes](#what-it-writes) · [How close it is](#how-close-it-is) ·
-[Layout](#layout)
+[Experiments](#experiments) · [Layout](#layout)
 
 ## Requirements
  - [uv](https://docs.astral.sh/uv/getting-started/installation/) installed
@@ -58,6 +58,15 @@ rows from the main path.
 
 ## How close it is
 
+![BUTom-ST21's frames above this example's](https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/butom_capture/compare.webp)
+
+BUTom-ST21's frames along the top, this example's under them: on the left a
+row inside the house, on the right an outer row, with the glass behind it,
+here the white wall; each the lower camera's and then the upper's. BUTom's
+frames are the University of Bonn's, under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). `shot.py`
+renders the picture again, with the dataset's RGB sequences at hand.
+
 | | BUTom-ST21 | Here | From |
 | --- | --- | --- | --- |
 | Cameras | RealSense D435i, portrait, 720 x 1280 at 15 Hz | the same | BUTom's readme |
@@ -84,13 +93,43 @@ about 10% on each. What the greenhouse differs in:
 - **BUTom's depth unit.** The real depth PNGs are taken to be millimetres,
   the RealSense default; the dataset does not say.
 
+## Experiments
+
+### Cosmos3-Nano: the frames as photos
+
+https://github.com/user-attachments/assets/035f7bc1-4830-47a9-a822-e779cb1decb2
+
+[Cosmos3-Nano](https://huggingface.co/nvidia/Cosmos3-Nano), NVIDIA's world
+model, redraws 12 s of the lower camera's pass as a video, guided by three
+hints rendered with it: depth, a segmentation painted in each class's mean
+colour in the render, and edges. It runs in FP8 on a 16 GB RTX 5070 Ti,
+in about 40 minutes for the 181 frames at 480 x 848. Above, the render and
+the result; below, the hints.
+
+The fruit keeps its ripeness, the stems and leaves stay where they are, and
+the two chunks it is drawn in meet without a seam. Leaves near the camera
+come out pale, stems grow thorn-like stubs, and the unripe fruit high in the
+picture drifts toward cream. Where the depth is empty it draws a black void;
+the walls keep the depth filled.
+
+**Next: fine-tuning on BUTom-ST21.** Trained on BUTom's frames, with hints
+made from them, its depth and its frames' edges and blur, a model would draw
+that house's crop, light and lenses from this example's hints, its labels
+still exact. NVIDIA documents the post-training of
+[Cosmos-Transfer2.5-2B](https://github.com/nvidia-cosmos/cosmos-transfer2.5)
+on these hints: about 2000 iterations, under an hour on eight rented 80 GB
+A100s or H100s, its clips 77 frames of BUTom's 83. Rendering with it needs
+an 80 GB GPU too. Cosmos3-Nano's own takes eight H200s and has no LoRA
+recipe yet.
+
 ## Layout
 
 | file | what it owns |
 | --- | --- |
 | `pathobot.usda` | the trolley: its chassis, wheels and mast, and the two cameras with BUTom's intrinsics |
 | `capture.py` | the greenhouse's parameters, the passes, and writing the dataset |
-| `test_capture.py` | where a pass goes, how depth is stored, and the script's imports, without Kit |
+| `shot.py` | the picture in [How close it is](#how-close-it-is): the trolley's cameras at a shot's places, under BUTom's frames |
+| `test_capture.py` | where a pass goes, how depth is stored, and the scripts' imports, without Kit |
 
 [`examples/isaaclab_demo/DEVELOPMENT.md`](../isaaclab_demo/DEVELOPMENT.md)
 covers the pinned Isaac Lab release, which this example pins too.

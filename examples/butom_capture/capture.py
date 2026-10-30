@@ -142,6 +142,26 @@ def row_y(layout, row: int) -> float:
     return (row - (layout.rows - 1) / 2) * layout.pitch
 
 
+def trolley():
+    """The transform op that places the trolley, the only one on its prim."""
+    from pxr import UsdGeom
+
+    robot = UsdGeom.Xformable(sim_utils.get_current_stage().GetPrimAtPath(ROBOT))
+    robot.ClearXformOpOrder()
+    return robot.AddTransformOp()
+
+
+def stand(pose, layout, row: int, face: int, x: float) -> None:
+    """Stands the trolley at `x` on the path by `face` of `row`, its cameras
+    on the row, through `pose`, the transform op on its prim."""
+    from pxr import Gf
+
+    # Turned to face the row, since the cameras look to the trolley's right.
+    turn = Gf.Rotation(Gf.Vec3d(0, 0, 1), 0.0 if face == 1 else 180.0)
+    at = Gf.Vec3d(float(x), row_y(layout, row) + face * layout.pitch / 2, 0.0)
+    pose.Set(Gf.Matrix4d().SetRotate(turn).SetTranslateOnly(at))
+
+
 def design_scene() -> None:
     # The glasshouse's whitewashed glass: a bright, even sky over the crop.
     sky = sim_utils.DomeLightCfg(intensity=2500.0, color=(1.0, 0.98, 0.94))
@@ -212,12 +232,10 @@ def sensor(name: str):
 def record(sim: sim_utils.SimulationContext, cameras: list, args: argparse.Namespace) -> None:
     import yaml
     from PIL import Image
-    from pxr import Gf, Usd, UsdGeom
+    from pxr import Usd, UsdGeom
 
     stage = sim_utils.get_current_stage()
-    robot = UsdGeom.Xformable(stage.GetPrimAtPath(ROBOT))
-    robot.ClearXformOpOrder()
-    pose = robot.AddTransformOp()
+    pose = trolley()
     lenses = [UsdGeom.Xformable(stage.GetPrimAtPath(f"{ROBOT}/{name}")) for name in CAMERAS]
 
     out = args.out
@@ -243,9 +261,6 @@ def record(sim: sim_utils.SimulationContext, cameras: list, args: argparse.Names
 
     for _ in range(args.passes):
         row, face, xs = plan(rng, layout, args.frames)
-        path_y = row_y(layout, row) + face * layout.pitch / 2
-        # Turned to face the row, since the cameras look to the trolley's right.
-        turn = Gf.Rotation(Gf.Vec3d(0, 0, 1), 0.0 if face == 1 else 180.0)
         names = [f"{taken + i:03d}" for i in range(len(CAMERAS))]
         taken += len(names)
         for name in names:
@@ -257,9 +272,7 @@ def record(sim: sim_utils.SimulationContext, cameras: list, args: argparse.Names
             flush=True,
         )
         for k, x in enumerate(xs):
-            pose.Set(
-                Gf.Matrix4d().SetRotate(turn).SetTranslateOnly(Gf.Vec3d(float(x), path_y, 0.0))
-            )
+            stand(pose, layout, row, face, x)
             # Headless, a frame is drawn by the cameras' update, once per render.
             for _ in range(SUBFRAMES):
                 sim.render()

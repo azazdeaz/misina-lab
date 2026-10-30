@@ -1,5 +1,5 @@
 """Checks of `capture` that need no Kit: where a pass goes, how depth is
-stored, and that importing the script leaves `pxr` unloaded. Kit ships its own
+stored, and that importing the scripts leaves `pxr` unloaded. Kit ships its own
 `pxr` and dies during startup if the pip one was imported first."""
 
 import pathlib
@@ -15,10 +15,10 @@ pytest.importorskip("isaaclab", reason="Isaac Lab is not installed")
 import capture  # noqa: E402
 
 
-def test_importing_the_script_does_not_load_pxr():
+def test_importing_the_scripts_does_not_load_pxr():
     # A subprocess, so the check is not fooled by another test's imports.
     subprocess.run(
-        [sys.executable, "-c", "import capture, sys; assert 'pxr' not in sys.modules"],
+        [sys.executable, "-c", "import capture, shot, sys; assert 'pxr' not in sys.modules"],
         cwd=pathlib.Path(__file__).parent,
         check=True,
     )
