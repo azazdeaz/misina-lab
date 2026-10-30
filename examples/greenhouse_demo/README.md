@@ -66,7 +66,7 @@ needed.
 > finished controller: some trusses are not cut, and some are dropped short
 > of the crate.
 
-https://github.com/user-attachments/assets/6853635e-f1da-40b4-ba06-eb8d8e289957
+https://github.com/user-attachments/assets/f62f4aca-bbfb-450b-a0da-9f42e2fcc6d4
 
 The robot has the layout of eternal.ag's Harvester and most robots of its
 kind: a trolley as wide as the heating pipes are spaced, a lift on it, a
