@@ -1,6 +1,6 @@
 name: Playground
 
-# Manual only: a fat-LTO wasm build of Bevy takes ~15 minutes, and a demo page
+# Manual only: a fat-LTO wasm build of Bevy takes ~20 minutes, and a demo page
 # does not have to track every push. It publishes the bundle to the
 # `playground` release rather than deploying it: pages.yml deploys the whole
 # site, the bundle included, and runs once this succeeds.
@@ -38,8 +38,12 @@ jobs:
           tool: wasm-bindgen-cli@${{ env.WASM_BINDGEN }}
 
       # No apt packages: alsa, udev and wayland are all native-only paths. One
-      # build for every viewer, so the dependencies compile once.
-      - run: cargo build --profile wasm-release --target wasm32-unknown-unknown -p vinery-lab -p greenhouse-lab --bins
+      # viewer at a time: two fat-LTO links at once run the runner out of
+      # memory. The dependencies compile once, in the first.
+      - run: |
+          for p in vinery-lab greenhouse-lab; do
+            cargo build --profile wasm-release --target wasm32-unknown-unknown -p "$p" --bins
+          done
 
       # One bundle per playground, named for where pages.yml serves it:
       # vinery.tar.gz is /playground/vinery/.
