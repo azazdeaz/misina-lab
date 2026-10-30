@@ -97,7 +97,7 @@ about 10% on each. What the greenhouse differs in:
 
 ### Cosmos3-Nano video transfer: the frames as photos
 
-https://github.com/user-attachments/assets/035f7bc1-4830-47a9-a822-e779cb1decb2
+https://github.com/user-attachments/assets/d5f10bc4-ba70-478c-bb92-eb53b7435b9b
 
 [Cosmos3-Nano](https://huggingface.co/nvidia/Cosmos3-Nano), NVIDIA's world
 model, redraws 12 s of the lower camera's pass as a video in its
