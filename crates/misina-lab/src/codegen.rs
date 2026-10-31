@@ -340,11 +340,22 @@ fn cfg_aggregate<G: Generator>() -> String {
             format!("    {}: {stem}Cfg = {stem}Cfg()\n", fragment.name())
         })
         .collect();
-    out += "\n    FRAGMENTS: ClassVar[tuple[str, ...]] = (\n";
-    for fragment in params::fragments::<G::Params>() {
-        out += &format!("        {:?},\n", fragment.name());
-    }
-    out += "    )\n";
+    let names: Vec<String> = params::fragments::<G::Params>()
+        .map(|fragment| format!("{:?}", fragment.name()))
+        .collect();
+    out += "\n    FRAGMENTS: ClassVar[tuple[str, ...]] = ";
+    // One name stays on the line: its comma is the tuple's, not a trailing
+    // one, so the formatter closes the tuple right after it.
+    out += &match names.as_slice() {
+        [name] => format!("({name},)\n"),
+        _ => format!(
+            "(\n{}    )\n",
+            names
+                .iter()
+                .map(|name| format!("        {name},\n"))
+                .collect::<String>()
+        ),
+    };
     out += &docstring(
         &[format!(
             "The fragment fields, in the order `{}Params` takes them: what `to_params` converts \

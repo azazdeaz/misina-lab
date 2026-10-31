@@ -24,6 +24,18 @@ Scene document format 11.
 
 ### Added
 
+- **garden-lab**: a third generator, raised vegetable beds: a level floor
+  and a grid of timber-framed beds filled with soil, each its own collider,
+  with the beds' width, length, height, soil level, paths and count as its
+  knobs, and its first crops, dealt out to the beds' 30 cm squares by their
+  shares and grown to the scene's week from each crop's sowing week:
+  lettuce, a rosette of ruffled blades, loose-leaf or heading; kale, an
+  upright stem with a crown of curled leaves on long petioles; and carrots,
+  compound leaves over a taproot whose shoulder shows at the soil, carrying
+  its ripeness, how it is picked and a `Cut` frame. Two scene-wide `physics`
+  switches say what collides: every stem as a chain of capsules, and every
+  fruit and root as a capsule. `cargo run -p garden-lab` opens its viewer, and
+  `garden_lab.isaaclab.GardenCfg` spawns it in Isaac Lab.
 - **greenhouse-lab**: Stems collide, as a chain of capsules along each
   stem's axis from where it takes off from the lowered bundle,
   `Stem_n/Collision_00 …`, each straight from one of the axis's points to

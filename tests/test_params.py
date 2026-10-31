@@ -2,7 +2,8 @@
 matches the compiled module.
 
 Needs only the extensions, not Isaac Lab, so it runs everywhere `import vinery_lab`
-does; the greenhouse's stub is checked where `greenhouse_lab` is installed too.
+does; the greenhouse's and the garden's stubs are checked where their packages
+are installed too.
 """
 
 from __future__ import annotations
@@ -62,7 +63,7 @@ def test_a_wrong_keyword_or_type_is_a_type_error(kwargs):
         vinery_lab.PoleParams(**kwargs)
 
 
-@pytest.mark.parametrize("name", ["vinery_lab", "greenhouse_lab"])
+@pytest.mark.parametrize("name", ["vinery_lab", "greenhouse_lab", "garden_lab"])
 def test_the_stub_declares_what_the_module_exports(name):
     """The generated stub and the compiled module agree, class for class and
     field for field. A stale extension, or a class the module forgot to

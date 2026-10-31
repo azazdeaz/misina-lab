@@ -2,7 +2,8 @@
 
 A framework for procedural scene generators for robotics simulation, mainly
 Isaac Lab, and two reference generators built on it: `vinery-lab`, a
-vineyard, and `greenhouse-lab`, the rows of a tomato greenhouse. A Bevy app
+vineyard, and `greenhouse-lab`, the rows of a tomato greenhouse, and a third
+under construction, `garden-lab`, raised vegetable beds. A Bevy app
 builds the scene as ordinary meshes and transforms, exports it as a plain
 JSON scene document, and Python turns that into a USD stage. Each
 generator's crate ships as an interactive viewer and as a Python extension
@@ -20,7 +21,7 @@ spawning its cfg. This file is the map for working on the repo itself.
 cargo run --release                                          # viewer / parameter editor
 cargo run --release -p greenhouse-lab                        # the greenhouse's
 cargo fmt --all
-cargo clippy --workspace --all-targets --features vinery-lab/python,greenhouse-lab/python -- -D warnings
+cargo clippy --workspace --all-targets --features vinery-lab/python,greenhouse-lab/python,garden-lab/python -- -D warnings
 cargo test --workspace
 uv run ruff check . && uv run ruff format --check .
 uv run mypy
@@ -36,16 +37,17 @@ that need it skip themselves; run those from a demo venv — see
 
 ### Rust
 
-Three crates in one Cargo workspace: `crates/misina-lab` is the framework —
-everything that knows nothing about vines — and `crates/vinery-lab` and
-`crates/greenhouse-lab` are the generators built on it. The seam is
+Four crates in one Cargo workspace: `crates/misina-lab` is the framework —
+everything that knows nothing about vines — and `crates/vinery-lab`,
+`crates/greenhouse-lab` and `crates/garden-lab` are the generators built on
+it. The seam is
 `misina_lab::Generator`: one marker type per generator, which every framework
 surface is keyed on. The framework has a map of its own,
 [crates/misina-lab/AGENTS.md](crates/misina-lab/AGENTS.md), and its docs
 explain how a generator is built. The root `Cargo.toml`'s `default-members`
-leaves the greenhouse out of a bare `cargo run` or `cargo test`, so name it
-with `-p greenhouse-lab` or reach it with `--workspace`. What follows is the
-vineyard, and then the greenhouse.
+leaves the greenhouse and the garden out of a bare `cargo run` or `cargo test`,
+so name them with `-p greenhouse-lab` or `-p garden-lab`, or reach them with
+`--workspace`. What follows is the vineyard, the greenhouse, then the garden.
 
 | Path | What it is |
 | --- | --- |
@@ -56,15 +58,20 @@ vineyard, and then the greenhouse.
 | [vinery-lab/src/perf.rs](crates/vinery-lab/src/perf.rs) | the per-layer marks and the bench |
 | [greenhouse-lab/src/lib.rs](crates/greenhouse-lab/src/lib.rs) | crate root: the `Greenhouse` generator and its `_core` Python module |
 | [greenhouse-lab/src/elements/](crates/greenhouse-lab/src/elements/) | the layout, the floor, one module per fixture and one per layer of the crop, and `leaflet.rs`, a leaflet's outline built from its veins; `mod.rs` holds the stage sets and the `generator!` call |
+| [garden-lab/src/lib.rs](crates/garden-lab/src/lib.rs) | crate root: the `Garden` generator and its `_core` Python module |
+| [garden-lab/src/elements/](crates/garden-lab/src/elements/) | the layout, the floor, the beds, the planting, and one generic layer per organ of the crop, instantiated per species; `mod.rs` holds the stage sets and the `generator!` call |
+| [garden-lab/src/species/](crates/garden-lab/src/species/) | one file per crop: its params struct, which is its schema, and its recipe; `mod.rs` holds the `Species` and `Recipe` traits and the registry the planting reads |
+| [garden-lab/src/grow/](crates/garden-lab/src/grow/), [garden-lab/src/shape/](crates/garden-lab/src/shape/) | the vocabulary a recipe is written in, and the organ geometry it becomes |
 
 ### Python
 
-Three packages in one uv workspace, mirroring the crates: `python/misina-lab`
+Four packages in one uv workspace, mirroring the crates: `python/misina-lab`
 is the framework's Python side, pure Python over `usd-core` and mapped in the
 framework's `AGENTS.md`; `crates/vinery-lab/python/vinery_lab` is the
 vineyard's, a maturin package holding the compiled `_core` and the generated
 cfg classes; `crates/greenhouse-lab/python/greenhouse_lab` is the
-greenhouse's, laid out the same way.
+greenhouse's and `crates/garden-lab/python/garden_lab` the garden's, laid out
+the same way.
 
 | Path | What it is |
 | --- | --- |
@@ -75,7 +82,8 @@ greenhouse's, laid out the same way.
 | [vinery_lab/_core.pyi](crates/vinery-lab/python/vinery_lab/_core.pyi) | typed signatures for the compiled extension (generated) |
 
 Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinery_lab`,
-`import greenhouse_lab` and `import misina_lab` work without it.
+`import greenhouse_lab`, `import garden_lab` and `import misina_lab` work
+without it.
 
 ### Everything else
 

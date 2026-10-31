@@ -44,6 +44,10 @@ nav = [
       "examples/butom_capture/README.md",
     ] },
   ] },
+  { "Garden" = [
+    { "Overview" = "crates/garden-lab/README.md" },
+    "crates/garden-lab/docs/parameters.md",
+  ] },
   { "Development" = [
     "DEVELOPMENT.md",
     "CHANGELOG.md",

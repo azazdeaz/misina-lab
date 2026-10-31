@@ -11,9 +11,9 @@ Python: the USD builder and the Isaac Lab spawner every generator shares.
 Python lives in `crates/vinery-lab/python/vinery_lab/`, and the compiled Rust
 extension is built into it as the `_core` submodule, which `__init__.py`
 re-exports. Only the `isaaclab` subpackages import Isaac Lab, so plain
-`import vinery_lab` stays usable without it. `crates/greenhouse-lab` is laid
-out the same way, as `greenhouse_lab`; `--reinstall-package greenhouse-lab`
-rebuilds it.
+`import vinery_lab` stays usable without it. `crates/greenhouse-lab` and
+`crates/garden-lab` are laid out the same way, as `greenhouse_lab` and
+`garden_lab`; `--reinstall-package greenhouse-lab` rebuilds the one named.
 
 How the binding surface is shaped — why fragments are `Py<T>`, what
 `write_usd` releases the GIL around — is in the framework's
@@ -48,7 +48,7 @@ of building Bevy once per generator.
 `.github/workflows/ci.yml` runs all of these on every push and pull request:
 
     cargo fmt --all -- --check
-    cargo clippy --workspace --all-targets --features vinery-lab/python,greenhouse-lab/python -- -D warnings
+    cargo clippy --workspace --all-targets --features vinery-lab/python,greenhouse-lab/python,garden-lab/python -- -D warnings
     cargo test --workspace
     ruff check . && ruff format --check .
     mypy
@@ -107,6 +107,7 @@ Renaming the repository means updating all three publishers.
 
     cargo run --release                         # the vineyard
     cargo run --release -p greenhouse-lab       # the greenhouse
+    cargo run --release -p garden-lab           # the garden
 
 The panel is built from the params structs: one section per fragment of
 `VineyardParams`, one control per field, with the caption, range and tooltip
