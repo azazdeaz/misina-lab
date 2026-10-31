@@ -291,7 +291,8 @@ mod tests {
     }
 
     /// Four lettuces to every whole 30 cm square of a bed's soil, each on the
-    /// soil surface inside the frame, when none is missing.
+    /// soil surface inside the frame and numbered by lattice place, when none
+    /// is missing.
     #[test]
     fn a_bed_holds_four_lettuces_to_a_square() {
         let mut params = lettuce_bed();
@@ -299,15 +300,21 @@ mod tests {
         let (bed, rim) = (params.bed.clone(), params.bed.rim);
         let mut app = grown(params);
         let bed_prim = prim(app.world_mut(), &["Beds", "Bed_00"]).unwrap();
-        let plants: Vec<Entity> = named_children(app.world_mut(), bed_prim)
+        let plants: Vec<(String, Entity)> = named_children(app.world_mut(), bed_prim)
             .into_iter()
             .filter(|(name, _)| name.starts_with("Plant_"))
-            .map(|(_, plant)| plant)
             .collect();
         let inner = Vec2::new(bed.length, bed.width) - Vec2::splat(2.0 * layout::BOARD);
         let squares = (inner / SQUARE).floor();
-        assert_eq!(plants.len(), (squares.x * squares.y) as usize * 4);
-        for plant in plants {
+        // Two to a side, numbered by row and column of the four-by-four
+        // lattice, so the places a denser crop would fill stay unused.
+        let mut names: Vec<&str> = plants.iter().map(|(name, _)| name.as_str()).collect();
+        names.sort_unstable();
+        let expected: Vec<String> = (0..(squares.x * squares.y) as u64)
+            .flat_map(|cell| [0, 1, 4, 5].map(|place| format!("Plant_{:03}", cell * 16 + place)))
+            .collect();
+        assert_eq!(names, expected);
+        for (_, plant) in plants {
             let at = app
                 .world()
                 .entity(plant)

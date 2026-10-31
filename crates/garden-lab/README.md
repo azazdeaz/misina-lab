@@ -77,7 +77,8 @@ Beds are numbered along the south row first, west to east. Every bed carries
 `garden_lab:soil_z` and `garden_lab:rim_z`, the heights of its soil surface
 and its rim above the floor, and `garden_lab:inner_size`, the soil's extent
 inside the frame along X and Y with the rim's height. Plants are numbered by
-planting place, so a place the miss rate left empty is a gap in the numbers
+planting place on a four-by-four lattice per square, so a place the miss rate
+or a wider spacing left empty is a gap in the numbers
 rather than a shift; every plant carries `garden_lab:species`,
 `garden_lab:crop` and `garden_lab:age`, its weeks since sowing. A fruit or
 root carries `garden_lab:ripeness`, 0 to 1, `garden_lab:pick`, how a

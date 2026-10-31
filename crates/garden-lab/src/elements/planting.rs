@@ -10,10 +10,11 @@
 //! # Path stability
 //!
 //! `Bed_00/Plant_017` names a planting place of the bed, not the eighteenth
-//! plant: every square has sixteen numbers, one per place at the densest
-//! spacing, and a place left empty, by the miss rate, by a wider spacing or
-//! by a crop not yet sown, leaves a gap in the numbering, so a config keyed
-//! on a path is never repointed at another plant.
+//! plant: a square has sixteen numbers, a plant's being its row and column
+//! on the four-by-four lattice of the densest spacing, and a place left
+//! empty, by the miss rate, by a wider spacing or by a crop not yet sown,
+//! leaves a gap in the numbering, so a config keyed on a path is never
+//! repointed at another plant.
 
 use bevy::prelude::*;
 use misina_lab::params::Slider;
@@ -140,7 +141,8 @@ fn author(
             let pitch = SQUARE / per_side as f32;
             let age = scene.week - entry.common.sown_week;
             for k in 0..per_side * per_side {
-                let number = cell as u64 * PLACES + k as u64;
+                let (col, row) = (k % per_side, k / per_side);
+                let number = cell as u64 * PLACES + (row * MAX_PER_SIDE + col) as u64;
                 let mut rng = Rng::new(scene.seed ^ STREAM ^ salt(bed_index << 32 | number));
                 let missed = rng.unit() < params.misses as f64;
                 let off = Vec2::new(rng.range(-1.0, 1.0) as f32, rng.range(-1.0, 1.0) as f32)
@@ -151,8 +153,7 @@ fn author(
                 if age < 0.0 || missed {
                     continue;
                 }
-                let slot =
-                    Vec2::new((k % per_side) as f32, (k / per_side) as f32) + Vec2::splat(0.5);
+                let slot = Vec2::new(col as f32, row as f32) + Vec2::splat(0.5);
                 let at = corner + square * SQUARE + slot * pitch + off;
                 let mut plant = commands.spawn((
                     Owned,
