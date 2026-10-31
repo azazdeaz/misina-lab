@@ -146,6 +146,28 @@ def test_the_piece_falls_and_the_stub_stays(rig):
     assert rig.shears.cut_through(*plane_at(0.14)) == 0
 
 
+def test_a_piece_held_goes_with_its_frame_and_falls_once_let_go(rig):
+    """The body held keeps its place in a frame carried across at 0.2 m/s, the
+    rest of the piece hangs from it, and let go the piece falls."""
+    rig.shears.cut_through(*plane_at(0.14))
+    start = rig.shears.pose(rig.bodies[2])
+    frame = np.array([0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0])
+    rig.shears.hold(rig.bodies[2], frame)
+    for _ in range(round(0.5 / DT)):
+        frame[1] += 0.2 * DT
+        rig.shears.hold(rig.bodies[2], frame)
+        rig.step(DT)
+
+    held, hanging = rig.state.body_q.numpy()[rig.bodies[2:]]
+    assert held == pytest.approx(start + [0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0], abs=1e-4)
+    assert np.linalg.norm(hanging[:3] - held[:3]) == pytest.approx(SEGMENT, abs=0.005)
+
+    rig.shears.hold(None, frame)
+    before = rig.height()
+    rig.step(0.3)
+    assert (before - rig.height())[2:] == pytest.approx(GRAVITY * 0.3**2 / 2, rel=0.1)
+
+
 @pytest.mark.parametrize(
     ("body", "at", "loose"),
     [

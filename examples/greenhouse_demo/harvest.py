@@ -119,10 +119,15 @@ DROP = 0.42
 """How high above the crate's floor the jaws carry a truss and let it go,
 over its middle, in meters: the truss hanging from them clears the crate's
 rim."""
+ASIDE = 0.12
+"""How far along the crate from its middle the jaws let a truss go where
+the middle is out of the arm's reach, in meters: the middle is straight
+behind the shoulder, at the end of its range."""
 HELD = 0.015
 """How near the middle of the jaws, in meters, a truss's rod cut free
-passes once it is pulled out, for the jaws to have it: a peduncle anywhere
-between them passes within this."""
+passes for the jaws to have it: a peduncle anywhere between them passes
+within this. One they have as the shear shuts is held there until it
+opens."""
 TIP = 1.2
 """How far the blades are turned down about the peduncle, in radians, to
 tip out a truss the open finger still bears: one lying across it slides
@@ -438,6 +443,10 @@ class Harvest:
         self.velocity = np.zeros_like(self.q)
         self.cut: list[Truss] = []
         """The trusses cut, in order."""
+        self.held: int | None = None
+        """The body of the rod cut free that the jaws hold, from the shut until
+        the shear opens or the job is given up: `run` has `Shears.hold` carry
+        it with the hand."""
         self.time = 0.0
         self.soft: set[int] = set()
         """The rod bodies the arm may brush, those the last cut was planned through."""
@@ -462,6 +471,7 @@ class Harvest:
 
     def _next(self) -> None:
         """Start on the next job, or finish."""
+        self.held = None
         while self.jobs:
             self.job = self.jobs.pop(0)
             if not isinstance(self.job, Truss):
@@ -527,14 +537,17 @@ class Harvest:
         self.stage, self.ticks, self.clock = stage, 0, 0.0
         self.trajectory = trajectory
 
-    def _shut(self) -> None:
-        """Count the truss cut if its rod is, now the shear is shut, and
-        back out with what the jaws hold."""
+    def _shut(self, hand: np.ndarray) -> None:
+        """Count the truss cut if its rod is, now the shear is shut, hold it
+        if the jaws have it, and back out with what they hold."""
         if self.shears.loose[np.searchsorted(self.shears.bodies, self.job.bodies)].any():
             print(f"[INFO]: {self.job.prim}: cut after {self.time - self.started:.1f} s")
             self.cut.append(self.job)
             self.tally.cut += 1
             self.tally.seconds += self.time - self.started
+            gap, body = self._between(hand)
+            if gap < HELD:
+                self.held = body
         else:
             missed = "a neighbour" if self.stroke.cuts else "nothing"
             print(f"[INFO]: {self.job.prim}: the shear cut {missed}")
@@ -568,52 +581,64 @@ class Harvest:
 
     def _carry(self, hand: np.ndarray) -> None:
         """Swing the truss held round the arm's base to over the crate's
-        middle, the jaws `DROP` above its floor, or let it go where it is if
-        the arm cannot get there. The mouth ends turned about the upright
-        alone, so the truss hangs in the jaws as it did when cut: turned so
-        that its weight pulls toward the mouth's entrance, it slides out of
-        them. On the way the arm may brush any truss, which leaves `planner`
-        fewer to keep off and the mouth less to turn."""
+        middle, or `ASIDE` off it either way, the jaws `DROP` above its floor,
+        or let it go where it is if the arm can get to none of them. The mouth
+        ends turned about the upright alone, so the truss hangs in the jaws as
+        it did when cut, its weight pulling away from the mouth's entrance. On
+        the way the arm may brush any truss, which leaves `planner` fewer to
+        keep off and the mouth less to turn."""
         platform = self.platform()
         mouth = np.linalg.inv(platform) @ hand @ self.machine.tool
         hold = np.array([self.machine.shear.hold, 0.0, 0.0, 1.0])
-        jaws, middle = (mouth @ hold)[:3], self._over_crate()
-        # Round the shoulder's axis, the platform's upright: the short way,
-        # unless that takes the shoulder past its range.
-        turn = math.atan2(middle[1], middle[0]) - math.atan2(jaws[1], jaws[0])
-        over = transform(rpy=(0.0, 0.0, turn)) @ mouth
-        over[:3, 3] += middle - (over @ hold)[:3]
-        seed = self.q[3:].copy()
-        seed[0] = (seed[0] + turn + math.pi) % (2 * math.pi) - math.pi
-        drop, distance, angle = solve(self.planner.chain, self.machine.tool, over, seed)
-        # Unsolved where even the long way round takes the shoulder past its
-        # range.
+        jaws = (mouth @ hold)[:3]
         carrying = None
-        if distance < 0.005 and angle < 0.02:
-            carrying = self.planner.move(
-                self.q[3:], drop, platform, set(self.shears.bodies), self.beside
-            )
+        for along in (0.0, ASIDE, -ASIDE):
+            there = self._over_crate(along)
+            # Round the shoulder's axis, the platform's upright: the short
+            # way, unless that takes the shoulder past its range.
+            turn = math.atan2(there[1], there[0]) - math.atan2(jaws[1], jaws[0])
+            over = transform(rpy=(0.0, 0.0, turn)) @ mouth
+            over[:3, 3] += there - (over @ hold)[:3]
+            seed = self.q[3:].copy()
+            seed[0] = (seed[0] + turn + math.pi) % (2 * math.pi) - math.pi
+            drop, distance, angle = solve(self.planner.chain, self.machine.tool, over, seed)
+            # Unsolved where even the long way round takes the shoulder past
+            # its range.
+            if distance < 0.005 and angle < 0.02:
+                carrying = self.planner.move(
+                    self.q[3:], drop, platform, set(self.shears.bodies), self.beside
+                )
+            if carrying is not None:
+                break
         if carrying is None:
             print(f"[INFO]: {self.job.prim}: let go short of the crate")
             self._release(hand)
         else:
             self._play("carry", carrying)
 
-    def _over_crate(self) -> np.ndarray:
+    def _over_crate(self, along: float = 0.0) -> np.ndarray:
         """Where the jaws let a truss go, in the platform's frame: `DROP` over
-        the crate's floor, over its middle."""
-        return (self.machine.crate_frame @ [0.0, 0.0, self.machine.crate.floor + DROP, 1.0])[:3]
+        the crate's floor, `along` its length from its middle."""
+        return (self.machine.crate_frame @ [along, 0.0, self.machine.crate.floor + DROP, 1.0])[:3]
 
-    def _release(self, hand: np.ndarray) -> None:
-        """Open the shear, counting the truss held if its rod cut free still
-        passes within `HELD` of the middle of the jaws."""
+    def _between(self, hand: np.ndarray) -> tuple[float, int]:
+        """How near the middle of the jaws the job's rod cut free passes, and
+        the body of it that passes nearest."""
         jaws = (hand @ self.machine.tool @ transform((self.machine.shear.hold, 0.0, 0.0)))[:3, 3]
         rod = np.searchsorted(self.shears.bodies, self.job.bodies)
-        start, end = (each[rod[self.shears.loose[rod]]] for each in self.shears.capsules())
+        loose = rod[self.shears.loose[rod]]
+        start, end = (each[loose] for each in self.shears.capsules())
         axis = end - start
         along = np.clip(((jaws - start) * axis).sum(1) / (axis * axis).sum(1), 0.0, 1.0)
         gaps = np.linalg.norm(start + along[:, None] * axis - jaws, axis=1)
-        self.tally.held += bool((gaps < HELD).any())
+        nearest = int(gaps.argmin())
+        return float(gaps[nearest]), int(self.shears.bodies[loose[nearest]])
+
+    def _release(self, hand: np.ndarray) -> None:
+        """Open the shear and let go, counting the truss held if its rod cut
+        free still passes within `HELD` of the middle of the jaws."""
+        self.tally.held += self._between(hand)[0] < HELD
+        self.held = None
         self.stage, self.ticks = "open", 0
 
     def _tip(self, hand: np.ndarray) -> None:
@@ -667,7 +692,7 @@ class Harvest:
                 self._next()
         elif self.stage == "close":
             if self.stroke.tick(hand, angle, closing=True):
-                self._shut()
+                self._shut(hand)
         elif self.stage == "open":
             if self.stroke.tick(hand, angle, closing=False):
                 # A truss let go still lying on the finger is tipped out.
@@ -802,10 +827,14 @@ def run(
                 joint_ids=joints,
             )
 
-    def hand_pose() -> np.ndarray:
-        return frame_of(
-            robot.data.body_link_pos_w.torch[0, hand[0]].cpu().numpy(),
-            robot.data.body_link_quat_w.torch[0, hand[0]].cpu().numpy(),
+    def hand_at() -> np.ndarray:
+        """The hand's world pose, as a position and (x, y, z, w) rotation in one
+        array of 7."""
+        return np.concatenate(
+            [
+                robot.data.body_link_pos_w.torch[0, hand[0]].cpu().numpy(),
+                robot.data.body_link_quat_w.torch[0, hand[0]].cpu().numpy(),
+            ]
         )
 
     # A drive with no target holds zero, so the arm is held home and the
@@ -820,9 +849,13 @@ def run(
     step, after = 0, 0
     while sim.is_running():
         q = robot.data.joint_pos.torch[0, joints].cpu().numpy()
+        at = hand_at()
         if step % DECIMATION == 0:
-            targets, velocities, jaw = harvest.control(q[:-1], hand_pose(), float(q[-1]))
+            targets, velocities, jaw = harvest.control(
+                q[:-1], frame_of(at[:3], at[3:]), float(q[-1])
+            )
             hold([*targets, jaw], [*velocities, 0.0])
+        shears.hold(harvest.held, at)
         robot.write_data_to_sim()
         sim.step(render=render)
         robot.update(SIM_DT)

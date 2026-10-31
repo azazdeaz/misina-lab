@@ -1,6 +1,7 @@
 """Record a short video of the harvest demo: the harvester drives into a path
-and cuts its due trusses, the first few filmed close up, in Isaac Sim's RTX
-renderer by a camera this script moves. It runs headless.
+and cuts its due trusses, the first few filmed close up and the rest by a
+camera riding along with the trolley, in Isaac Sim's RTX renderer by a
+camera this script moves. It runs headless.
 
     uv run video.py OUT.mp4
 
@@ -60,9 +61,11 @@ class Shot:
     caption: str | None = None
 
 
-CLOSE = Shot(eye=(0.5, -0.9, 0.2), look=(0.0, 0.0, -0.15))
-"""The cuts' close-up: from the path a little ahead of the cut, so the
-shear comes in from behind it, toward the camera."""
+CLOSE = Shot(eye=(0.25, -0.95, 0.35), look=(0.0, 0.0, -0.08), lens=20.0)
+"""The cuts' close-up: from the path a little ahead of the cut and above
+it, so the shear comes in from behind it, toward the camera, and the truss
+hangs below it in frame. Half a meter ahead, the lift column stands between
+it and a cut the arm reaches back for."""
 
 CRATE = Shot(eye=(0.0, -0.45, 0.8), look=(0.0, 0.0, 0.1), lens=18.0)
 """The crate, from above the path across from the side the truss is cut on,
@@ -88,20 +91,32 @@ into the path with the arm folded. Points along the path count from its
 mouth, where the rows start."""
 
 REST = Shot(
-    eye=(5.0, -0.4, 2.6),
-    look=(1.0, 0.0, 0.8),
+    eye=(1.6, -0.25, 0.7),
+    look=(0.0, 0.5, 0.25),
+    lens=20.0,
     caption="The rest of the path, four times faster",
 )
-"""From past the far end of the rows, looking back down the path at the
-trolley, while the cuts no take has are made: the lift column hides the arm
-from behind."""
+"""Riding along with the trolley while the cuts no take has are made, and
+as the arm swings out to a later take's truss, under its caption: down
+the path ahead of the arm, a little across from the row it cuts from and
+above the trusses, looking at that row beside the arm. The point it frames
+is the platform's top under the arm's base, on the path's centre line: the
+lift holds it as far under every cut, so each is framed alike. From behind,
+the lift column would hide the arm."""
 
 CLOSING = Shot(
-    eye=(5.0, -0.4, 2.0),
-    look=(1.5, 0.0, 0.3),
+    eye=(1.4, -0.3, 1.2),
+    look=(0.0, 0.0, 0.0),
+    lens=20.0,
     caption="The path harvested into the crate",
 )
-"""The same, lower: the trolley driving out with the crate."""
+"""Riding along with the trolley as it drives out, from above the path
+ahead of it, looking down into the crate: the point it frames is the
+crate's middle, at its underside."""
+
+LAG = 0.4
+"""Seconds of video a shot riding along with the trolley lags it by,
+smoothing its runs and its turn from one row to the other."""
 
 PACE = {
     "inward": 2.0,
@@ -156,19 +171,30 @@ def main():
         y = demo.path_ys(stage, demo.GREENHOUSE_PATH)[PATHS[0]]
         entrance, left = np.array([0.0, y, 0.0]), np.array([0.0, 1.0, 0.0])
         rig, film = Rig(stage, FPS, EASE, CUT), Film(out, SIZE, FPS)
-        # The takes' captions, by the prim of the truss each films, and the
-        # trusses swung round to the crate.
+        # The takes' captions, by the prim of the truss each films, the
+        # trusses a cut was planned for and those swung round to the crate.
         captions: dict[str, str] = {}
+        planned: set[str] = set()
         swung: set[str] = set()
         # Frames due, counted a fraction a physics step: an eighth, at the
         # simulation's own speed. `last` is the truss cut last, let go at
         # `left_at` once the harvest moves on from it, and `shown` the one
-        # the last frame filmed.
+        # the last frame filmed. `ridden` is where the last frame riding
+        # along stood, `row` the side it was across from, and a frame riding
+        # along closes `share` of the gap to its shot.
         due, last, left_at, shown = 0.0, None, None, None
+        ridden, row = None, left
+        share = 1.0 - np.exp(-1.0 / (LAG * FPS))
         try:
             for step, harvest in enumerate(demo.run(sim, robot, machine, PATHS, render=False)):
                 now = step * demo.SIM_DT
                 truss = harvest.job if isinstance(harvest.job, demo.Truss) else None
+                if truss and harvest.stage == "approach":
+                    planned.add(truss.prim)
+                # A take's truss out of reach passes its caption on.
+                current = truss.prim if truss else None
+                for prim in [p for p in captions if p not in planned and p != current]:
+                    del captions[prim]
                 if truss and truss.prim not in captions and len(captions) < len(TAKES):
                     captions[truss.prim] = TAKES[len(captions)]
                 if harvest.cut and harvest.cut[-1] is not last:
@@ -187,6 +213,15 @@ def main():
                 elif (
                     truss
                     and truss.prim in captions
+                    and last is not None
+                    and harvest.stage in ("fold", "run", "approach")
+                ):
+                    # A later take rides along as the arm swings out to its
+                    # truss, past where the close-up stands.
+                    shot, pace = REST, harvest.stage
+                elif (
+                    truss
+                    and truss.prim in captions
                     and not (last is None and harvest.stage in ("fold", "run"))
                 ):
                     # The first take starts as the arm reaches out at the
@@ -202,18 +237,30 @@ def main():
                 if now < SETTLE or due < 1:
                     continue
                 due -= 1
-                ahead = 1.0
+                riding = shot is REST or shot is CLOSING
                 if filmed:
                     # Ahead is the way the shear comes in.
                     way = demo.heading(filmed.cut[:3, 0], filmed.side)
                     point, side, caption = filmed.cut[:3, 3], filmed.side, captions[filmed.prim]
-                    ahead = float(np.sign(way[0]))
                     if shot is CRATE:
                         point = (harvest.platform() @ machine.crate_frame)[:3, 3]
+                    pose = framing(shot, point, side, float(np.sign(way[0])))
+                elif riding:
+                    # Along with the trolley, across from the row it last cut from.
+                    row = truss.side if truss else row
+                    platform = harvest.platform()
+                    point = np.array([platform[0, 3], y, platform[2, 3]])
+                    if shot is CLOSING:
+                        point = (platform @ machine.crate_frame)[:3, 3]
+                    goal = framing(shot, point, row)
+                    caption = captions.get(truss.prim, shot.caption) if truss else shot.caption
+                    pose = goal if ridden is None else ridden + share * (goal - ridden)
                 else:
                     point, side, caption = entrance, left, shot.caption
-                rig.aim(framing(shot, point, side, ahead), cut=filmed is not shown)
-                shown = filmed
+                    pose = framing(shot, point, side)
+                # A shot riding along eases itself: the rig cuts to each frame of it.
+                rig.aim(pose, cut=riding or filmed is not shown)
+                shown, ridden = filmed, pose if riding else None
                 sim.render()
                 camera.update(demo.SIM_DT, force_recompute=True)
                 film.add(camera.data.output["rgb"].torch[0, ..., :3].cpu().numpy(), caption)

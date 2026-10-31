@@ -52,6 +52,9 @@ Scene document format 11.
   one over each kink. A robot meets them, and so do the stem's own plant's
   trusses. The lowered runs, below anything a robot reaches for, do not
   collide.
+- **misina-lab**: `Shears.hold(body, frame)` holds a rod body where it lies
+  in a frame and carries it as the frame moves, kinematic, the rest of its
+  rod hanging from it, until it is let go: a hand's hold on a piece it cut.
 - **misina-lab**: `rods.tune_builder`, the tuning `rods.tune_rods` applies
   inside Isaac Lab's model-init window, as a function on a bare
   `ModelBuilder`, for a test or a rig outside the app.
