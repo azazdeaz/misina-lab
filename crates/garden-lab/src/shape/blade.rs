@@ -5,15 +5,17 @@
 //! ruffled by waves that fade toward the midrib, the blade cupped about its
 //! midrib and its tip drooped, on a stalk when the template has one. A
 //! compound leaf is a rachis with toothed leaflets in pairs along it and one
-//! at its tip, the whole drooped. A ruffle displaces the margin out of the
-//! plane rather than lengthening it, which a flat triangulation cannot do.
+//! at its tip, the whole drooped; a trifoliate leaf a petiole with a pair of
+//! entire leaflets where it ends and one past them, the same. A ruffle
+//! displaces the margin out of the plane rather than lengthening it, which a
+//! flat triangulation cannot do.
 
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
 use bevy::prelude::*;
 use misina_lab::geometry::mesh::{MeshData, bend, cylinder_mesh, merge_meshes};
 use misina_lab::geometry::outline::{Outline, outline_mesh};
-use misina_lab::geometry::shapes::{bent, toothed};
+use misina_lab::geometry::shapes::{bent, leaf, toothed};
 use misina_lab::rng::Rng;
 use spade::Point2;
 
@@ -29,9 +31,11 @@ const STATIONS: usize = 56;
 const BASE: f64 = 0.12;
 const PEAK: f64 = 0.62;
 
-/// Triangles a simple blade is filled at, and a leaflet.
+/// Triangles a simple blade is filled at, a compound leaf's leaflet, and a
+/// trifoliate leaf's.
 pub const TRIANGLES: f64 = 360.0;
 const LEAFLET_TRIANGLES: f64 = 24.0;
+const TRIFOLIATE_TRIANGLES: f64 = 80.0;
 
 /// Waves summed into the ruffle, their wavelengths as fractions of the
 /// blade's length at no ruffle, how far a full ruffle shortens them, and
@@ -68,11 +72,53 @@ const LEAFLET_TEETH: usize = 3;
 const LEAFLET_DROOP: f64 = 0.3;
 const LEAFLET_KEEL: f64 = 8.0;
 
+/// A trifoliate leaf's leaflets: the stalk from the pair to the terminal
+/// one as a fraction of what the petiole leaves, how much shorter the pair
+/// is than the terminal leaflet, where a leaflet is widest along its length,
+/// how far the pair spreads off the midrib in radians, how far every
+/// leaflet rises off the leaf's plane, and how it folds.
+const TRIFOLIATE_RACHIS: f64 = 0.15;
+const LATERAL: f64 = 0.9;
+const LEAFLET_PEAK: f64 = 0.4;
+const TRIFOLIATE_SPREAD: f32 = 1.1;
+const TRIFOLIATE_RISE: f32 = 0.2;
+const TRIFOLIATE_DROOP: f64 = 0.35;
+const TRIFOLIATE_KEEL: f64 = 3.0;
+
+/// The share of its box a blade or a leaflet fills: [`profile`]'s hump.
+const OUTLINE_FILL: f32 = 0.62;
+
+/// The blade area a config draws, in square meters: every blade or leaflet
+/// as its box times [`OUTLINE_FILL`], the petiole and the stalks left out.
+pub fn area(config: &LeafConfig) -> f32 {
+    let whole = config.length.max(0.0);
+    let blade = (whole - config.petiole.max(0.0)).max(0.0);
+    let boxes = match config.template {
+        Template::Simple => blade * config.width * whole,
+        Template::Compound => {
+            let pairs = config.pairs.max(1);
+            let leaflet =
+                |i: u32| config.width * whole * (1.0 - TIP_SHRINK * i as f32 / pairs as f32);
+            let along = (0..pairs)
+                .map(|i| 2.0 * leaflet(i) * leaflet(i))
+                .sum::<f32>();
+            (along + leaflet(pairs) * leaflet(pairs)) * LEAFLET_WIDTH as f32
+        }
+        Template::Trifoliate => {
+            let terminal = blade * (1.0 - TRIFOLIATE_RACHIS as f32);
+            let lateral = LATERAL as f32 * terminal;
+            (terminal * terminal + 2.0 * lateral * lateral) * config.width
+        }
+    };
+    OUTLINE_FILL * boxes
+}
+
 /// A leaf from its config.
 pub fn mesh(config: &LeafConfig) -> anyhow::Result<MeshData> {
     match config.template {
         Template::Simple => simple(config),
         Template::Compound => compound(config),
+        Template::Trifoliate => trifoliate(config),
     }
 }
 
@@ -216,8 +262,45 @@ fn compound(config: &LeafConfig) -> anyhow::Result<MeshData> {
         Vec3::new((whole - terminal) as f32, 0.0, 0.0),
         Quat::from_rotation_y(-RISE),
     ));
-    let mut mesh = merge_meshes(&parts);
-    let droop = config.droop as f64 / whole;
+    Ok(drooped(merge_meshes(&parts), config.droop as f64 / whole))
+}
+
+/// A trifoliate leaf: a petiole, a pair of entire leaflets spread either
+/// side where it ends, and one straight on past them on a short stalk, the
+/// whole drooped.
+fn trifoliate(config: &LeafConfig) -> anyhow::Result<MeshData> {
+    let whole = config.length.max(0.005) as f64;
+    let petiole = (config.petiole as f64).clamp(0.0, 0.8 * whole);
+    let rachis = TRIFOLIATE_RACHIS * (whole - petiole);
+    let terminal = whole - petiole - rachis;
+    let cut = |length: f64| -> anyhow::Result<MeshData> {
+        bent(
+            leaf(length, config.width as f64 * length, LEAFLET_PEAK),
+            TRIFOLIATE_DROOP,
+            TRIFOLIATE_KEEL,
+            TRIFOLIATE_TRIANGLES,
+        )
+    };
+    let mut parts = vec![stalk(petiole + rachis, STALK_RADIUS * whole)];
+    let lateral = cut(LATERAL * terminal)?;
+    for side in [1.0f32, -1.0] {
+        parts.push(placed(
+            &lateral,
+            Vec3::new(petiole as f32, 0.0, 0.0),
+            Quat::from_rotation_z(side * TRIFOLIATE_SPREAD)
+                * Quat::from_rotation_y(-TRIFOLIATE_RISE),
+        ));
+    }
+    parts.push(placed(
+        &cut(terminal)?,
+        Vec3::new((petiole + rachis) as f32, 0.0, 0.0),
+        Quat::from_rotation_y(-TRIFOLIATE_RISE),
+    ));
+    Ok(drooped(merge_meshes(&parts), config.droop as f64 / whole))
+}
+
+/// `mesh` bent over its length by the curvature `droop`, tip down.
+fn drooped(mut mesh: MeshData, droop: f64) -> MeshData {
     if droop != 0.0 {
         for point in &mut mesh.points {
             let (x, z) = bend(point[0] as f64, point[2] as f64, droop);
@@ -225,7 +308,7 @@ fn compound(config: &LeafConfig) -> anyhow::Result<MeshData> {
             point[2] = z as f32;
         }
     }
-    Ok(mesh)
+    mesh
 }
 
 #[cfg(test)]
@@ -270,6 +353,9 @@ mod tests {
         };
         assert!(depth(&flat) < 1e-6);
         assert!(depth(&ruffled) > 0.005, "{}", depth(&ruffled));
+        let whole_box = 0.18 * 0.75 * 0.18;
+        assert!((area(&flat) - OUTLINE_FILL * whole_box).abs() < 1e-6);
+        assert!(area(&stalked) < area(&flat) && area(&stalked) > 0.5 * area(&flat));
         let (x0, _) = bounds(&blade_only(&stalked), 0);
         assert!((x0 - 0.06).abs() < 1e-5, "the blade starts at {x0}");
     }
@@ -301,5 +387,42 @@ mod tests {
         let drooped = super::mesh(&leaf.droop(1.5)).unwrap();
         assert!(bounds(&drooped, 2).0 < -0.05, "{:?}", bounds(&drooped, 2));
         assert!(mesh.face_vertex_counts.len() < 1200);
+    }
+
+    /// A trifoliate leaf reaches its length, its pair spreads both sides
+    /// out along the petiole (a turned leaflet's base stub reaches a little
+    /// back), and it costs three leaflets' triangles.
+    #[test]
+    fn a_trifoliate_leaf_spreads_a_pair_past_its_petiole() {
+        let leaf = LeafConfig::trifoliate(0.2, 0.7).petiole(0.08);
+        let mesh = mesh(&leaf).unwrap();
+        let (x0, x1) = bounds(&mesh, 0);
+        let (y0, y1) = bounds(&mesh, 1);
+        assert!(
+            x0.abs() < 1e-6 && (0.9..=1.0).contains(&(x1 / 0.2)),
+            "{x0}..{x1}"
+        );
+        assert!(
+            y0 < -0.05 && y1 > 0.05 && (y0 + y1).abs() < 1e-4,
+            "{y0}..{y1}"
+        );
+        let stalk_points = stalk(1.0, 1.0).points.len();
+        let (blade_x0, _) = bounds(
+            &MeshData {
+                points: mesh.points[stalk_points..].to_vec(),
+                face_vertex_counts: vec![],
+                face_vertex_indices: vec![],
+            },
+            0,
+        );
+        assert!(
+            blade_x0 > 0.06,
+            "the leaflets start out along the petiole: {blade_x0}"
+        );
+        assert!(
+            mesh.face_vertex_counts.len() < 400,
+            "{}",
+            mesh.face_vertex_counts.len()
+        );
     }
 }

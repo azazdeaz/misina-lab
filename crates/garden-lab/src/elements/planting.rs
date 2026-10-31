@@ -5,7 +5,10 @@
 //! plants as its species' spacing asks for, on a grid jittered off exact.
 //! It spawns one entity per plant under its bed's prim, carrying the
 //! species' marker and the [`PlantConfig`] its recipe reads; the plant
-//! layers grow the rest.
+//! layers grow the rest. A bed dealt a climbing species gets the trellis
+//! on its north edge, and every climbing plant a `String` from its foot to
+//! the rail, under its own prim so that it is in the plant's collision
+//! group.
 //!
 //! # Path stability
 //!
@@ -17,10 +20,14 @@
 //! repointed at another plant.
 
 use bevy::prelude::*;
+use misina_lab::geometry::mesh::cylinder_mesh;
+use misina_lab::palette::{Response, srgb};
 use misina_lab::params::Slider;
 use misina_lab::rng::{Rng, salt};
-use misina_lab::scene::{Order, UsdAttributes};
+use misina_lab::scene::doc::TRIANGLE_MESH;
+use misina_lab::scene::{COLLISION, Geometry, Library, Order, UsdAttributes, capsule};
 
+use super::bed::{TIMBER, TRELLIS_TIMBER, trellis, trellis_y};
 use super::layout::{BOARD, Bed, GardenLayout};
 use super::{Grow, SceneParams};
 use crate::grow::builder::smooth;
@@ -40,6 +47,18 @@ const PLACES: u64 = (MAX_PER_SIDE * MAX_PER_SIDE) as u64;
 
 /// How far a plant's vigour strays from 1 either way.
 const VIGOUR: f64 = 0.15;
+
+/// A climber's string: jute twine's radius, in meters, its sides, and its
+/// colour.
+pub const STRING_RADIUS: f32 = 0.0015;
+const STRING_SIDES: usize = 6;
+const STRING: (u32, Response) = (
+    0xC9B48A,
+    Response {
+        roughness: 0.9,
+        reflectance: 0.2,
+    },
+);
 
 /// How a bed is filled, beyond what each crop says for itself.
 #[derive(Resource, Reflect, Clone, Debug, PartialEq)]
@@ -76,6 +95,9 @@ pub struct PlantConfig {
     pub vigour: f32,
     /// Its own stream, which every draw of its recipe comes from.
     pub seed: u64,
+    /// Where its string ends, in its frame, if its species climbs: at the
+    /// trellis rail straight north of it.
+    pub string: Option<Vec3>,
 }
 
 impl PlantConfig {
@@ -110,6 +132,7 @@ pub fn plugin(app: &mut App) {
 /// stream of its own, so the miss rate re-rolls nothing.
 fn author(
     mut commands: Commands,
+    mut library: Library,
     layout: Res<GardenLayout>,
     commons: Res<Commons>,
     params: Res<PlantingParams>,
@@ -117,6 +140,11 @@ fn author(
     beds: Query<(Entity, &Bed)>,
 ) {
     commands.despawn_all::<With<Owned>>();
+    library.clear("Trellis");
+    library.clear("String");
+    // Registered on the first bed and the first plant that need them, so a
+    // garden without a climber draws neither.
+    let (mut trellis_part, mut string_part): (Option<Geometry>, Option<Geometry>) = (None, None);
     let inner = layout.bed - Vec2::splat(2.0 * BOARD);
     // Whole squares, centred in the bed; a bed narrower than one holds none.
     let squares = (inner / SQUARE).floor().as_uvec2();
@@ -124,10 +152,19 @@ fn author(
     let jitter = params.jitter.clamp(0.0, 0.5);
     for (bed, &Bed(index)) in &beds {
         let bed_index = index as u64;
-        for (cell, plot) in deal(&commons, index as u32 + 1, (squares.x * squares.y) as usize)
-            .into_iter()
-            .enumerate()
-        {
+        let plots = deal(&commons, index as u32 + 1, (squares.x * squares.y) as usize);
+        if plots.iter().flatten().any(|(_, entry)| entry.climbs) {
+            let geometry = trellis_part.get_or_insert_with(|| {
+                let (color, response) = TIMBER;
+                let mesh = trellis(layout.bed, layout.soil_z, layout.rail_z);
+                let geometry =
+                    library.part("Trellis", 0, mesh.to_mesh(), response.surface(srgb(color)));
+                library.collide(&geometry, TRIANGLE_MESH);
+                geometry
+            });
+            commands.spawn((Owned, Name::new("Trellis"), geometry.clone(), ChildOf(bed)));
+        }
+        for (cell, plot) in plots.into_iter().enumerate() {
             let Some((name, entry)) = plot else {
                 continue;
             };
@@ -155,6 +192,15 @@ fn author(
                 }
                 let slot = Vec2::new(col as f32, row as f32) + Vec2::splat(0.5);
                 let at = corner + square * SQUARE + slot * pitch + off;
+                // The string runs from the plant's foot to under the rail,
+                // straight north.
+                let string = entry.climbs.then(|| {
+                    Vec3::new(
+                        at.x,
+                        trellis_y(layout.bed),
+                        layout.rail_z - TRELLIS_TIMBER / 2.0,
+                    ) - at.extend(layout.soil_z)
+                });
                 let mut plant = commands.spawn((
                     Owned,
                     Name::new(format!("Plant_{number:03}")),
@@ -163,6 +209,7 @@ fn author(
                         age,
                         vigour,
                         seed: scene.seed ^ PLANT_STREAM ^ salt(bed_index << 32 | number),
+                        string,
                     },
                     UsdAttributes::default()
                         .with("species", name)
@@ -173,16 +220,60 @@ fn author(
                     ChildOf(bed),
                 ));
                 (entry.tag)(&mut plant);
+                if let Some(top) = string {
+                    let twine = string_part
+                        .get_or_insert_with(|| {
+                            let (color, response) = STRING;
+                            library.part(
+                                "String",
+                                0,
+                                cylinder_mesh(1.0, 1.0, 1.0, STRING_SIDES).to_mesh(),
+                                response.surface(srgb(color)),
+                            )
+                        })
+                        .clone();
+                    let length = top.length();
+                    // A unit cylinder up +Z, scaled to the string and turned
+                    // to it, and a capsule the same, its tips at the ends.
+                    plant.with_children(|plant| {
+                        plant
+                            .spawn((
+                                Name::new("String"),
+                                Transform::from_rotation(Quat::from_rotation_arc(
+                                    Vec3::Z,
+                                    top / length,
+                                )),
+                                Visibility::default(),
+                            ))
+                            .with_children(|string| {
+                                string.spawn((
+                                    Name::new("Cord"),
+                                    twine,
+                                    Transform::from_scale(Vec3::new(
+                                        STRING_RADIUS,
+                                        STRING_RADIUS,
+                                        length,
+                                    )),
+                                ));
+                                string.spawn((
+                                    Name::new(COLLISION),
+                                    capsule(STRING_RADIUS, 0.0, length),
+                                ));
+                            });
+                    });
+                }
             }
         }
     }
 }
 
 /// Which species holds each of a bed's `squares`: the species allowed in
-/// bed `bed` (from 1), in name order, each a block of squares in proportion
-/// to its share. With no species allowed, every square is empty.
+/// bed `bed` (from 1), in name order with the climbers last, each a block
+/// of squares in proportion to its share. The squares are dealt from the
+/// south row north, so the climbers end up under the trellis. With no
+/// species allowed, every square is empty.
 fn deal(commons: &Commons, bed: u32, squares: usize) -> Vec<Option<(&'static str, &Entry)>> {
-    let allowed: Vec<(&'static str, &Entry)> = commons
+    let mut allowed: Vec<(&'static str, &Entry)> = commons
         .0
         .iter()
         .filter(|(_, entry)| {
@@ -190,6 +281,7 @@ fn deal(commons: &Commons, bed: u32, squares: usize) -> Vec<Option<(&'static str
         })
         .map(|(name, entry)| (*name, entry))
         .collect();
+    allowed.sort_by_key(|(_, entry)| entry.climbs);
     let total: f32 = allowed.iter().map(|(_, entry)| entry.common.share).sum();
     let mut plots = vec![None; squares];
     if total <= 0.0 {
@@ -214,7 +306,7 @@ mod tests {
     use super::*;
     use crate::species::Common;
 
-    fn entry(share: f32, bed: u32) -> Entry {
+    fn entry(share: f32, bed: u32, climbs: bool) -> Entry {
         Entry {
             common: Common {
                 share,
@@ -222,19 +314,22 @@ mod tests {
                 sown_week: 0.0,
                 bed,
             },
+            climbs,
             tag: |_: &mut EntityCommands| {},
         }
     }
 
-    /// Squares go out in blocks by share, in name order; a species confined
-    /// to another bed gets none here, and a share of 0 none anywhere.
+    /// Squares go out in blocks by share, in name order but for a climber,
+    /// which comes last whatever its name; a species confined to another bed
+    /// gets none here, and a share of 0 none anywhere.
     #[test]
     fn squares_are_dealt_by_share() {
         let mut commons = Commons::default();
-        commons.0.insert("a", entry(0.75, 0));
-        commons.0.insert("b", entry(0.25, 0));
-        commons.0.insert("c", entry(1.0, 2));
-        commons.0.insert("d", entry(0.0, 0));
+        commons.0.insert("0", entry(0.25, 0, true));
+        commons.0.insert("a", entry(0.75, 0, false));
+        commons.0.insert("b", entry(0.25, 0, false));
+        commons.0.insert("c", entry(1.0, 2, false));
+        commons.0.insert("d", entry(0.0, 0, false));
         let names = |commons: &Commons, bed: u32| -> Vec<Option<&str>> {
             deal(commons, bed, 8)
                 .into_iter()
@@ -243,11 +338,17 @@ mod tests {
         };
         assert_eq!(
             names(&commons, 1),
-            [vec![Some("a"); 6], vec![Some("b"); 2]].concat()
+            [vec![Some("a"); 5], vec![Some("b"); 1], vec![Some("0"); 2]].concat()
         );
         assert_eq!(
             names(&commons, 2),
-            [vec![Some("a"); 3], vec![Some("b"); 1], vec![Some("c"); 4]].concat()
+            [
+                vec![Some("a"); 3],
+                vec![Some("b"); 1],
+                vec![Some("c"); 3],
+                vec![Some("0"); 1]
+            ]
+            .concat()
         );
         commons.0.clear();
         assert_eq!(names(&commons, 1), vec![None; 8]);

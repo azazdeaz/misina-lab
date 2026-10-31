@@ -37,20 +37,33 @@ class SceneParams:
     def __repr__(self) -> str: ...
 
 class PhysicsParams:
-    """What a robot bumps into, besides the floor and the beds. Scene-wide, since a demo
-    wants one switch.
+    """What a robot bumps into, besides the floor and the beds, and what bends.
+    Scene-wide, since a demo wants one switch.
     """
 
     stems_collide: bool
-    """Whether every stem collides, as a chain of capsules along it."""
+    """Whether every stem collides, as a chain of capsules along it. A rod collides as
+    itself, whatever this says.
+    """
     fruit_collides: bool
     """Whether every fruit and root collides, as a capsule each."""
+    flexible_stems: bool
+    """Whether the stems that bend, a pole bean's vine, are rods the solver moves, their
+    leaves and pods riding them; off, they are wood like every other stem.
+    """
+    segment: float
+    """Length of a rod's segments, in meters: shorter bends smoother and costs a body
+    per segment. No longer than 6 cm, the most a pole bean's vine can be sampled at
+    and still clear its string.
+    """
 
     def __init__(
         self,
         *,
         stems_collide: bool = True,
         fruit_collides: bool = False,
+        flexible_stems: bool = False,
+        segment: float = 0.05,
     ) -> None: ...
     def __repr__(self) -> str: ...
 
@@ -84,6 +97,11 @@ class BedParams:
     """Beds along X in each row."""
     rows: int
     """Rows of beds across Y."""
+    trellis: float
+    """Height of the trellis rail above the soil, in meters, on a bed that holds a
+    climber: two posts at the bed's north corners and a rail between them, a string
+    from it down to every climbing plant.
+    """
 
     def __init__(
         self,
@@ -95,6 +113,7 @@ class BedParams:
         path: float = 0.9,
         columns: int = 2,
         rows: int = 3,
+        trellis: float = 2.0,
     ) -> None: ...
     def __repr__(self) -> str: ...
 
@@ -266,6 +285,103 @@ class CarrotParams:
     ) -> None: ...
     def __repr__(self) -> str: ...
 
+class BushBeanParams:
+    """Bush bean: a short stem branching from its lowest nodes into a bush of trifoliate
+    leaves, pods hanging in clusters under the upper leaves, grown to harvest over
+    eight weeks.
+    """
+
+    height: float
+    """Height of a harvest-ready plant's main stem, in meters."""
+    branches: int
+    """Branches leaving the lowest nodes."""
+    leaf_length: float
+    """Length of a grown leaf, petiole and leaflets, in meters."""
+    pod_length: float
+    """Length of a ripe pod, in meters."""
+    share: float
+    """Share of the garden's planting squares this crop gets, against the other crops';
+    0 leaves it out.
+    """
+    spacing: float
+    """Distance between plants, in meters, rounded to one, two, three or four per side
+    of a 30 cm square.
+    """
+    sown_week: float
+    """The week it was sown, on the scene's calendar: a plant's age is the scene's week
+    less this, and a bed is bare before it.
+    """
+    bed: int
+    """The one bed it is confined to, counted from 1; 0 plants it anywhere."""
+    variations: int
+    """How many distinct meshes each of its organs, its leaves and its fruit, may share.
+    A budget, not a count: the organs are clustered and this is how many
+    representatives the clustering may keep.
+    """
+
+    def __init__(
+        self,
+        *,
+        height: float = 0.4,
+        branches: int = 3,
+        leaf_length: float = 0.18,
+        pod_length: float = 0.13,
+        share: float = 0.25,
+        spacing: float = 0.1,
+        sown_week: float = 0.0,
+        bed: int = 0,
+        variations: int = 12,
+    ) -> None: ...
+    def __repr__(self) -> str: ...
+
+class PoleBeanParams:
+    """Pole bean: a vine twining up a string from its bed's trellis, a large trifoliate
+    leaf at every node and pods hanging from the upper nodes, grown to harvest over
+    ten weeks.
+    """
+
+    height: float
+    """Length of a harvest-ready vine up its string, in meters; a vine stops at the
+    string's top.
+    """
+    leaf_length: float
+    """Length of a grown leaf, petiole and leaflets, in meters."""
+    pod_length: float
+    """Length of a ripe pod, in meters."""
+    share: float
+    """Share of the garden's planting squares this crop gets, against the other crops';
+    0 leaves it out.
+    """
+    spacing: float
+    """Distance between plants, in meters, rounded to one, two, three or four per side
+    of a 30 cm square.
+    """
+    sown_week: float
+    """The week it was sown, on the scene's calendar: a plant's age is the scene's week
+    less this, and a bed is bare before it.
+    """
+    bed: int
+    """The one bed it is confined to, counted from 1; 0 plants it anywhere."""
+    variations: int
+    """How many distinct meshes each of its organs, its leaves and its fruit, may share.
+    A budget, not a count: the organs are clustered and this is how many
+    representatives the clustering may keep.
+    """
+
+    def __init__(
+        self,
+        *,
+        height: float = 2.2,
+        leaf_length: float = 0.25,
+        pod_length: float = 0.16,
+        share: float = 0.25,
+        spacing: float = 0.15,
+        sown_week: float = 0.0,
+        bed: int = 0,
+        variations: int = 12,
+    ) -> None: ...
+    def __repr__(self) -> str: ...
+
 # <<< generated: fragments
 
 class GardenParams:
@@ -280,6 +396,8 @@ class GardenParams:
     lettuce: LettuceParams
     kale: KaleParams
     carrot: CarrotParams
+    bush_bean: BushBeanParams
+    pole_bean: PoleBeanParams
 
     def __init__(
         self,
@@ -290,6 +408,8 @@ class GardenParams:
         lettuce: LettuceParams | None = None,
         kale: KaleParams | None = None,
         carrot: CarrotParams | None = None,
+        bush_bean: BushBeanParams | None = None,
+        pole_bean: PoleBeanParams | None = None,
     ) -> None: ...
     # <<< generated: aggregate
     def __repr__(self) -> str: ...

@@ -5,7 +5,9 @@
 //! rim, on a post inside each corner and against each long side every
 //! [`POST_SPACING`] at most; the soil is a block filling the frame up to the
 //! soil surface. Every bed is the same, so the garden holds one frame mesh
-//! and one soil mesh, each its own collider, referenced from every bed.
+//! and one soil mesh, each its own collider, referenced from every bed. A
+//! bed that holds a climber also gets the [`trellis`], which the planting
+//! layer spawns with the plants it strings to it.
 
 use bevy::prelude::*;
 use misina_lab::geometry::mesh::{MeshData, merge_meshes};
@@ -25,8 +27,13 @@ const POST_PROUD: f32 = 0.03;
 /// The most a long side runs from one post to the next, in meters.
 const POST_SPACING: f32 = 1.2;
 
+/// A trellis post's and rail's square section, in meters, and how deep a
+/// post stands in the soil.
+pub const TRELLIS_TIMBER: f32 = 0.05;
+const TRELLIS_SUNK: f32 = 0.15;
+
 /// Weathered timber.
-const TIMBER: (u32, Response) = (
+pub const TIMBER: (u32, Response) = (
     0x9B7B5B,
     Response {
         roughness: 0.8,
@@ -126,6 +133,34 @@ pub fn soil(size: Vec2, soil_z: f32) -> MeshData {
     cuboid((-inner).extend(0.0), inner.extend(soil_z))
 }
 
+/// The trellis of a bed `size` across: a post inside each north corner,
+/// sunk in the soil and standing to the rail, and the rail along the bed
+/// between them, centred at `rail_z`; see [`trellis_y`] for where it stands.
+pub fn trellis(size: Vec2, soil_z: f32, rail_z: f32) -> MeshData {
+    let (y, half) = (trellis_y(size), TRELLIS_TIMBER / 2.0);
+    let reach = size.x / 2.0 - BOARD - half;
+    let mut boxes: Vec<MeshData> = [-reach, reach]
+        .into_iter()
+        .map(|x| {
+            cuboid(
+                Vec3::new(x - half, y - half, soil_z - TRELLIS_SUNK),
+                Vec3::new(x + half, y + half, rail_z + half),
+            )
+        })
+        .collect();
+    boxes.push(cuboid(
+        Vec3::new(-reach - half, y - half, rail_z - half),
+        Vec3::new(reach + half, y + half, rail_z + half),
+    ));
+    merge_meshes(&boxes)
+}
+
+/// Where a bed's trellis stands across the bed: its posts' and rail's
+/// centre line, just inside the north boards.
+pub fn trellis_y(size: Vec2) -> f32 {
+    size.y / 2.0 - BOARD - TRELLIS_TIMBER / 2.0
+}
+
 #[cfg(test)]
 mod tests {
     use misina_lab::testing::bounds;
@@ -146,5 +181,26 @@ mod tests {
         assert_eq!(bounds(&frame, 2), (0.0, rim_z + POST_PROUD));
         assert_eq!(bounds(&frame, 0), (-size.x / 2.0, size.x / 2.0));
         assert_eq!(bounds(&frame, 1), (-size.y / 2.0, size.y / 2.0));
+        let trellis = trellis(size, soil_z, 2.26);
+        let close = |got: (f32, f32), want: (f32, f32)| {
+            assert!(
+                (got.0 - want.0).abs() < 1e-5 && (got.1 - want.1).abs() < 1e-5,
+                "{got:?} is not {want:?}"
+            );
+        };
+        close(
+            bounds(&trellis, 2),
+            (soil_z - TRELLIS_SUNK, 2.26 + TRELLIS_TIMBER / 2.0),
+        );
+        close(
+            bounds(&trellis, 0),
+            (-(size.x / 2.0 - BOARD), size.x / 2.0 - BOARD),
+        );
+        let (y0, y1) = bounds(&trellis, 1);
+        // Flush inside the north boards.
+        assert!(
+            (y1 - (size.y / 2.0 - BOARD)).abs() < 1e-5 && (y1 - y0 - TRELLIS_TIMBER).abs() < 1e-5,
+            "{y0}..{y1}"
+        );
     }
 }

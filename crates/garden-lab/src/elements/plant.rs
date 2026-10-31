@@ -1,16 +1,20 @@
 //! Plant — one plant's recipe into its organs, a system per species.
 //!
 //! [`grow`] runs the species' [`Recipe`] for every plant of it, replacing
-//! the organs it grew last time: its axes as one `Wood` mesh of its own, a
-//! capsule chain along each axis when the stems collide, the crown, one
+//! the organs it grew last time: its rigid axes as one `Wood` mesh of its
+//! own, a capsule chain along each when the stems collide, the crown, one
 //! part per species scaled to each plant, a `Leaf_NN` child per leaf at its
 //! anchor carrying the [`LeafConfig`](super::leaf::LeafConfig) the leaf
 //! layer meshes, and a `Fruit_NN` Xform per fruit carrying its
 //! [`FruitConfig`](super::fruit::FruitConfig) and harvest attributes, with
 //! the `Skin` the fruit layer meshes, a `Cut` frame and its own capsule when
-//! the fruit collide. A plant is grown in its own frame: its foot at the
-//! origin, +Z up.
+//! the fruit collide. An axis that bends becomes a `Rod_NN` instead when
+//! the scene's stems are flexible: the framework's cable, a prim per
+//! segment carrying its tube, and under those the leaves and fruit that sit
+//! on it, their masses in the cable's loads; the rod collides as itself. A
+//! plant is grown in its own frame: its foot at the origin, +Z up.
 
+use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
 
 use bevy::prelude::*;
@@ -18,14 +22,15 @@ use misina_lab::geometry::mesh::{MeshData, cylinder_mesh, merge_meshes};
 use misina_lab::geometry::strand::{Bark, Strand, sides_within, strand_mesh};
 use misina_lab::palette::{Response, srgb};
 use misina_lab::scene::{
-    COLLISION, Geometry, Library, Order, UsdAttributes, capsule, capsule_between,
+    COLLISION, Geometry, Library, Order, UsdAttributes, cable, capsule, capsule_between, rebase,
+    segment_frames, segment_of, segment_tubes, spawn_rod,
 };
 use nalgebra::Point3;
 
 use super::PhysicsParams;
 use super::fruit::{READY, Skin};
 use super::planting::PlantConfig;
-use crate::grow::axis::Grown;
+use crate::grow::axis::{Anchor, Grown};
 use crate::grow::builder::Builder;
 use crate::species::{Of, OrganOf, Recipe, Species};
 
@@ -58,6 +63,14 @@ const WOOD: Response = Response {
 /// meters.
 const STRAY: f32 = 0.003;
 
+/// A rod: its held first segment, in meters, the framework's usual, so an
+/// axis has to be two of them long for a segment that moves; the sides of a
+/// segment's tube; and the grid the tubes are shared on, in meters: two
+/// segments alike in length and end widths to it draw one part.
+const HELD: f32 = 0.0135;
+const TUBE_SIDES: usize = 8;
+const TUBE_GRID: f32 = 0.0002;
+
 /// An organ's `Order` is its plant's shifted by this, with the fruit above
 /// the leaves; a plant has fewer organs than the fruit bit.
 const ORGAN_BITS: u32 = 24;
@@ -66,6 +79,10 @@ const FRUIT_ORDER: u64 = 1 << 23;
 /// Planting places a bed holds at most, which keeps a `Wood` part's index,
 /// `bed * PLACES_PER_BED + place`, one per plant.
 const PLACES_PER_BED: u64 = 10_000;
+
+/// One plant grown and meshed, waiting to be spawned: its order, its
+/// entity, what its recipe collected, its wood if it has any, and its rods.
+type Built = (Order, Entity, Builder, Option<Geometry>, Vec<Rod>);
 
 /// Run condition: a plant of `S` was planted, replanted or pulled.
 pub fn changed<S: Species>(
@@ -79,8 +96,8 @@ pub fn changed<S: Species>(
 
 /// Grows every plant of `S` from its recipe, in authoring order.
 ///
-/// Every recipe runs and every `Wood` is meshed before anything is spawned
-/// or despawned, so a meshing error leaves the standing scene whole.
+/// Every recipe runs and every mesh is registered before anything is
+/// spawned or despawned, so a meshing error leaves the standing scene whole.
 pub fn grow<S: Recipe>(
     mut commands: Commands,
     mut library: Library,
@@ -91,26 +108,32 @@ pub fn grow<S: Recipe>(
     organs: Query<(), With<Organ>>,
 ) -> Result {
     let crown_prefix = format!("{}Crown", S::PREFIX);
+    let tube_prefix = format!("{}Tube", S::PREFIX);
     library.clear(S::PREFIX);
     library.clear(&crown_prefix);
+    library.clear(&tube_prefix);
     let mut grown: Vec<(Order, Entity, PlantConfig)> = plants
         .iter()
         .map(|(entity, order, config)| (*order, entity, *config))
         .collect();
     grown.sort_by_key(|(order, ..)| *order);
-    let mut built: Vec<(Order, Entity, Builder, Option<Geometry>)> =
-        Vec::with_capacity(grown.len());
+    // The rods' tubes, shared across the species by size as they are met.
+    let mut tubes: HashMap<[u32; 6], Geometry> = HashMap::new();
+    let mut built: Vec<Built> = Vec::with_capacity(grown.len());
     for (order, plant, config) in grown {
         let mut builder = Builder::new(&config);
         S::grow(&params, &config, &mut builder);
+        let (bending, rigid): (Vec<&Grown>, Vec<&Grown>) = builder
+            .axes
+            .iter()
+            .partition(|axis| physics.flexible_stems && axis.bends && axis.length() > 2.0 * HELD);
         // The plant's rigid axes, as one mesh of its own in the first axis's
         // colour: no two stems lie alike, and a herb's tube is a few
         // kilobytes. Named by the plant's bed and place, so a plant missing
         // renames no other's.
-        let wood = match builder.axes.first() {
+        let wood = match rigid.first() {
             Some(first) => {
-                let tubes: anyhow::Result<Vec<MeshData>> = builder
-                    .axes
+                let tubes: anyhow::Result<Vec<MeshData>> = rigid
                     .iter()
                     .map(|axis| strand_mesh(&strand(axis)))
                     .collect();
@@ -124,14 +147,32 @@ pub fn grow<S: Recipe>(
             }
             None => None,
         };
-        built.push((order, plant, builder, wood));
+        let mut rods: Vec<Rod> = bending
+            .into_iter()
+            .map(|axis| {
+                Rod::new(
+                    axis,
+                    physics.segment,
+                    &mut library,
+                    &tube_prefix,
+                    &mut tubes,
+                )
+            })
+            .collect();
+        for (_, anchor, leaf) in &builder.leaves {
+            load(&mut rods, anchor, leaf.mass());
+        }
+        for (_, anchor, fruit) in &builder.fruits {
+            load(&mut rods, anchor, fruit.mass());
+        }
+        built.push((order, plant, builder, wood, rods));
     }
 
     // One stub for the species, a unit radius and height, scaled per plant;
     // registered only if some plant grew one, so no part goes undrawn.
     let crown = built
         .iter()
-        .any(|(_, _, builder, _)| builder.crown.is_some())
+        .any(|(_, _, builder, ..)| builder.crown.is_some())
         .then(|| {
             let (color, response) = CROWN;
             library.part(
@@ -142,7 +183,7 @@ pub fn grow<S: Recipe>(
             )
         });
 
-    for (order, plant, builder, wood) in built {
+    for (order, plant, builder, wood, rods) in built {
         for &child in children.get(plant).into_iter().flatten() {
             if organs.contains(child) {
                 commands.entity(child).despawn();
@@ -156,89 +197,219 @@ pub fn grow<S: Recipe>(
             ..
         } = builder;
         let organ_order = order.0 << ORGAN_BITS;
-        commands.entity(plant).with_children(|parent| {
-            if let Some(wood) = wood {
-                parent.spawn((Organ, Name::new("Wood"), wood));
-            }
-            if physics.stems_collide {
-                let mut k = 0;
-                for axis in &axes {
-                    for (radius, from, to) in chain(axis) {
-                        // Straight across the whole span, its caps past both
-                        // ends, so it overlaps the next one over their joint.
-                        let out = (to - from).normalize_or_zero() * radius;
-                        parent.spawn((
-                            Organ,
-                            Name::new(format!("{COLLISION}_{k:02}")),
-                            capsule_between(radius, from - out, to + out),
-                        ));
-                        k += 1;
-                    }
+        if let Some(wood) = wood {
+            commands.spawn((Organ, Name::new("Wood"), wood, ChildOf(plant)));
+        }
+        if physics.stems_collide {
+            let mut k = 0;
+            for axis in axes
+                .iter()
+                .filter(|axis| !rods.iter().any(|rod| rod.axis == axis.index))
+            {
+                for (radius, from, to) in chain(axis) {
+                    // Straight across the whole span, its caps past both
+                    // ends, so it overlaps the next one over their joint.
+                    let out = (to - from).normalize_or_zero() * radius;
+                    commands.spawn((
+                        Organ,
+                        Name::new(format!("{COLLISION}_{k:02}")),
+                        capsule_between(radius, from - out, to + out),
+                        ChildOf(plant),
+                    ));
+                    k += 1;
                 }
             }
-            if let (Some(stub), Some(geometry)) = (grew, &crown) {
-                parent.spawn((
+        }
+        if let (Some(stub), Some(geometry)) = (grew, &crown) {
+            commands.spawn((
+                Organ,
+                Name::new("Crown"),
+                geometry.clone(),
+                Transform::from_xyz(0.0, 0.0, stub.base).with_scale(Vec3::new(
+                    stub.radius,
+                    stub.radius,
+                    stub.height(),
+                )),
+                ChildOf(plant),
+            ));
+        }
+        // Each rod under an Xform of its own at the plant's frame, so the
+        // segments are siblings of the cable, where the solver looks.
+        let rods: Vec<(Rod, Vec<Entity>)> = rods
+            .into_iter()
+            .map(|rod| {
+                let mut organ = commands.spawn((
                     Organ,
-                    Name::new("Crown"),
-                    geometry.clone(),
-                    Transform::from_xyz(0.0, 0.0, stub.base).with_scale(Vec3::new(
-                        stub.radius,
-                        stub.radius,
-                        stub.height(),
-                    )),
+                    Name::new(format!("Rod_{:02}", rod.axis)),
+                    Transform::IDENTITY,
+                    Visibility::default(),
+                    ChildOf(plant),
                 ));
-            }
-            for (k, anchor, leaf) in leaves {
-                parent.spawn((
+                let curve = cable(
+                    rod.points.clone(),
+                    rod.widths.clone(),
+                    rod.loads.clone(),
+                    WOOD.surface(rod.tint),
+                );
+                let segments = spawn_rod(&mut organ, curve, &rod.frames, &rod.tubes);
+                (rod, segments)
+            })
+            .collect();
+        for (k, anchor, leaf) in leaves {
+            let (host, placement) = host(&anchor, &rods, plant);
+            commands.spawn((
+                Organ,
+                OrganOf::<S>::default(),
+                Name::new(format!("Leaf_{k:02}")),
+                placement,
+                Visibility::default(),
+                leaf,
+                Order(organ_order | k),
+                ChildOf(host),
+            ));
+        }
+        for (k, anchor, fruit) in fruits {
+            let (host, placement) = host(&anchor, &rods, plant);
+            commands
+                .spawn((
                     Organ,
                     OrganOf::<S>::default(),
-                    Name::new(format!("Leaf_{k:02}")),
-                    anchor,
+                    Name::new(format!("Fruit_{k:02}")),
+                    placement,
                     Visibility::default(),
-                    leaf,
-                    Order(organ_order | k),
-                ));
-            }
-            for (k, (anchor, fruit)) in fruits.into_iter().enumerate() {
-                parent
-                    .spawn((
-                        Organ,
-                        OrganOf::<S>::default(),
-                        Name::new(format!("Fruit_{k:02}")),
-                        anchor,
+                    fruit,
+                    Order(organ_order | FRUIT_ORDER | k),
+                    UsdAttributes::default()
+                        .with("ripeness", fruit.ripeness)
+                        .with("pick", fruit.kind.pick())
+                        .with("harvest_ready", fruit.ripeness >= READY),
+                    ChildOf(host),
+                ))
+                .with_children(|prim| {
+                    prim.spawn((
+                        Skin,
+                        Name::new("Skin"),
+                        Transform::IDENTITY,
                         Visibility::default(),
-                        fruit,
-                        Order(organ_order | FRUIT_ORDER | k as u64),
-                        UsdAttributes::default()
-                            .with("ripeness", fruit.ripeness)
-                            .with("pick", fruit.kind.pick())
-                            .with("harvest_ready", fruit.ripeness >= READY),
-                    ))
-                    .with_children(|prim| {
-                        prim.spawn((
-                            Skin,
-                            Name::new("Skin"),
-                            Transform::IDENTITY,
-                            Visibility::default(),
-                        ));
-                        // Where a harvester takes it: the fruit's top, +X up
-                        // the stalk.
-                        prim.spawn((
-                            Name::new("Cut"),
-                            Transform::from_rotation(Quat::from_rotation_y(-FRAC_PI_2)),
-                            Visibility::default(),
-                        ));
-                        if physics.fruit_collides {
-                            // A capsule the fruit's whole length, its tips at
-                            // the top and the bottom.
-                            let radius = (fruit.diameter / 2.0).min(fruit.length / 2.0);
-                            prim.spawn((Name::new(COLLISION), capsule(radius, -fruit.length, 0.0)));
-                        }
-                    });
-            }
-        });
+                    ));
+                    // Where a harvester takes it: the fruit's top, +X up
+                    // the stalk.
+                    prim.spawn((
+                        Name::new("Cut"),
+                        Transform::from_rotation(Quat::from_rotation_y(-FRAC_PI_2)),
+                        Visibility::default(),
+                    ));
+                    if physics.fruit_collides {
+                        // A capsule the fruit's whole length, its tips at
+                        // the top and the bottom.
+                        let radius = (fruit.diameter / 2.0).min(fruit.length / 2.0);
+                        prim.spawn((Name::new(COLLISION), capsule(radius, -fruit.length, 0.0)));
+                    }
+                });
+        }
     }
     Ok(())
+}
+
+/// A bending axis as a rod: its points at `stations` along the axis, the
+/// frames and tubes of its segments, and what its riders weigh on each
+/// point.
+struct Rod {
+    /// The axis it stands in for, by its index among the plant's.
+    axis: usize,
+    stations: Vec<f32>,
+    points: Vec<[f32; 3]>,
+    widths: Vec<f32>,
+    frames: Vec<Transform>,
+    tubes: Vec<Geometry>,
+    loads: Vec<f32>,
+    tint: [f32; 3],
+}
+
+impl Rod {
+    /// `axis` sampled at the held stub and then even steps as near `segment`
+    /// as divide the rest, its tubes drawn from `shared` or registered under
+    /// `prefix` as the next part.
+    fn new(
+        axis: &Grown,
+        segment: f32,
+        library: &mut Library,
+        prefix: &str,
+        shared: &mut HashMap<[u32; 6], Geometry>,
+    ) -> Self {
+        let length = axis.length();
+        let steps = ((length - HELD) / segment.max(0.005)).round().max(1.0);
+        let mut stations = vec![0.0, HELD];
+        stations.extend((1..=steps as usize).map(|i| HELD + (length - HELD) * i as f32 / steps));
+        let (points, widths): (Vec<[f32; 3]>, Vec<f32>) = stations
+            .iter()
+            .map(|&station| {
+                let (at, radius) = axis.at(station);
+                (at.to_array(), 2.0 * radius)
+            })
+            .unzip();
+        let frames = segment_frames(&points);
+        let surface = WOOD.surface(axis.tint);
+        let grid = |x: f32| (x / TUBE_GRID).round() as u32;
+        let [r, g, b] = axis.tint.map(f32::to_bits);
+        let tubes = segment_tubes(&points, &widths, TUBE_SIDES)
+            .into_iter()
+            .zip(points.windows(2).zip(widths.windows(2)))
+            .map(|(mesh, (pair, ends))| {
+                let span = Vec3::from(pair[0]).distance(pair[1].into());
+                let key = [grid(span), grid(ends[0]), grid(ends[1]), r, g, b];
+                let next = shared.len();
+                shared
+                    .entry(key)
+                    .or_insert_with(|| library.part(prefix, next, mesh.to_mesh(), surface))
+                    .clone()
+            })
+            .collect();
+        Self {
+            axis: axis.index,
+            loads: vec![0.0; points.len()],
+            stations,
+            points,
+            widths,
+            frames,
+            tubes,
+            tint: axis.tint,
+        }
+    }
+}
+
+/// Puts `mass` on the rod `anchor` sits on, if it sits on one: split
+/// between the two points of its segment, the nearer taking more.
+fn load(rods: &mut [Rod], anchor: &Anchor, mass: f32) {
+    let Some((axis, station)) = anchor.on else {
+        return;
+    };
+    let Some(rod) = rods.iter_mut().find(|rod| rod.axis == axis) else {
+        return;
+    };
+    let k = segment_of(&rod.stations, station);
+    let (from, to) = (rod.stations[k], rod.stations[k + 1]);
+    let t = ((station - from) / (to - from).max(1e-6)).clamp(0.0, 1.0);
+    rod.loads[k] += mass * (1.0 - t);
+    rod.loads[k + 1] += mass * t;
+}
+
+/// What an organ at `anchor` is spawned under, and where: the segment prim
+/// that carries it, in that segment's frame, when its axis is a rod, else
+/// the plant, as it is.
+fn host(anchor: &Anchor, rods: &[(Rod, Vec<Entity>)], plant: Entity) -> (Entity, Transform) {
+    anchor
+        .on
+        .and_then(|(axis, station)| {
+            rods.iter()
+                .find(|(rod, _)| rod.axis == axis)
+                .map(|rod| (rod, station))
+        })
+        .map(|((rod, segments), station)| {
+            let k = segment_of(&rod.stations, station);
+            (segments[k], rebase(&rod.frames[k], &anchor.frame))
+        })
+        .unwrap_or((plant, anchor.frame))
 }
 
 /// An axis as a tube to mesh: round within [`WOOD_TOLERANCE`], unbarked.
@@ -311,5 +482,34 @@ mod tests {
             assert_eq!(pair[0].2, pair[1].1, "the chain is joined");
         }
         assert!(spans.iter().all(|(radius, ..)| *radius >= 0.01));
+    }
+
+    /// A load lands on the two points of the segment its station falls in,
+    /// the nearer taking more, and nowhere when the anchor sits on no rod.
+    #[test]
+    fn a_load_splits_between_its_segments_points() {
+        let mut rod = Rod {
+            axis: 2,
+            stations: vec![0.0, HELD, 0.1, 0.2],
+            points: vec![],
+            widths: vec![],
+            frames: vec![],
+            tubes: vec![],
+            loads: vec![0.0; 4],
+            tint: [0.0; 3],
+        };
+        let on = |axis, station| Anchor {
+            frame: Transform::IDENTITY,
+            on: Some((axis, station)),
+        };
+        load(std::slice::from_mut(&mut rod), &on(2, 0.175), 0.4);
+        load(std::slice::from_mut(&mut rod), &on(1, 0.175), 9.0);
+        load(
+            std::slice::from_mut(&mut rod),
+            &Transform::IDENTITY.into(),
+            9.0,
+        );
+        assert!((rod.loads[2] - 0.1).abs() < 1e-6 && (rod.loads[3] - 0.3).abs() < 1e-6);
+        assert_eq!(rod.loads[..2], [0.0, 0.0]);
     }
 }

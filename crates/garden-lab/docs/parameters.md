@@ -25,12 +25,14 @@ Scene-wide parameters: the seed, and how far into the season the garden is.
 
 `PhysicsParams` in Python, `PhysicsCfg` in Isaac Lab.
 
-What a robot bumps into, besides the floor and the beds. Scene-wide, since a demo wants one switch.
+What a robot bumps into, besides the floor and the beds, and what bends. Scene-wide, since a demo wants one switch.
 
 | Parameter | Type | Default | Slider range | Description |
 |---|---|---|---|---|
-| `stems_collide` | bool | `True` |  | Whether every stem collides, as a chain of capsules along it. |
+| `stems_collide` | bool | `True` |  | Whether every stem collides, as a chain of capsules along it. A rod collides as itself, whatever this says. |
 | `fruit_collides` | bool | `False` |  | Whether every fruit and root collides, as a capsule each. |
+| `flexible_stems` | bool | `False` |  | Whether the stems that bend, a pole bean's vine, are rods the solver moves, their leaves and pods riding them; off, they are wood like every other stem. |
+| `segment` | float | `0.05` | 0.02 to 0.06 | Length of a rod's segments, in meters: shorter bends smoother and costs a body per segment. No longer than 6 cm, the most a pole bean's vine can be sampled at and still clear its string. |
 
 ## Beds
 
@@ -49,6 +51,7 @@ Beds run east–west along X in `columns`, and the `rows` are numbered across Y 
 | `path` | float | `0.9` | 0.45 to 1.5 | Width of the paths between the beds and round the garden, in meters. 45 to 60 cm is comfortable on foot; 90 cm and up takes a cart or a wheeled robot. |
 | `columns` | int | `2` | 1 to 4 | Beds along X in each row. |
 | `rows` | int | `3` | 1 to 6 | Rows of beds across Y. |
+| `trellis` | float | `2.0` | 1.2 to 2.5 | Height of the trellis rail above the soil, in meters, on a bed that holds a climber: two posts at the bed's north corners and a rail between them, a string from it down to every climbing plant. |
 
 ## Planting
 
@@ -112,6 +115,41 @@ Carrot: a rosette of finely divided leaves over a taproot whose shoulder shows a
 | `root_diameter` | float | `0.03` | 0.015 to 0.06 | Diameter of a harvest-ready root at its shoulder, in meters. |
 | `share` | float | `0.25` | 0 to 1 | Share of the garden's planting squares this crop gets, against the other crops'; 0 leaves it out. |
 | `spacing` | float | `0.075` | 0.03 to 1 | Distance between plants, in meters, rounded to one, two, three or four per side of a 30 cm square. |
+| `sown_week` | float | `0.0` | 0 to 20 | The week it was sown, on the scene's calendar: a plant's age is the scene's week less this, and a bed is bare before it. |
+| `bed` | int | `0` | 0 to 24 | The one bed it is confined to, counted from 1; 0 plants it anywhere. |
+| `variations` | int | `12` | 1 to 64 | How many distinct meshes each of its organs, its leaves and its fruit, may share. A budget, not a count: the organs are clustered and this is how many representatives the clustering may keep. |
+
+## Bush bean
+
+`BushBeanParams` in Python, `BushBeanCfg` in Isaac Lab.
+
+Bush bean: a short stem branching from its lowest nodes into a bush of trifoliate leaves, pods hanging in clusters under the upper leaves, grown to harvest over eight weeks.
+
+| Parameter | Type | Default | Slider range | Description |
+|---|---|---|---|---|
+| `height` | float | `0.4` | 0.2 to 0.6 | Height of a harvest-ready plant's main stem, in meters. |
+| `branches` | int | `3` | 0 to 5 | Branches leaving the lowest nodes. |
+| `leaf_length` | float | `0.18` | 0.08 to 0.3 | Length of a grown leaf, petiole and leaflets, in meters. |
+| `pod_length` | float | `0.13` | 0.06 to 0.2 | Length of a ripe pod, in meters. |
+| `share` | float | `0.25` | 0 to 1 | Share of the garden's planting squares this crop gets, against the other crops'; 0 leaves it out. |
+| `spacing` | float | `0.1` | 0.03 to 1 | Distance between plants, in meters, rounded to one, two, three or four per side of a 30 cm square. |
+| `sown_week` | float | `0.0` | 0 to 20 | The week it was sown, on the scene's calendar: a plant's age is the scene's week less this, and a bed is bare before it. |
+| `bed` | int | `0` | 0 to 24 | The one bed it is confined to, counted from 1; 0 plants it anywhere. |
+| `variations` | int | `12` | 1 to 64 | How many distinct meshes each of its organs, its leaves and its fruit, may share. A budget, not a count: the organs are clustered and this is how many representatives the clustering may keep. |
+
+## Pole bean
+
+`PoleBeanParams` in Python, `PoleBeanCfg` in Isaac Lab.
+
+Pole bean: a vine twining up a string from its bed's trellis, a large trifoliate leaf at every node and pods hanging from the upper nodes, grown to harvest over ten weeks.
+
+| Parameter | Type | Default | Slider range | Description |
+|---|---|---|---|---|
+| `height` | float | `2.2` | 1 to 3 | Length of a harvest-ready vine up its string, in meters; a vine stops at the string's top. |
+| `leaf_length` | float | `0.25` | 0.1 to 0.4 | Length of a grown leaf, petiole and leaflets, in meters. |
+| `pod_length` | float | `0.16` | 0.08 to 0.25 | Length of a ripe pod, in meters. |
+| `share` | float | `0.25` | 0 to 1 | Share of the garden's planting squares this crop gets, against the other crops'; 0 leaves it out. |
+| `spacing` | float | `0.15` | 0.03 to 1 | Distance between plants, in meters, rounded to one, two, three or four per side of a 30 cm square. |
 | `sown_week` | float | `0.0` | 0 to 20 | The week it was sown, on the scene's calendar: a plant's age is the scene's week less this, and a bed is bare before it. |
 | `bed` | int | `0` | 0 to 24 | The one bed it is confined to, counted from 1; 0 plants it anywhere. |
 | `variations` | int | `12` | 1 to 64 | How many distinct meshes each of its organs, its leaves and its fruit, may share. A budget, not a count: the organs are clustered and this is how many representatives the clustering may keep. |

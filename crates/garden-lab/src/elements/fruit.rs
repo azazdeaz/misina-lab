@@ -28,11 +28,18 @@ const SKIN: Response = Response {
 /// The ripeness from which a fruit is `harvest_ready`.
 pub const READY: f32 = 0.9;
 
+/// A fruit's density, in kg/m³, and how much of the cylinder round it a
+/// fruit fills.
+const DENSITY: f32 = 1000.0;
+const FILL: f32 = 0.6;
+
 /// What a fruit is, which decides its solid and how it is picked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     /// A taproot: pulled by its tops.
     Root,
+    /// A pod: snapped off its stalk.
+    Pod,
 }
 
 impl Kind {
@@ -40,6 +47,7 @@ impl Kind {
     pub fn pick(self) -> &'static str {
         match self {
             Kind::Root => "pull",
+            Kind::Pod => "snap",
         }
     }
 }
@@ -59,6 +67,14 @@ pub struct FruitConfig {
     pub tint: [f32; 3],
     /// The stream its shade comes from; [`FruitMetric`] reads it not.
     pub seed: u64,
+}
+
+impl FruitConfig {
+    /// Its mass, in kilograms: what it weighs on a rod it rides.
+    pub fn mass(&self) -> f32 {
+        let radius = self.diameter / 2.0;
+        DENSITY * FILL * std::f32::consts::PI * radius * radius * self.length
+    }
 }
 
 /// Marks a fruit's `Skin` child, which this layer gives the mesh.
@@ -121,6 +137,7 @@ pub fn build<S: Species>(
     let book = farthest_first(&configs, budget, 0.0, &FruitMetric);
     let meshes = par_map(&book.representatives, |_, config| match config.kind {
         Kind::Root => solid::root(config),
+        Kind::Pod => solid::pod(config),
     });
     let mut geometry = Vec::with_capacity(meshes.len());
     for (index, (config, mesh)) in book.representatives.iter().zip(meshes).enumerate() {

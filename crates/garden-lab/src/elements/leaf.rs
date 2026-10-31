@@ -22,6 +22,9 @@ const FOLIAGE: Response = Response {
     reflectance: 0.4,
 };
 
+/// A fresh leaf's mass per area of blade, in kg/m².
+const AREAL_MASS: f32 = 0.3;
+
 /// What a leaf is built as.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Template {
@@ -29,6 +32,9 @@ pub enum Template {
     Simple,
     /// A rachis with leaflets in pairs along it and one at its tip.
     Compound,
+    /// Three entire leaflets on a petiole: a pair where it ends and one past
+    /// them.
+    Trifoliate,
 }
 
 /// One leaf's shape, as its recipe specified it; the constructors are in
@@ -38,8 +44,9 @@ pub struct LeafConfig {
     pub template: Template,
     /// From the anchor to the tip, petiole included, in meters.
     pub length: f32,
-    /// A simple blade's width at its widest, or a leaflet's length, as a
-    /// fraction of the length.
+    /// A simple blade's width at its widest or a compound leaf's leaflet's
+    /// length, as a fraction of the length; a trifoliate leaflet's width as
+    /// a fraction of its own length.
     pub width: f32,
     /// The bare stalk between the anchor and the blade, in meters.
     pub petiole: f32,
@@ -61,6 +68,14 @@ pub struct LeafConfig {
     pub seed: u64,
 }
 
+impl LeafConfig {
+    /// Its mass, in kilograms: what it weighs on a rod it rides, from the
+    /// blade area its template draws.
+    pub fn mass(&self) -> f32 {
+        AREAL_MASS * blade::area(self)
+    }
+}
+
 /// Two leaves share a mesh when they are built the same way and are close
 /// in every dimension that shows, weighted as roughly how far apart each
 /// moves the margin. A different template or tint is a different part, so
@@ -73,12 +88,13 @@ impl Metric<LeafConfig> for LeafMetric {
         let reach = a.length.max(b.length);
         let step = |same: bool| if same { 0.0 } else { 10.0 * reach.max(0.1) };
         let simple = (a.template == Template::Simple) as u8 as f32;
+        let compound = (a.template == Template::Compound) as u8 as f32;
         [
             a.length - b.length,
             (a.width - b.width) * reach,
             a.petiole - b.petiole,
             // A pair more is two leaflets more.
-            (a.pairs as f32 - b.pairs as f32) * reach / 6.0 * (1.0 - simple),
+            (a.pairs as f32 - b.pairs as f32) * reach / 6.0 * compound,
             // A full ruffle is a few percent of the length deep.
             (a.ruffle - b.ruffle) * reach / 20.0 * simple,
             // The edge's rise under the cup: the turn over half the width.

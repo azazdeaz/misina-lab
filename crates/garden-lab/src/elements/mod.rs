@@ -29,7 +29,7 @@ use misina_lab::Build;
 use misina_lab::geometry::mesh::{MeshData, box_mesh};
 use misina_lab::params::{Label, Slider};
 
-use crate::species::{self, Commons, carrot, kale, lettuce};
+use crate::species::{self, Commons, bush_bean, carrot, kale, lettuce, pole_bean};
 
 /// Build order: the species publish their common knobs, the layout spawns
 /// the bed prims the fixtures fill, planting fills the beds, and each layer
@@ -74,6 +74,8 @@ pub fn plugin(app: &mut App) {
     species::species::<lettuce::Lettuce>(app);
     species::species::<kale::Kale>(app);
     species::species::<carrot::Carrot>(app);
+    species::species::<bush_bean::BushBean>(app);
+    species::species::<pole_bean::PoleBean>(app);
 }
 
 /// Scene-wide parameters: the seed, and how far into the season the garden is.
@@ -101,18 +103,28 @@ impl Default for SceneParams {
     }
 }
 
-/// What a robot bumps into, besides the floor and the beds. Scene-wide,
-/// since a demo wants one switch.
+/// What a robot bumps into, besides the floor and the beds, and what bends.
+/// Scene-wide, since a demo wants one switch.
 #[derive(Resource, Reflect, Clone, Debug, PartialEq)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(get_all, set_all, skip_from_py_object)
 )]
 pub struct PhysicsParams {
-    /// Whether every stem collides, as a chain of capsules along it.
+    /// Whether every stem collides, as a chain of capsules along it. A rod
+    /// collides as itself, whatever this says.
     pub stems_collide: bool,
     /// Whether every fruit and root collides, as a capsule each.
     pub fruit_collides: bool,
+    /// Whether the stems that bend, a pole bean's vine, are rods the solver
+    /// moves, their leaves and pods riding them; off, they are wood like
+    /// every other stem.
+    pub flexible_stems: bool,
+    /// Length of a rod's segments, in meters: shorter bends smoother and
+    /// costs a body per segment. No longer than 6 cm, the most a pole bean's
+    /// vine can be sampled at and still clear its string.
+    #[reflect(@Slider { min: 0.02, max: 0.06, step: 0.005 })]
+    pub segment: f32,
 }
 
 impl Default for PhysicsParams {
@@ -120,6 +132,8 @@ impl Default for PhysicsParams {
         Self {
             stems_collide: true,
             fruit_collides: false,
+            flexible_stems: false,
+            segment: 0.05,
         }
     }
 }
@@ -136,6 +150,10 @@ misina_lab::generator! {
         pub lettuce: lettuce::LettuceParams,
         pub kale: kale::KaleParams,
         pub carrot: carrot::CarrotParams,
+        #[reflect(@Label("Bush bean"))]
+        pub bush_bean: bush_bean::BushBeanParams,
+        #[reflect(@Label("Pole bean"))]
+        pub pole_bean: pole_bean::PoleBeanParams,
     }
 }
 
@@ -173,12 +191,12 @@ pub(crate) fn in_scene(world: &World, mut entity: Entity) -> Transform {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use misina_lab::Params;
-    use misina_lab::scene::COLLISION;
     use misina_lab::scene::doc::Node;
     use misina_lab::scene::export::{scene_doc, scene_json};
+    use misina_lab::scene::{COLLISION, Cable, Collider};
     use misina_lab::testing::{check_params, named_children, nudged, organs, prim};
 
     use super::fruit::FruitConfig;
@@ -217,18 +235,22 @@ mod tests {
     /// a path, which a config keyed on one would be silently repointed by.
     #[test]
     fn every_reference_resolves_and_every_path_is_unique() {
-        let doc = scene_doc(grown(small()).world_mut()).unwrap();
-        let mut prims = Vec::new();
-        walk(&doc.root, "", &mut prims);
+        for flexible in [false, true] {
+            let mut params = small();
+            params.physics.flexible_stems = flexible;
+            let doc = scene_doc(grown(params).world_mut()).unwrap();
+            let mut prims = Vec::new();
+            walk(&doc.root, "", &mut prims);
 
-        let paths: BTreeSet<&str> = prims.iter().map(|(path, _)| path.as_str()).collect();
-        assert_eq!(paths.len(), prims.len(), "a prim path repeats");
-        let drawn: BTreeSet<&str> = prims
-            .iter()
-            .filter_map(|(_, node)| node.reference.as_deref())
-            .collect();
-        let parts: BTreeSet<&str> = doc.parts.iter().map(|part| part.name.as_str()).collect();
-        assert_eq!(drawn, parts);
+            let paths: BTreeSet<&str> = prims.iter().map(|(path, _)| path.as_str()).collect();
+            assert_eq!(paths.len(), prims.len(), "a prim path repeats");
+            let drawn: BTreeSet<&str> = prims
+                .iter()
+                .filter_map(|(_, node)| node.reference.as_deref())
+                .collect();
+            let parts: BTreeSet<&str> = doc.parts.iter().map(|part| part.name.as_str()).collect();
+            assert_eq!(drawn, parts);
+        }
     }
 
     /// An edit to a standing scene lands exactly where generating from scratch
@@ -275,8 +297,49 @@ mod tests {
             ("carrot leaves", edited(|p| p.carrot.leaves = 12)),
             ("carrot root", edited(|p| p.carrot.root_length = 0.1)),
             ("carrots later", edited(|p| p.carrot.sown_week = 6.0)),
+            ("trellis", edited(|p| p.bed.trellis = 1.5)),
+            ("bush bean branches", edited(|p| p.bush_bean.branches = 1)),
+            ("pod length", edited(|p| p.bush_bean.pod_length = 0.2)),
+            ("pole bean height", edited(|p| p.pole_bean.height = 1.5)),
+            ("no pole beans", edited(|p| p.pole_bean.share = 0.0)),
+            (
+                "flexible stems",
+                edited(|p| p.physics.flexible_stems = true),
+            ),
+            (
+                "segment",
+                edited(|p| (p.physics.flexible_stems, p.physics.segment) = (true, 0.08)),
+            ),
         ] {
             let mut app = grown(small());
+            want.apply(app.world_mut());
+            app.update();
+            assert!(json(&mut app) == json(&mut grown(want)), "{what} drifted");
+        }
+        // And from a garden whose stems already bend: the rods come down, or
+        // are resampled, where generating would have put them.
+        let flexible = || {
+            let mut params = small();
+            params.physics.flexible_stems = true;
+            params
+        };
+        let bent = |edit: fn(&mut GardenParams)| {
+            let mut params = flexible();
+            edit(&mut params);
+            params
+        };
+        for (what, want) in [
+            (
+                "stems rigid again",
+                bent(|p| p.physics.flexible_stems = false),
+            ),
+            ("segment while flexible", bent(|p| p.physics.segment = 0.03)),
+            (
+                "vine height while flexible",
+                bent(|p| p.pole_bean.height = 1.6),
+            ),
+        ] {
+            let mut app = grown(flexible());
             want.apply(app.world_mut());
             app.update();
             assert!(json(&mut app) == json(&mut grown(want)), "{what} drifted");
@@ -287,6 +350,7 @@ mod tests {
     fn lettuce_bed() -> GardenParams {
         let mut params = small();
         (params.kale.share, params.carrot.share) = (0.0, 0.0);
+        (params.bush_bean.share, params.pole_bean.share) = (0.0, 0.0);
         params
     }
 
@@ -332,14 +396,14 @@ mod tests {
     /// Every week builds every species, with every leaf and every fruit
     /// anchored at or above the soil, more leaves the older the plant, and a
     /// plant grown by a week keeping the leaves it had: the same azimuth and
-    /// the same stream at every rank.
+    /// the same stream under every name.
     #[test]
     fn a_plant_keeps_its_leaves_as_it_grows() {
         let mut params = small();
         params.planting.misses = 0.0;
         let soil_z = params.bed.height - params.bed.rim;
         let mut counts = Vec::new();
-        let mut first: Vec<Vec<(f32, u64)>> = Vec::new();
+        let mut first: Vec<BTreeMap<String, (f32, u64)>> = Vec::new();
         for week in [0.0, 4.0, 5.0, 8.0, 14.0] {
             params.scene.week = week;
             let mut app = grown(params.clone());
@@ -366,12 +430,15 @@ mod tests {
                 leaves
                     .iter()
                     .filter(|leaf| {
-                        leaf.path.ends_with("Plant_000") && leaf.name.starts_with("Leaf_")
+                        leaf.path.contains("/Plant_000/") && leaf.name.starts_with("Leaf_")
                     })
                     .map(|leaf| {
                         (
-                            (leaf.transform.rotation * Vec3::X).xy().to_angle(),
-                            leaf.config.seed,
+                            leaf.name.clone(),
+                            (
+                                (leaf.transform.rotation * Vec3::X).xy().to_angle(),
+                                leaf.config.seed,
+                            ),
                         )
                     })
                     .collect(),
@@ -383,13 +450,154 @@ mod tests {
         );
         assert!(counts[0] < counts[3], "{counts:?}");
         let (at_four, at_five) = (&first[1], &first[2]);
-        assert!(at_four.len() <= at_five.len());
-        for (rank, (had, has)) in at_four.iter().zip(at_five).enumerate() {
+        assert!(!at_four.is_empty() && at_four.len() <= at_five.len());
+        for (name, had) in at_four {
+            let has = at_five
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} was dropped"));
             assert!(
                 (had.0 - has.0).abs() < 1e-4 && had.1 == has.1,
-                "rank {rank}: {had:?} became {has:?}"
+                "{name}: {had:?} became {has:?}"
             );
         }
+    }
+
+    /// One square of pole beans with the stems flexible: a plant's vine is a
+    /// `Rod_00` holding the cable and a prim per segment, the points past the
+    /// held pair evenly spaced, every leaf and pod of the plant riding a
+    /// segment with its mass in the cable's loads, and no capsule chain; with
+    /// the stems rigid the same plant is wood with a chain and no rod.
+    #[test]
+    fn a_pole_bean_vine_bends_into_a_rod_carrying_its_organs() {
+        let beans = |flexible: bool| {
+            let mut params = small();
+            (params.bed.length, params.bed.width) = (0.5, 0.5);
+            for share in [
+                &mut params.lettuce.share,
+                &mut params.kale.share,
+                &mut params.carrot.share,
+                &mut params.bush_bean.share,
+            ] {
+                *share = 0.0;
+            }
+            (params.planting.misses, params.scene.week) = (0.0, 10.0);
+            params.physics.flexible_stems = flexible;
+            grown(params)
+        };
+        let mut app = beans(true);
+        let plant = prim(app.world_mut(), &["Beds", "Bed_00", "Plant_000"]).unwrap();
+        let children = named_children(app.world_mut(), plant);
+        let names: Vec<&str> = children.iter().map(|(name, _)| name.as_str()).collect();
+        assert!(
+            names.contains(&"Rod_00") && names.contains(&"String"),
+            "{names:?}"
+        );
+        // The string runs from the plant's foot to under the rail, straight
+        // north of it.
+        let string = children
+            .iter()
+            .find(|(name, _)| name == "String")
+            .map(|(_, entity)| *entity)
+            .unwrap();
+        let turn = app
+            .world()
+            .entity(string)
+            .get::<Transform>()
+            .unwrap()
+            .rotation;
+        let span = named_children(app.world_mut(), string)
+            .into_iter()
+            .find(|(name, _)| name == COLLISION)
+            .map(|(_, capsule)| {
+                let capsule = &app.world().entity(capsule).get::<Collider>().unwrap().0;
+                capsule.height + 2.0 * capsule.radius
+            })
+            .unwrap();
+        let foot = app
+            .world()
+            .entity(plant)
+            .get::<Transform>()
+            .unwrap()
+            .translation;
+        let top = foot + turn * Vec3::Z * span;
+        let defaults = GardenParams::default().bed;
+        let rail_z = defaults.height - defaults.rim + defaults.trellis;
+        let under_rail = Vec3::new(
+            foot.x,
+            bed::trellis_y(Vec2::splat(0.5)),
+            rail_z - bed::TRELLIS_TIMBER / 2.0,
+        );
+        assert!(
+            top.distance(under_rail) < 1e-4,
+            "{top} is not under the rail at {under_rail}"
+        );
+        assert!(
+            !names.iter().any(|name| name.starts_with(COLLISION)
+                || name.starts_with("Leaf_")
+                || name.starts_with("Fruit_")),
+            "{names:?}"
+        );
+        let rod = prim(app.world_mut(), &["Beds", "Bed_00", "Plant_000", "Rod_00"]).unwrap();
+        let parts = named_children(app.world_mut(), rod);
+        let cable = parts
+            .iter()
+            .find(|(name, _)| name == "Cable")
+            .map(|(_, entity)| {
+                app.world()
+                    .entity(*entity)
+                    .get::<Cable>()
+                    .unwrap()
+                    .0
+                    .clone()
+            })
+            .unwrap();
+        let segments: Vec<Entity> = parts
+            .iter()
+            .filter(|(name, _)| name.starts_with("Cable_edge_body_"))
+            .map(|(_, entity)| *entity)
+            .collect();
+        assert_eq!(segments.len(), cable.points.len() - 1);
+        let steps: Vec<f32> = cable.points[1..]
+            .windows(2)
+            .map(|pair| Vec3::from(pair[0]).distance(pair[1].into()))
+            .collect();
+        assert!(
+            steps.len() > 10 && steps.iter().all(|step| (step - steps[0]).abs() < 1e-4),
+            "{steps:?}"
+        );
+        let (mut riders, mut mass) = (0, 0.0);
+        for segment in segments {
+            for (name, entity) in named_children(app.world_mut(), segment) {
+                let organ = app.world().entity(entity);
+                if name.starts_with("Leaf_") {
+                    mass += organ.get::<LeafConfig>().unwrap().mass();
+                } else if name.starts_with("Fruit_") {
+                    mass += organ.get::<FruitConfig>().unwrap().mass();
+                } else {
+                    continue;
+                }
+                riders += 1;
+            }
+        }
+        let loads: f32 = cable.loads.iter().sum();
+        assert!(
+            riders > 10 && (loads - mass).abs() < 1e-4,
+            "{riders} riders, {loads} kg of {mass}"
+        );
+
+        let mut app = beans(false);
+        let plant = prim(app.world_mut(), &["Beds", "Bed_00", "Plant_000"]).unwrap();
+        let names: Vec<String> = named_children(app.world_mut(), plant)
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect();
+        assert!(
+            names.iter().any(|name| name == "Wood")
+                && names.iter().any(|name| name.starts_with(COLLISION))
+                && names.iter().any(|name| name.starts_with("Leaf_"))
+                && !names.iter().any(|name| name.starts_with("Rod_")),
+            "{names:?}"
+        );
     }
 
     /// With the stems colliding a kale carries a capsule chain and a carrot's
@@ -408,12 +616,12 @@ mod tests {
                 let parent = world.entity(parent.parent());
                 let holder = parent.get::<Name>().unwrap().as_str();
                 if name.as_str() == COLLISION && holder.starts_with("Fruit_") {
-                    let root = parent.get::<FruitConfig>().unwrap();
+                    let fruit = parent.get::<FruitConfig>().unwrap();
                     let span = collider.0.height + 2.0 * collider.0.radius;
                     assert!(
-                        (span - root.length).abs() < 1e-5,
-                        "{span} m over a {} m root",
-                        root.length
+                        (span - fruit.length).abs() < 1e-5,
+                        "{span} m over a {} m fruit",
+                        fruit.length
                     );
                     on_fruit += 1;
                 } else if name.starts_with(COLLISION) && holder.starts_with("Plant_") {

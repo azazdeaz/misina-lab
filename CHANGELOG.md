@@ -32,10 +32,18 @@ Scene document format 11.
   lettuce, a rosette of ruffled blades, loose-leaf or heading; kale, an
   upright stem with a crown of curled leaves on long petioles; and carrots,
   compound leaves over a taproot whose shoulder shows at the soil, carrying
-  its ripeness, how it is picked and a `Cut` frame. Two scene-wide `physics`
-  switches say what collides: every stem as a chain of capsules, and every
-  fruit and root as a capsule. `cargo run -p garden-lab` opens its viewer, and
-  `garden_lab.isaaclab.GardenCfg` spawns it in Isaac Lab.
+  its ripeness, how it is picked and a `Cut` frame; bush beans, a stem
+  branching into a bush of trifoliate leaves with pods in clusters under the
+  upper ones; and pole beans, a vine twining up a string to a trellis on its
+  bed's north edge, posts and rail with a string to every plant, the rail's
+  height a bed knob. Scene-wide `physics` switches say what collides, every
+  stem as a chain of capsules and every fruit and root as a capsule, and what
+  bends: with `flexible_stems` a pole bean's vine is a rod in `segment`
+  lengths, its leaves and pods riding the segments with their masses as the
+  cable's loads. `cargo run -p garden-lab` opens its viewer, and
+  `garden_lab.isaaclab.GardenCfg` spawns it in Isaac Lab, its `PLANT` and
+  `without_rods()` saying what prim a rod belongs to and whether a cfg
+  authors one.
 - **greenhouse-lab**: Stems collide, as a chain of capsules along each
   stem's axis from where it takes off from the lowered bundle,
   `Stem_n/Collision_00 …`, each straight from one of the axis's points to
@@ -44,6 +52,9 @@ Scene document format 11.
   one over each kink. A robot meets them, and so do the stem's own plant's
   trusses. The lowered runs, below anything a robot reaches for, do not
   collide.
+- **misina-lab**: `rods.tune_builder`, the tuning `rods.tune_rods` applies
+  inside Isaac Lab's model-init window, as a function on a bare
+  `ModelBuilder`, for a test or a rig outside the app.
 - **misina-lab**: `rods.let_rods_out_of_their_wood` lets each rod through
   any of its own plant's wood colliders it is authored inside, which
   `tune_rods` runs: a proxy can be fatter than the wood, and the segments

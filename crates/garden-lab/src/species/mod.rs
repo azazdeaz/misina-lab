@@ -126,9 +126,11 @@ macro_rules! species {
     };
 }
 
+pub mod bush_bean;
 pub mod carrot;
 pub mod kale;
 pub mod lettuce;
+pub mod pole_bean;
 
 /// What a species file writes its recipe in.
 pub mod prelude {
@@ -139,10 +141,10 @@ pub mod prelude {
     pub use super::{Common, Recipe, Species};
     pub use crate::elements::fruit::FruitConfig;
     pub use crate::elements::leaf::LeafConfig;
-    pub use crate::elements::planting::PlantConfig;
-    pub use crate::grow::axis::Axis;
+    pub use crate::elements::planting::{PlantConfig, STRING_RADIUS};
+    pub use crate::grow::axis::{Axis, Grown};
     pub use crate::grow::builder::{Builder, lerp, smooth};
-    pub use crate::grow::phyllotaxis::{Rosette, Spiral};
+    pub use crate::grow::phyllotaxis::{AxisNode, Rosette, Spiral};
 }
 
 /// The knobs every species carries, as the planting layer reads them.
@@ -176,6 +178,10 @@ pub trait Recipe: Species {
     /// Sowing to harvest-ready, in weeks; [`PlantConfig::grown`] eases a
     /// plant's age over it.
     const HARVEST: f32;
+    /// Whether it climbs: dealt the north squares of its bed, under a
+    /// trellis, each plant given a string to the rail, which its recipe
+    /// reads as [`PlantConfig::string`].
+    const CLIMBS: bool = false;
     /// One plant, in its own frame, its foot at the origin on the soil: what
     /// it grows, drawn from the builder's stream.
     fn grow(params: &Self::Params, plant: &PlantConfig, b: &mut Builder);
@@ -201,18 +207,22 @@ impl<S: Species> Default for OrganOf<S> {
     }
 }
 
-/// One registered species: its common knobs, and how to mark a plant of it.
+/// One registered species: its common knobs, whether it climbs, and how to
+/// mark a plant of it.
 #[derive(Clone, Copy, Debug)]
 pub struct Entry {
     pub common: Common,
+    /// [`Recipe::CLIMBS`].
+    pub climbs: bool,
     /// Inserts the species' [`Of`] marker on a plant being spawned.
     pub tag: fn(&mut EntityCommands),
 }
 
 impl PartialEq for Entry {
-    /// The tag is a function of the species alone, so the knobs are the entry.
+    /// The tag is a function of the species alone, so the knobs and the
+    /// climbing are the entry.
     fn eq(&self, other: &Self) -> bool {
-        self.common == other.common
+        self.common == other.common && self.climbs == other.climbs
     }
 }
 
@@ -224,9 +234,10 @@ impl PartialEq for Entry {
 pub struct Commons(pub BTreeMap<&'static str, Entry>);
 
 /// Keeps `S`'s entry in [`Commons`] current.
-fn publish<S: Species>(params: Res<S::Params>, mut commons: ResMut<Commons>) {
+fn publish<S: Recipe>(params: Res<S::Params>, mut commons: ResMut<Commons>) {
     let entry = Entry {
         common: S::common(&params),
+        climbs: S::CLIMBS,
         tag: |plant| {
             plant.insert(Of::<S>::default());
         },

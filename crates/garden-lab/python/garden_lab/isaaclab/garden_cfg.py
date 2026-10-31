@@ -9,7 +9,7 @@ hand-written, over the core's `GeneratedSceneCfg`.
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import ClassVar, Self
 
 from isaaclab.utils.configclass import configclass
 
@@ -35,14 +35,25 @@ class SceneCfg:
 
 @configclass
 class PhysicsCfg:
-    """What a robot bumps into, besides the floor and the beds. Scene-wide, since a demo
-    wants one switch.
+    """What a robot bumps into, besides the floor and the beds, and what bends.
+    Scene-wide, since a demo wants one switch.
     """
 
     stems_collide: bool = True
-    """Whether every stem collides, as a chain of capsules along it."""
+    """Whether every stem collides, as a chain of capsules along it. A rod collides as
+    itself, whatever this says.
+    """
     fruit_collides: bool = False
     """Whether every fruit and root collides, as a capsule each."""
+    flexible_stems: bool = False
+    """Whether the stems that bend, a pole bean's vine, are rods the solver moves, their
+    leaves and pods riding them; off, they are wood like every other stem.
+    """
+    segment: float = 0.05
+    """Length of a rod's segments, in meters: shorter bends smoother and costs a body
+    per segment. No longer than 6 cm, the most a pole bean's vine can be sampled at
+    and still clear its string.
+    """
 
 
 @configclass
@@ -76,6 +87,11 @@ class BedCfg:
     """Beds along X in each row."""
     rows: int = 3
     """Rows of beds across Y."""
+    trellis: float = 2.0
+    """Height of the trellis rail above the soil, in meters, on a bed that holds a
+    climber: two posts at the bed's north corners and a rail between them, a string
+    from it down to every climbing plant.
+    """
 
 
 @configclass
@@ -200,6 +216,78 @@ class CarrotCfg:
     """
 
 
+@configclass
+class BushBeanCfg:
+    """Bush bean: a short stem branching from its lowest nodes into a bush of trifoliate
+    leaves, pods hanging in clusters under the upper leaves, grown to harvest over
+    eight weeks.
+    """
+
+    height: float = 0.4
+    """Height of a harvest-ready plant's main stem, in meters."""
+    branches: int = 3
+    """Branches leaving the lowest nodes."""
+    leaf_length: float = 0.18
+    """Length of a grown leaf, petiole and leaflets, in meters."""
+    pod_length: float = 0.13
+    """Length of a ripe pod, in meters."""
+    share: float = 0.25
+    """Share of the garden's planting squares this crop gets, against the other crops';
+    0 leaves it out.
+    """
+    spacing: float = 0.1
+    """Distance between plants, in meters, rounded to one, two, three or four per side
+    of a 30 cm square.
+    """
+    sown_week: float = 0.0
+    """The week it was sown, on the scene's calendar: a plant's age is the scene's week
+    less this, and a bed is bare before it.
+    """
+    bed: int = 0
+    """The one bed it is confined to, counted from 1; 0 plants it anywhere."""
+    variations: int = 12
+    """How many distinct meshes each of its organs, its leaves and its fruit, may share.
+    A budget, not a count: the organs are clustered and this is how many
+    representatives the clustering may keep.
+    """
+
+
+@configclass
+class PoleBeanCfg:
+    """Pole bean: a vine twining up a string from its bed's trellis, a large trifoliate
+    leaf at every node and pods hanging from the upper nodes, grown to harvest over
+    ten weeks.
+    """
+
+    height: float = 2.2
+    """Length of a harvest-ready vine up its string, in meters; a vine stops at the
+    string's top.
+    """
+    leaf_length: float = 0.25
+    """Length of a grown leaf, petiole and leaflets, in meters."""
+    pod_length: float = 0.16
+    """Length of a ripe pod, in meters."""
+    share: float = 0.25
+    """Share of the garden's planting squares this crop gets, against the other crops';
+    0 leaves it out.
+    """
+    spacing: float = 0.15
+    """Distance between plants, in meters, rounded to one, two, three or four per side
+    of a 30 cm square.
+    """
+    sown_week: float = 0.0
+    """The week it was sown, on the scene's calendar: a plant's age is the scene's week
+    less this, and a bed is bare before it.
+    """
+    bed: int = 0
+    """The one bed it is confined to, counted from 1; 0 plants it anywhere."""
+    variations: int = 12
+    """How many distinct meshes each of its organs, its leaves and its fruit, may share.
+    A budget, not a count: the organs are clustered and this is how many
+    representatives the clustering may keep.
+    """
+
+
 # <<< generated: fragments
 
 
@@ -211,8 +299,10 @@ class GardenCfg(GeneratedSceneCfg):
     fragments below, then spawned through Isaac Lab's ordinary USD-file path;
     see `GeneratedSceneCfg` for what that leaves open.
 
-    It comes with its own static colliders: the floor, and every bed's frame
-    and soil, each as its own mesh.
+    It comes with its own static colliders: the floor, every bed's frame and
+    soil, each as its own mesh, and the trellis and strings of a bed that
+    holds a climber. With `PhysicsCfg.flexible_stems` a pole bean's vine is
+    a rod, which only the VBD solver steps; see `for_backend`.
 
     .. code-block:: python
 
@@ -223,6 +313,34 @@ class GardenCfg(GeneratedSceneCfg):
     """
 
     PARAMS: ClassVar[type] = garden_lab.GardenParams
+    PLANT: ClassVar[str] = "Plant"
+    """Prim name of the plant a rod belongs to: every plant is `Plant_NNN`
+    under its bed, whatever its species; `crates/garden-lab/src/elements/
+    planting.rs` names it."""
+
+    def without_rods(self) -> Self | None:
+        """The garden with every stem rigid, or `None` when none bends as it
+        stands: flexible stems off, or the one climbing crop, the pole bean,
+        left out, confined to a bed the grid has not got, or not sown by the
+        scene's week.
+
+        What is left is a promise, not a count: a pole bean share can still
+        round to no square of a small bed, every place of it can miss, and
+        a vine too young for two rod segments is wood. The coupled solver
+        refuses an entry that owns no body, at reset, with its own error.
+        Keep the stems rigid for such a scene.
+        """
+        # ponytail: read off the cfg, as the scene itself is only generated
+        # inside the app, after the physics config was built.
+        bean, bed = self.pole_bean, self.bed
+        if (
+            not self.physics.flexible_stems
+            or bean.share <= 0.0
+            or bean.bed > bed.columns * bed.rows
+            or bean.sown_week > self.scene.week
+        ):
+            return None
+        return self.replace(physics=self.physics.replace(flexible_stems=False))
 
     # >>> generated: aggregate
     scene: SceneCfg = SceneCfg()
@@ -232,6 +350,8 @@ class GardenCfg(GeneratedSceneCfg):
     lettuce: LettuceCfg = LettuceCfg()
     kale: KaleCfg = KaleCfg()
     carrot: CarrotCfg = CarrotCfg()
+    bush_bean: BushBeanCfg = BushBeanCfg()
+    pole_bean: PoleBeanCfg = PoleBeanCfg()
 
     FRAGMENTS: ClassVar[tuple[str, ...]] = (
         "scene",
@@ -241,6 +361,8 @@ class GardenCfg(GeneratedSceneCfg):
         "lettuce",
         "kale",
         "carrot",
+        "bush_bean",
+        "pole_bean",
     )
     """The fragment fields, in the order `GardenParams` takes them: what `to_params`
     converts and the cache key is built from. Everything else on the cfg is applied

@@ -273,13 +273,10 @@ def tune_rods(
     through every other plant.
     """
     global _tuning
-    # Matches a label up to and including its plant prim.
-    plant_path = re.compile(rf"(.*/{re.escape(plant)}_[^/]*)/")
     # Imported here and not at module scope: `newton` brings `pxr` with it, and
     # Kit's own `pxr` wins the import only if nothing loaded the pip one first.
     from isaaclab.sim import SimulationContext
     from isaaclab_newton.physics import NewtonBuilderCfg, NewtonManager
-    from newton import JointType
 
     if _tuning is not None and _tuning.id in NewtonManager._callbacks:
         return _tuning
@@ -287,50 +284,7 @@ def tune_rods(
     def tune(_payload) -> None:
         sim = SimulationContext.instance()
         builder = sim.get_or_create_backend(NewtonBuilderCfg(physics_cfg=sim.cfg.physics))
-        rods: set[int] = set()
-        for joint, kind in enumerate(builder.joint_type):
-            if kind != JointType.ROD:
-                continue
-            # Both ends, so a chain's first body is counted too: it is the
-            # first rod joint's parent and no rod joint's child.
-            rods.update((builder.joint_parent[joint], builder.joint_child[joint]))
-            # A rod's four slots, in the builder's order: stretch, shear, bend,
-            # twist.
-            dof = builder.joint_qd_start[joint]
-            for slot in (dof, dof + 1):
-                builder.joint_target_ke[slot] *= stretch
-            for slot in (dof + 2, dof + 3):
-                builder.joint_target_kd[slot] = damping * builder.joint_target_ke[slot]
-
-        carry_riders(builder)
-
-        # Groups: a plant's for its rods and wood, allotted as they turn up;
-        # `SCENE_GROUP` for what stands under no plant; one of its own for
-        # every other body. Group 0 is a site, which collides with nothing,
-        # and stays.
-        plants: dict[str, int] = {}
-
-        def plant_group(label: str) -> int:
-            owner = plant_path.match(label)
-            if owner is None:
-                return SCENE_GROUP
-            return plants.setdefault(owner.group(1), PLANT_GROUPS + len(plants))
-
-        def regroup(shapes: Sequence[int], group: int) -> None:
-            for shape in shapes:
-                if builder.shape_collision_group[shape] != 0:
-                    builder.shape_collision_group[shape] = group
-
-        # `body_shapes` is keyed by body index, and a static shape has none,
-        # so -1 is the whole of the static scene.
-        for body in range(builder.body_count):
-            label = builder.body_label[body]
-            group = plant_group(label) if body in rods else -(2 + body)
-            regroup(builder.body_shapes.get(body, ()), group)
-        for shape in builder.body_shapes[-1]:
-            regroup((shape,), plant_group(builder.shape_label[shape]))
-
-        let_rods_out_of_their_wood(builder)
+        tune_builder(builder, plant, damping, stretch)
 
     _tuning = NewtonManager.register_callback(tune, PhysicsEvent.MODEL_INIT)
     NewtonManager.register_callback(
@@ -338,6 +292,72 @@ def tune_rods(
         PhysicsEvent.PHYSICS_READY,
     )
     return _tuning
+
+
+def tune_builder(
+    builder,
+    plant: str,
+    damping: float = ROD_DAMPING,
+    stretch: float = ROD_STRETCH,
+) -> int:
+    """What `tune_rods` does to the builder once the importer has filled it:
+    softens every rod joint's stretch and shear by `stretch`, damps its bend
+    and twist by `damping` times their stiffness, seats the riders, groups
+    each plant's rods and wood under its own collision group and everything
+    under no plant into the scene's, and lets each rod out of the wood it is
+    authored inside. Returns how many pairs that let through.
+
+    For a builder outside Isaac Lab, a test or a rig: `tune_rods` is the same
+    call inside the app's `MODEL_INIT` window.
+    """
+    from newton import JointType
+
+    # Matches a label up to and including its plant prim.
+    plant_path = re.compile(rf"(.*/{re.escape(plant)}_[^/]*)/")
+    rods: set[int] = set()
+    for joint, kind in enumerate(builder.joint_type):
+        if kind != JointType.ROD:
+            continue
+        # Both ends, so a chain's first body is counted too: it is the
+        # first rod joint's parent and no rod joint's child.
+        rods.update((builder.joint_parent[joint], builder.joint_child[joint]))
+        # A rod's four slots, in the builder's order: stretch, shear, bend,
+        # twist.
+        dof = builder.joint_qd_start[joint]
+        for slot in (dof, dof + 1):
+            builder.joint_target_ke[slot] *= stretch
+        for slot in (dof + 2, dof + 3):
+            builder.joint_target_kd[slot] = damping * builder.joint_target_ke[slot]
+
+    carry_riders(builder)
+
+    # Groups: a plant's for its rods and wood, allotted as they turn up;
+    # `SCENE_GROUP` for what stands under no plant; one of its own for
+    # every other body. Group 0 is a site, which collides with nothing,
+    # and stays.
+    plants: dict[str, int] = {}
+
+    def plant_group(label: str) -> int:
+        owner = plant_path.match(label)
+        if owner is None:
+            return SCENE_GROUP
+        return plants.setdefault(owner.group(1), PLANT_GROUPS + len(plants))
+
+    def regroup(shapes: Sequence[int], group: int) -> None:
+        for shape in shapes:
+            if builder.shape_collision_group[shape] != 0:
+                builder.shape_collision_group[shape] = group
+
+    # `body_shapes` is keyed by body index, and a static shape has none,
+    # so -1 is the whole of the static scene.
+    for body in range(builder.body_count):
+        label = builder.body_label[body]
+        group = plant_group(label) if body in rods else -(2 + body)
+        regroup(builder.body_shapes.get(body, ()), group)
+    for shape in builder.body_shapes[-1]:
+        regroup((shape,), plant_group(builder.shape_label[shape]))
+
+    return let_rods_out_of_their_wood(builder)
 
 
 def carry_riders(builder) -> int:

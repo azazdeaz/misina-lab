@@ -14,6 +14,14 @@ const RINGS: usize = 10;
 /// How blunt a root's shoulder is: the exponent its profile falls off with.
 const SHOULDER: f32 = 1.6;
 
+/// A pod: its rings, how square its ends are (the exponent its profile
+/// falls to the tips with), how much thinner it gets from its middle to its
+/// tip, and how far its tip swings aside as a fraction of its length.
+const POD_RINGS: usize = 14;
+const POD_END: f32 = 6.0;
+const POD_TAPER: f32 = 0.35;
+const POD_CURVE: f32 = 0.08;
+
 /// A closed surface through `rings`, from `top` down to `bottom`, every ring
 /// the same number of points counter-clockwise seen from above. Faces wind
 /// outward.
@@ -64,6 +72,28 @@ pub fn root(config: &FruitConfig) -> MeshData {
     lathe(Vec3::ZERO, &rings, Vec3::new(0.0, 0.0, -length))
 }
 
+/// A pod hanging from the origin down -Z: a slender solid rounded at both
+/// ends, its diameter across its upper half, thinning from its middle to
+/// its tip and swinging a little toward +X on its way down.
+pub fn pod(config: &FruitConfig) -> MeshData {
+    let (radius, length) = (config.diameter.max(1e-3) / 2.0, config.length.max(1e-3));
+    let aside = |t: f32| POD_CURVE * length * t * t;
+    let rings: Vec<Vec<Vec3>> = (0..POD_RINGS)
+        .map(|j| {
+            let t = (j as f32 + 0.5) / POD_RINGS as f32;
+            let ends = (1.0 - t.powf(POD_END)).sqrt() * (1.0 - (1.0 - t).powf(POD_END)).sqrt();
+            let r = radius * ends * (1.0 - POD_TAPER * (2.0 * t - 1.0).max(0.0));
+            (0..SECTORS)
+                .map(|i| {
+                    let a = TAU * i as f32 / SECTORS as f32;
+                    Vec3::new(aside(t) + r * a.cos(), r * a.sin(), -length * t)
+                })
+                .collect()
+        })
+        .collect();
+    lathe(Vec3::ZERO, &rings, Vec3::new(aside(1.0), 0.0, -length))
+}
+
 #[cfg(test)]
 mod tests {
     use misina_lab::testing::bounds;
@@ -84,6 +114,26 @@ mod tests {
         assert_eq!(
             mesh.face_vertex_counts.len(),
             2 * SECTORS + (RINGS - 1) * SECTORS
+        );
+    }
+
+    /// A pod hangs its length, is as wide as its diameter about its middle,
+    /// and swings its tip aside by its curve, its last ring's radius past
+    /// that.
+    #[test]
+    fn a_pod_hangs_its_length_and_swings_aside() {
+        let mesh = pod(&FruitConfig::pod(0.012, 0.15));
+        assert_eq!(bounds(&mesh, 2), (-0.15, 0.0));
+        let (y0, y1) = bounds(&mesh, 1);
+        assert!(
+            y1 > 0.0055 && y1 <= 0.006 && (y0 + y1).abs() < 1e-6,
+            "{y0}..{y1}"
+        );
+        let (x0, x1) = bounds(&mesh, 0);
+        let swing = POD_CURVE * 0.15;
+        assert!(
+            x0 > -0.006 && x1 > swing && x1 < swing + 0.006,
+            "{x0}..{x1}"
         );
     }
 }

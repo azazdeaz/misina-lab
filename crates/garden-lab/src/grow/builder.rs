@@ -8,7 +8,7 @@
 use bevy::prelude::*;
 use misina_lab::rng::{Rng, salt};
 
-use super::axis::{Axis, Grown};
+use super::axis::{Anchor, Axis, Grown};
 use super::phyllotaxis::Node;
 use crate::elements::fruit::{FruitConfig, Kind};
 use crate::elements::leaf::{LeafConfig, Template};
@@ -31,19 +31,21 @@ const ATTACH: f32 = 0.8;
 /// Fruit seeds are salted apart from leaf seeds by this bit.
 const FRUIT_SALT: u64 = 1 << 40;
 
+/// The stream a node's draws come from, salted with the node's index.
+const NODE_STREAM: u64 = 0x7F4A_3C21_9E0B_D5A7;
+
 /// What one recipe grew, collected for the plant layer to spawn.
 pub struct Builder {
     rng: Rng,
     seed: u64,
     /// The crown, if the recipe grew one.
     pub(crate) crown: Option<Crown>,
-    /// The axes, in the order grown: the plant's rigid wood.
+    /// The axes, in the order grown: the plant's stems, wood or rods.
     pub(crate) axes: Vec<Grown>,
-    /// Each leaf's index on the plant, its anchor in the plant's frame, and
-    /// its config.
-    pub(crate) leaves: Vec<(u64, Transform, LeafConfig)>,
-    /// Each fruit's anchor in the plant's frame, and its config.
-    pub(crate) fruits: Vec<(Transform, FruitConfig)>,
+    /// Each leaf's index on the plant, its anchor, and its config.
+    pub(crate) leaves: Vec<(u64, Anchor, LeafConfig)>,
+    /// Each fruit's index on the plant, its anchor, and its config.
+    pub(crate) fruits: Vec<(u64, Anchor, FruitConfig)>,
 }
 
 impl Builder {
@@ -63,6 +65,14 @@ impl Builder {
         &mut self.rng
     }
 
+    /// A stream of the plant's for the node numbered `index`, the same
+    /// whatever was drawn before it and unrelated to its neighbours': a
+    /// recipe whose node count grows with age draws each node's jitter from
+    /// here, so a node more re-rolls no other.
+    pub fn stream(&self, index: u64) -> Rng {
+        Rng::new(self.seed ^ NODE_STREAM ^ salt(index))
+    }
+
     /// The stub of stem at the plant's foot, `radius` across and standing
     /// on `base`, that a rosette's leaves anchor on.
     pub fn crown(&mut self, radius: f32, base: f32) -> Crown {
@@ -74,10 +84,11 @@ impl Builder {
         crown
     }
 
-    /// An axis grown from `foot`; its lean and bow are drawn from the
-    /// plant's stream, three draws.
+    /// An axis grown from `foot`, three draws from the plant's stream
+    /// whatever its course; see [`Axis::grow`].
     pub fn axis(&mut self, foot: Vec3, axis: Axis) -> Grown {
-        let grown = axis.grow(foot, &mut self.rng);
+        let mut grown = axis.grow(foot, &mut self.rng);
+        grown.index = self.axes.len();
         self.axes.push(grown.clone());
         grown
     }
@@ -85,22 +96,30 @@ impl Builder {
     /// A leaf at `anchor`, in the plant's frame, numbered after the leaves
     /// before it. Its own draws come from a stream of the plant's and its
     /// number, so one leaf more re-rolls no other.
-    pub fn leaf(&mut self, anchor: Transform, leaf: LeafConfig) {
+    pub fn leaf(&mut self, anchor: impl Into<Anchor>, leaf: LeafConfig) {
         self.leaf_at(self.leaves.len() as u64, anchor, leaf);
     }
 
     /// A leaf at `anchor` numbered `index`: a recipe that leaves some of a
     /// stem's nodes bare numbers its leaves by node, so a node stripped
     /// renumbers and re-rolls no other leaf.
-    pub fn leaf_at(&mut self, index: u64, anchor: Transform, mut leaf: LeafConfig) {
+    pub fn leaf_at(&mut self, index: u64, anchor: impl Into<Anchor>, mut leaf: LeafConfig) {
         leaf.seed = salt(self.seed ^ index);
-        self.leaves.push((index, anchor, leaf));
+        self.leaves.push((index, anchor.into(), leaf));
     }
 
-    /// A fruit at `anchor`, in the plant's frame, hanging down its own -Z.
-    pub fn fruit(&mut self, anchor: Transform, mut fruit: FruitConfig) {
-        fruit.seed = salt(self.seed ^ FRUIT_SALT ^ self.fruits.len() as u64);
-        self.fruits.push((anchor, fruit));
+    /// A fruit at `anchor`, in the plant's frame, hanging down its own -Z,
+    /// numbered after the fruit before it.
+    pub fn fruit(&mut self, anchor: impl Into<Anchor>, fruit: FruitConfig) {
+        self.fruit_at(self.fruits.len() as u64, anchor, fruit);
+    }
+
+    /// A fruit at `anchor` numbered `index`: a recipe whose fruiting nodes
+    /// come and go with age numbers its fruit by node and place, so a node
+    /// that starts fruiting renumbers and re-rolls no other fruit.
+    pub fn fruit_at(&mut self, index: u64, anchor: impl Into<Anchor>, mut fruit: FruitConfig) {
+        fruit.seed = salt(self.seed ^ FRUIT_SALT ^ index);
+        self.fruits.push((index, anchor.into(), fruit));
     }
 }
 
@@ -169,6 +188,13 @@ impl LeafConfig {
         }
     }
 
+    /// A trifoliate leaf `length` long from its base to the tip of its
+    /// terminal leaflet: a pair of leaflets where the petiole ends and one
+    /// past them, each `width` of its own length across.
+    pub fn trifoliate(length: f32, width: f32) -> Self {
+        Self::template(Template::Trifoliate, length, width)
+    }
+
     /// A bare stalk `length` long between the anchor and the blade, counted
     /// in the leaf's length.
     pub fn petiole(mut self, length: f32) -> Self {
@@ -220,6 +246,16 @@ impl FruitConfig {
         }
     }
 
+    /// A pod `diameter` across at its middle and `length` long, hanging
+    /// from its anchor.
+    pub fn pod(diameter: f32, length: f32) -> Self {
+        Self {
+            kind: Kind::Pod,
+            tint: [0.25, 0.45, 0.1],
+            ..Self::root(diameter, length)
+        }
+    }
+
     /// How ripe it is, 0 to 1: written as the `ripeness` attribute, and
     /// `harvest_ready` from 0.9.
     pub fn ripeness(mut self, ripeness: f32) -> Self {
@@ -231,5 +267,35 @@ impl FruitConfig {
     pub fn tint(mut self, color: [f32; 3]) -> Self {
         self.tint = color;
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::*;
+
+    /// A node's stream is its own: the first draws of sixteen neighbouring
+    /// nodes share no value, where streams a step apart would.
+    #[test]
+    fn neighbouring_nodes_draw_from_unrelated_streams() {
+        let plant = PlantConfig {
+            age: 4.0,
+            vigour: 1.0,
+            seed: 0x1234_5678,
+            string: None,
+        };
+        let b = Builder::new(&plant);
+        let mut seen = BTreeSet::new();
+        for index in 0..16 {
+            let mut rng = b.stream(index);
+            for _ in 0..10 {
+                assert!(
+                    seen.insert(rng.unit().to_bits()),
+                    "node {index} repeats a draw"
+                );
+            }
+        }
     }
 }

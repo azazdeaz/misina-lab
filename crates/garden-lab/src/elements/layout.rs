@@ -16,9 +16,11 @@ use super::Grow;
 pub const BOARD: f32 = 0.04;
 
 /// Floors on what Python may set, so that nothing is laid out at zero size:
-/// a bed is at least a square of this, and its rim at least this high.
+/// a bed is at least a square of this, its rim at least this high, and its
+/// trellis rail at least this far above the soil.
 const MIN_SIDE: f32 = 0.3;
 const MIN_HEIGHT: f32 = 0.05;
+const MIN_TRELLIS: f32 = 0.2;
 
 /// The raised beds: their size, and how they are laid out.
 ///
@@ -59,6 +61,11 @@ pub struct BedParams {
     /// Rows of beds across Y.
     #[reflect(@Slider { min: 1.0, max: 6.0, step: 1.0 })]
     pub rows: u32,
+    /// Height of the trellis rail above the soil, in meters, on a bed that
+    /// holds a climber: two posts at the bed's north corners and a rail
+    /// between them, a string from it down to every climbing plant.
+    #[reflect(@Slider { min: 1.2, max: 2.5, step: 0.1 })]
+    pub trellis: f32,
 }
 
 impl Default for BedParams {
@@ -71,6 +78,7 @@ impl Default for BedParams {
             path: 0.9,
             columns: 2,
             rows: 3,
+            trellis: 2.0,
         }
     }
 }
@@ -90,6 +98,8 @@ pub struct GardenLayout {
     pub rim_z: f32,
     /// Height of the soil surface above the floor.
     pub soil_z: f32,
+    /// Height of a trellis rail's centre above the floor.
+    pub rail_z: f32,
 }
 
 /// A bed's prim, by its index into [`GardenLayout::beds`].
@@ -160,6 +170,7 @@ pub fn solve(params: &BedParams) -> GardenLayout {
     let (columns, rows) = (params.columns.max(1), params.rows.max(1));
     let rim_z = params.height.max(MIN_HEIGHT);
     let soil_z = (rim_z - params.rim.max(0.0)).max(MIN_HEIGHT / 2.0);
+    let rail_z = soil_z + params.trellis.max(MIN_TRELLIS);
 
     // Centre to centre; the floor is a path wider than the beds on each side.
     let pitch = bed + Vec2::splat(path);
@@ -174,6 +185,7 @@ pub fn solve(params: &BedParams) -> GardenLayout {
         bed,
         rim_z,
         soil_z,
+        rail_z,
     }
 }
 
@@ -227,10 +239,12 @@ mod tests {
             path: -1.0,
             columns: 0,
             rows: 0,
+            trellis: -1.0,
         });
         assert_eq!(layout.beds.len(), 1);
         assert!(layout.bed.min_element() > 4.0 * BOARD);
         assert!(layout.soil_z > 0.0 && layout.soil_z <= layout.rim_z);
+        assert!(layout.rail_z > layout.rim_z);
         assert_eq!(layout.floor, layout.bed / 2.0);
     }
 }

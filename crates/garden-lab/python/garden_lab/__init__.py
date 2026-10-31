@@ -12,24 +12,28 @@ works without it.
 # >>> generated: exports
 from ._core import (
     BedParams,
+    BushBeanParams,
     CarrotParams,
     GardenParams,
     KaleParams,
     LettuceParams,
     PhysicsParams,
     PlantingParams,
+    PoleBeanParams,
     SceneParams,
     __version__,
 )
 
 __all__ = [
     "BedParams",
+    "BushBeanParams",
     "CarrotParams",
     "GardenParams",
     "KaleParams",
     "LettuceParams",
     "PhysicsParams",
     "PlantingParams",
+    "PoleBeanParams",
     "SceneParams",
     "__version__",
 ]
