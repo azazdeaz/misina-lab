@@ -125,6 +125,12 @@ pub struct PhysicsParams {
     pub stems_collide: bool,
     /// Whether every fruit and root collides, as a capsule each.
     pub fruit_collides: bool,
+    /// Whether every leaf collides, as a box round its blade, fitted to the
+    /// blade's extent in the plane it lies flattest in; the petiole does not.
+    /// A leaf riding a bending stem carries its box with it, and two plants
+    /// authored with their leaves through each other push apart when the
+    /// solver starts.
+    pub leaves_collide: bool,
     /// Whether the stems that bend, a pole bean's vine, are rods the solver
     /// moves, their leaves and pods riding them; off, they are wood like
     /// every other stem.
@@ -141,6 +147,7 @@ impl Default for PhysicsParams {
         Self {
             stems_collide: true,
             fruit_collides: false,
+            leaves_collide: false,
             flexible_stems: false,
             segment: 0.05,
         }
@@ -320,6 +327,10 @@ mod tests {
                 edited(|p| p.physics.stems_collide = false),
             ),
             ("fruit collide", edited(|p| p.physics.fruit_collides = true)),
+            (
+                "leaves collide",
+                edited(|p| p.physics.leaves_collide = true),
+            ),
             ("kale height", edited(|p| p.kale.height = 0.9)),
             ("kale stripped", edited(|p| p.kale.leaves_kept = 6)),
             ("no kale", edited(|p| p.kale.share = 0.0)),
@@ -580,7 +591,11 @@ mod tests {
             .into_iter()
             .find(|(name, _)| name == COLLISION)
             .map(|(_, capsule)| {
-                let capsule = &app.world().entity(capsule).get::<Collider>().unwrap().0;
+                let Collider::Capsule(capsule) =
+                    app.world().entity(capsule).get::<Collider>().unwrap()
+                else {
+                    panic!("the string's collider is no capsule")
+                };
                 capsule.height + 2.0 * capsule.radius
             })
             .unwrap();
@@ -676,41 +691,59 @@ mod tests {
     /// root's whole length; with neither switch, nothing on a plant collides.
     #[test]
     fn colliders_follow_the_physics_switches() {
-        let capsules = |stems: bool, fruit: bool| -> (usize, usize) {
+        let proxies = |stems: bool, fruit: bool, leaves: bool| -> [usize; 3] {
             let mut params = small();
-            (params.physics.stems_collide, params.physics.fruit_collides) = (stems, fruit);
+            params.physics.stems_collide = stems;
+            (params.physics.fruit_collides, params.physics.leaves_collide) = (fruit, leaves);
             let mut app = grown(params);
             let world = app.world_mut();
-            let mut query = world.query::<(&Name, &misina_lab::scene::Collider, &ChildOf)>();
-            let (mut on_stems, mut on_fruit) = (0, 0);
+            let mut query = world.query::<(&Name, &Collider, &ChildOf)>();
+            let mut counts = [0; 3];
             for (name, collider, parent) in query.iter(world) {
                 let parent = world.entity(parent.parent());
                 let holder = parent.get::<Name>().unwrap().as_str();
-                if name.as_str() == COLLISION && holder.starts_with("Fruit_") {
-                    let fruit = parent.get::<FruitConfig>().unwrap();
-                    let span = collider.0.height + 2.0 * collider.0.radius;
-                    assert!(
-                        (span - fruit.length).abs() < 1e-5,
-                        "{span} m over a {} m fruit",
-                        fruit.length
-                    );
-                    on_fruit += 1;
-                } else if name.starts_with(COLLISION) && holder.starts_with("Plant_") {
-                    on_stems += 1;
+                match (collider, holder) {
+                    (Collider::Capsule(capsule), _) if holder.starts_with("Fruit_") => {
+                        let fruit = parent.get::<FruitConfig>().unwrap();
+                        let span = capsule.height + 2.0 * capsule.radius;
+                        assert!(
+                            (span - fruit.length).abs() < 1e-5,
+                            "{span} m over a {} m fruit",
+                            fruit.length
+                        );
+                        counts[1] += 1;
+                    }
+                    (Collider::Capsule(_), _) if holder.starts_with("Plant_") => {
+                        assert!(name.starts_with(COLLISION));
+                        counts[0] += 1;
+                    }
+                    // A box under the leaf's Xform, beside the Blade that
+                    // draws it.
+                    (Collider::Box, _) if holder.starts_with("Leaf_") => {
+                        assert_eq!(name.as_str(), COLLISION);
+                        assert!(parent.get::<LeafConfig>().is_some());
+                        let blade = parent.get::<Children>().unwrap().iter().any(|child| {
+                            world.entity(child).get::<Name>().unwrap().as_str() == "Blade"
+                        });
+                        assert!(blade, "a leaf with a box but no Blade");
+                        counts[2] += 1;
+                    }
+                    // The strings' and the fixtures' own.
+                    _ => {}
                 }
             }
-            (on_stems, on_fruit)
+            counts
         };
-        assert_eq!(capsules(false, false), (0, 0));
-        let (stems, fruit) = capsules(true, false);
+        assert_eq!(proxies(false, false, false), [0, 0, 0]);
+        let [stems, fruit, leaves] = proxies(true, false, false);
         assert!(
-            stems > 0 && fruit == 0,
-            "{stems} stem capsules, {fruit} on fruit"
+            stems > 0 && fruit == 0 && leaves == 0,
+            "{stems} stem capsules, {fruit} on fruit, {leaves} leaf boxes"
         );
-        let (stems_too, fruit) = capsules(true, true);
+        let [stems_too, fruit, leaves] = proxies(true, true, true);
         assert!(
-            stems_too == stems && fruit > 0,
-            "{stems_too} stem capsules, {fruit} on fruit"
+            stems_too == stems && fruit > 0 && leaves > 0,
+            "{stems_too} stem capsules, {fruit} on fruit, {leaves} leaf boxes"
         );
     }
 }

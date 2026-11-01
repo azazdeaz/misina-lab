@@ -973,7 +973,7 @@ mod tests {
                 );
                 let at = world.entity(children[COLLISION]);
                 let (shape, placed) = (
-                    at.get::<Collider>().unwrap().0,
+                    at.get::<Collider>().unwrap().capsule().unwrap(),
                     at.get::<Transform>().unwrap(),
                 );
                 let (radius, half) = (config.across() / 2.0, config.across() / 2.0 * config.aspect);

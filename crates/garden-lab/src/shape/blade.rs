@@ -99,6 +99,10 @@ const LOBE_SAG: f64 = 0.08;
 /// The share of its box a blade or a leaflet fills: [`profile`]'s hump.
 const OUTLINE_FILL: f32 = 0.62;
 
+/// The least half thickness of the box round a blade, in meters: a flat
+/// blade still collides as a slab.
+const BOX_SKIN: f32 = 0.002;
+
 /// The blade area a config draws, in square meters: every blade or leaflet
 /// as its box times [`OUTLINE_FILL`], the petiole and the stalks left out.
 pub fn area(config: &LeafConfig) -> f32 {
@@ -126,6 +130,40 @@ pub fn area(config: &LeafConfig) -> f32 {
         }
     };
     OUTLINE_FILL * boxes
+}
+
+/// The box round a blade `mesh` was built from `config`: the leaf less its
+/// stalk, bounded in the frame it lies flattest in, turned down by a lobed
+/// blade's whole hinge and by half of a curled blade's droop. Its placement
+/// in the leaf's frame and its half extents, at least [`BOX_SKIN`] each.
+pub fn collider(config: &LeafConfig, mesh: &MeshData) -> (Transform, Vec3) {
+    let turn = match config.template {
+        Template::Lobed => config.droop,
+        _ => config.droop / 2.0,
+    };
+    let frame = Quat::from_rotation_y(turn);
+    let back = frame.inverse();
+    let stalked = match config.template {
+        Template::Compound | Template::Trifoliate => true,
+        Template::Simple | Template::Lobed => config.petiole > 0.0,
+    };
+    let skip = if stalked {
+        stalk(1.0, 1.0).points.len()
+    } else {
+        0
+    };
+    let (lo, hi) = mesh.points[skip.min(mesh.points.len())..]
+        .iter()
+        .map(|p| back * Vec3::from(*p))
+        .fold((Vec3::MAX, Vec3::MIN), |(lo, hi), p| (lo.min(p), hi.max(p)));
+    if lo.cmpgt(hi).any() {
+        return (Transform::IDENTITY, Vec3::splat(BOX_SKIN));
+    }
+    let half = ((hi - lo) / 2.0).max(Vec3::splat(BOX_SKIN));
+    (
+        Transform::from_translation(frame * ((hi + lo) / 2.0)).with_rotation(frame),
+        half,
+    )
 }
 
 /// A leaf from its config.
@@ -506,6 +544,46 @@ mod tests {
         assert!(z0 < -0.9 * blade * hinge.sin(), "{z0}");
         assert!((area(&leaf) - lobed_outline(0.3, 0.33).area() as f32).abs() < 1e-6);
         assert!(mesh.face_vertex_counts.len() < 900);
+    }
+
+    /// Every template's box holds every point of its blade and leaves the
+    /// stalk's foot out; a hinged lobed blade's is a slab turned with it.
+    #[test]
+    fn a_blade_box_holds_the_blade_and_not_the_stalk() {
+        let leaves = [
+            LeafConfig::lobed(0.65, 1.1).petiole(0.35).droop(0.7),
+            LeafConfig::simple(0.35, 0.4)
+                .petiole(0.14)
+                .ruffle(0.8)
+                .cup(0.3)
+                .droop(0.9),
+            LeafConfig::compound(0.3, 8, 0.14).petiole(0.09).droop(0.7),
+            LeafConfig::trifoliate(0.18, 0.75).petiole(0.06).droop(0.4),
+        ];
+        for leaf in leaves {
+            let mesh = mesh(&leaf).unwrap();
+            let (placed, half) = collider(&leaf, &mesh);
+            let inside = |p: Vec3| {
+                let q = placed.rotation.inverse() * (p - placed.translation);
+                (q.abs() - half).max_element() <= 1e-5
+            };
+            let stalk_points = stalk(1.0, 1.0).points.len();
+            for point in &mesh.points[stalk_points..] {
+                assert!(inside(Vec3::from(*point)), "{leaf:?}: {point:?} is out");
+            }
+            assert!(!inside(Vec3::ZERO), "{leaf:?}: the foot is in");
+            assert!(half.min_element() >= BOX_SKIN);
+        }
+        let lobed = leaves[0];
+        let (placed, half) = collider(&lobed, &mesh(&lobed).unwrap());
+        assert!(half.z < 0.03 && half.x > 0.12 && half.y > 0.15, "{half}");
+        assert!(
+            placed
+                .rotation
+                .abs_diff_eq(Quat::from_rotation_y(0.7), 1e-6)
+                && placed.translation.x > 0.35,
+            "{placed:?}"
+        );
     }
 
     /// A trifoliate leaf reaches its length, its pair spreads both sides

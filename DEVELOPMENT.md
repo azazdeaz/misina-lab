@@ -122,7 +122,7 @@ sliders do: the number starts selected, `Enter` or clicking away applies it,
 `Escape` drops it. A typed value is clamped to the slider's range.
 
 The footer's **Colliders** box draws what a physics engine collides with
-over the scene: in magenta the capsules nothing moves, the posts' and the
+over the scene: in magenta the capsules and boxes nothing moves, the posts' and the
 wood's proxies and each rod's held first segment; in yellow every other rod
 segment, as thick as the mean of the widths at its two ends, which is how
 Newton sizes it; in cyan the meshes that collide as themselves, the ground

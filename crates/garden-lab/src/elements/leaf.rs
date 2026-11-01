@@ -4,15 +4,19 @@
 //! [`LeafConfig`]s in authoring order, clusters them to the species'
 //! `variations` budget, meshes one leaf per representative and hands each
 //! leaf the mesh it drew. A leaf has nothing hanging off it, so the leaf
-//! entity is the geometry prim itself, placed by the plant layer.
+//! entity is the geometry prim itself, placed by the plant layer; when the
+//! leaves collide it is an Xform instead, over a `Blade` drawing the mesh
+//! and a `Collision` box round the blade, since a prim that references a
+//! part may carry no child.
 
 use bevy::prelude::*;
 use misina_lab::geometry::par_map;
 use misina_lab::palette::{COLOR_STREAM, Response, shade};
 use misina_lab::quantize::{Metric, farthest_first};
 use misina_lab::rng::Rng;
-use misina_lab::scene::{Library, Order};
+use misina_lab::scene::{COLLISION, Library, Order, block};
 
+use super::PhysicsParams;
 use crate::shape::blade;
 use crate::species::{OrganOf, Species};
 
@@ -124,11 +128,12 @@ pub fn changed<S: Species>(
 }
 
 /// Builds one mesh per distinct leaf of `S` and gives it to every leaf that
-/// drew it.
+/// drew it, with the box round it when the leaves collide.
 pub fn build<S: Species>(
     mut commands: Commands,
     mut library: Library,
     params: Res<S::Params>,
+    physics: Res<PhysicsParams>,
     leaves: Query<(Entity, &Order, &LeafConfig), With<OrganOf<S>>>,
 ) -> Result {
     let prefix = format!("{}Leaf", S::PREFIX);
@@ -146,15 +151,29 @@ pub fn build<S: Species>(
     let meshes = par_map(&book.representatives, |_, config| blade::mesh(config));
     let mut geometry = Vec::with_capacity(meshes.len());
     for (index, (config, mesh)) in book.representatives.iter().zip(meshes).enumerate() {
+        let mesh = mesh?;
         // Shaded off the representative's own stream, not its index, so a
         // budget change moves no shade that stays.
         let color = shade(config.tint, &mut Rng::new(COLOR_STREAM ^ config.seed));
-        geometry.push(library.part(&prefix, index, mesh?.to_mesh(), FOLIAGE.blade(color)));
+        let collider = physics
+            .leaves_collide
+            .then(|| blade::collider(config, &mesh));
+        let part = library.part(&prefix, index, mesh.to_mesh(), FOLIAGE.blade(color));
+        geometry.push((part, collider));
     }
     for ((_, entity, _), drew) in hung.iter().zip(&book.assignment) {
-        commands
-            .entity(*entity)
-            .insert(geometry[*drew as usize].clone());
+        let (part, collider) = &geometry[*drew as usize];
+        match collider {
+            Some((placed, half)) => {
+                commands.entity(*entity).with_children(|leaf| {
+                    leaf.spawn((Name::new("Blade"), part.clone()));
+                    leaf.spawn((Name::new(COLLISION), block(*half, *placed)));
+                });
+            }
+            None => {
+                commands.entity(*entity).insert(part.clone());
+            }
+        }
     }
     Ok(())
 }

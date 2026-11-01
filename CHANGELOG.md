@@ -20,7 +20,8 @@ Two kinds of change break a project that worked on the release before:
 
 ## [Unreleased]
 
-Scene document format 11.
+Scene document format 12: a box collider is a `Cube` prim scaled to its half
+extents, which an earlier builder would author as a plain cube.
 
 ### Added
 
@@ -45,7 +46,9 @@ Scene document format 11.
   stem as a chain of capsules and every fruit and root as a capsule, and what
   bends: with `flexible_stems` a pole bean's vine is a rod in `segment`
   lengths, its leaves and pods riding the segments with their masses as the
-  cable's loads. `cargo run -p garden-lab` opens its viewer, and
+  cable's loads; `leaves_collide` puts a box round every blade, fitted in
+  the plane it lies flattest in, under `Leaf_NN/Collision` beside the
+  `Blade` that draws it. `cargo run -p garden-lab` opens its viewer, and
   `garden_lab.isaaclab.GardenCfg` spawns it in Isaac Lab, its `PLANT` and
   `without_rods()` saying what prim a rod belongs to and whether a cfg
   authors one.
@@ -60,6 +63,12 @@ Scene document format 11.
 - **misina-lab**: `Shears.hold(body, frame)` holds a rod body where it lies
   in a frame and carries it as the frame moves, kinematic, the rest of its
   rod hanging from it, until it is let go: a hand's hold on a piece it cut.
+- **misina-lab**: box colliders: `scene::block(half_extents, placed)` spawns
+  a `Cube` prim scaled to the box, which the builder authors with the
+  collision schema as it does a capsule, and the viewer's overlay draws.
+  `rods.let_rods_out_of_their_wood` lets every shape on a rod's body, a
+  segment's own or a rider's, through any static shape of its own plant it
+  overlaps as authored, whatever its shape, a box by the sphere round it.
 - **misina-lab**: `rods.tune_builder`, the tuning `rods.tune_rods` applies
   inside Isaac Lab's model-init window, as a function on a bare
   `ModelBuilder`, for a test or a rig outside the app.

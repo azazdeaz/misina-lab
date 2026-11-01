@@ -42,7 +42,7 @@ use serde::{Deserialize, Serialize};
 /// Bumped when the shape of this document changes incompatibly. The builder
 /// refuses anything it does not recognise, so a stale cached scene fails
 /// loudly instead of composing into something subtly wrong.
-pub const FORMAT: u32 = 11;
+pub const FORMAT: u32 = 12;
 
 /// One generated scene, ready to be turned into a USD stage.
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -144,8 +144,10 @@ pub struct Node {
     ///
     /// One of the three payloads — this, [`collider`](Self::collider),
     /// [`cable`](Self::cable) — at most, and `type_name` says which:
-    /// `"Capsule"` carries a collider, `"BasisCurves"` a cable, and a prim
-    /// with a reference is left typeless for the part to supply the type.
+    /// `"Capsule"` carries a collider, `"BasisCurves"` a cable, a `"Cube"`
+    /// is a box collider with no payload, its half extents the scale of its
+    /// [`xform`](Self::xform), and a prim with a reference is left typeless
+    /// for the part to supply the type.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference: Option<String>,
     /// Whether USD may treat this prim as an instance of what it references.
@@ -164,7 +166,8 @@ pub struct Node {
     pub instanceable: bool,
     /// A collision proxy standing in for geometry too detailed to collide
     /// with. Present only on prims whose `type_name` is `"Capsule"`, which
-    /// carry it instead of a `reference`.
+    /// carry it instead of a `reference`; a `"Cube"` is a box collider too,
+    /// sized by its transform's scale alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub collider: Option<Capsule>,
     /// A deformable curve simulated in place of a mesh. Present only on prims

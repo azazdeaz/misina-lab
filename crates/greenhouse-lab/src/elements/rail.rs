@@ -243,7 +243,12 @@ mod tests {
 
             let [steel, collision] = [0, 1].map(|k| named_children(world, pipe)[k].1);
             let drawn = world.entity(steel).get::<Transform>().unwrap().scale.z;
-            let shape = world.entity(collision).get::<Collider>().unwrap().0;
+            let shape = world
+                .entity(collision)
+                .get::<Collider>()
+                .unwrap()
+                .capsule()
+                .unwrap();
             assert!((drawn - step).abs() < 1e-4, "segment {i} is {drawn} long");
             assert_eq!(shape.radius, spec.pipe_diameter / 2.0);
             assert!((shape.height - step).abs() < 1e-4, "segment {i}");

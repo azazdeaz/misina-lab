@@ -26,7 +26,7 @@ newest of
 | Bush bean | a short stem branching from its lowest nodes into a bush, a trifoliate leaf at every node of every axis, pods in clusters hanging under the leaves from the fourth node up once the plant is older than five weeks, growing out as they ripen | height, branches, leaf length, pod length; the common knobs |
 | Pole bean | a vine twining anticlockwise up its string to the trellis rail, a large trifoliate leaf at every node and pods hanging from the fourth node up once the vine is older than six weeks; the vine is the garden's one bending stem | height, leaf length, pod length; the common knobs |
 | Zucchini | a stout, leaning stem with a palmate five-lobed blade on a long petiole every 1.2 cm up it, the oldest leaves lying out near level and the youngest standing steep, each blade hinged down where its petiole ends; three fruit at most, on the fourth to sixth nodes, set a week apart once the plant is older than five weeks, lying out from the stem a little above level, growing as they ripen and cut to pick; one plant every three squares at its default spacing | height, leaf length, fruit length; the common knobs |
-| Physics | what a robot bumps into besides the floor and the beds, and what bends, scene-wide: every stem as a chain of capsules, every fruit and root as a capsule, and the stems that bend as rods the solver moves, their leaves and pods riding them | stems collide, fruit collides, flexible stems, segment length |
+| Physics | what a robot bumps into besides the floor and the beds, and what bends, scene-wide: every stem as a chain of capsules, every fruit and root as a capsule, every leaf as a box round its blade, and the stems that bend as rods the solver moves, their leaves and pods riding them, boxes and all | stems collide, fruit collides, leaves collide, flexible stems, segment length |
 
 +Y is north, beds run east–west along X, the garden is centred on the origin
 and the top of the floor is z = 0.
@@ -87,6 +87,7 @@ parameter, with its default and range.
           /Stem                   the segment's tube
           /Leaf_04  /Fruit_33 …   what rides the segment, placed in its frame
       /Leaf_00 …                  one leaf each, numbered by node; a branch's from a thousand times the branch's number
+        /Blade  /Collision        when leaves collide: the mesh, and a box round the blade, a Cube scaled to its half extents
       /Fruit_00 …                 a fruit or root, a stemmed plant's eight to a node: garden_lab:ripeness, :pick, :harvest_ready
         /Skin  /Cut  /Collision   the mesh, the frame a harvester takes it by, its capsule
   /Weeds                          a Scope, absent when no weed grew

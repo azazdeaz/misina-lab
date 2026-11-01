@@ -361,7 +361,7 @@ mod tests {
         assert_eq!(names, [POST, COLLISION]);
 
         let at = app.world().entity(children[1].1);
-        let shape = at.get::<Collider>().unwrap().0;
+        let shape = at.get::<Collider>().unwrap().capsule().unwrap();
         let z = at.get::<Transform>().unwrap().translation.z;
         let reach = shape.height / 2.0 + shape.radius;
 

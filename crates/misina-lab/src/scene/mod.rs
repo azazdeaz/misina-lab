@@ -196,9 +196,25 @@ impl UsdAttributes {
 pub const COLLISION: &str = "Collision";
 
 /// A collision proxy — geometry a physics engine reads instead of the mesh
-/// beside it. See [`capsule`], which is the only way one is built.
+/// beside it. See [`capsule`] and [`block`], the only ways one is built.
 #[derive(Component, Clone, Copy, Debug)]
-pub struct Collider(pub doc::Capsule);
+pub enum Collider {
+    /// A capsule about the prim's own `+Z`, centered on it.
+    Capsule(doc::Capsule),
+    /// A box of half extents 1 about the prim's origin, sized by the
+    /// prim's scale: a `Cube` prim, which carries no payload.
+    Box,
+}
+
+impl Collider {
+    /// The capsule, if it is one.
+    pub fn capsule(&self) -> Option<&doc::Capsule> {
+        match self {
+            Collider::Capsule(capsule) => Some(capsule),
+            Collider::Box => None,
+        }
+    }
+}
 
 /// The prim a capsule collider spanning `z0..z1` up the organ's own `+Z`
 /// becomes. See [`capsule_between`].
@@ -217,7 +233,7 @@ pub fn capsule_between(radius: f32, from: Vec3, to: Vec3) -> impl Bundle + Copy 
     let span = to - from;
     (
         UsdType("Capsule"),
-        Collider(doc::Capsule {
+        Collider::Capsule(doc::Capsule {
             radius,
             height: (span.length() - 2.0 * radius).max(0.0),
         }),
@@ -225,6 +241,21 @@ pub fn capsule_between(radius: f32, from: Vec3, to: Vec3) -> impl Bundle + Copy 
             translation: (from + to) / 2.0,
             rotation: Quat::from_rotation_arc(Vec3::Z, span.try_normalize().unwrap_or(Vec3::Z)),
             scale: Vec3::ONE,
+        },
+    )
+}
+
+/// The prim a box collider becomes: `half_extents` out from its centre along
+/// its own axes, `placed` in the organ's frame. A `Cube` of size 2 whose
+/// scale is the box, so the document carries the box in the prim's
+/// transform alone; `placed`'s own scale multiplies in.
+pub fn block(half_extents: Vec3, placed: Transform) -> impl Bundle + Copy {
+    (
+        UsdType("Cube"),
+        Collider::Box,
+        Transform {
+            scale: placed.scale * half_extents,
+            ..placed
         },
     )
 }

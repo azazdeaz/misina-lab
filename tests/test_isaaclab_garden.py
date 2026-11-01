@@ -61,16 +61,19 @@ def test_a_garden_bends_vines_only_with_flexible_stems_and_a_climber():
     assert cables(json.loads(to_params(one_bed).generate_scene_json())) > 0
 
 
-def beans(segment: float = 0.05, fruit_collides: bool = True) -> garden_lab.GardenParams:
+def beans(
+    segment: float = 0.05, fruit_collides: bool = True, leaves_collide: bool = False
+) -> garden_lab.GardenParams:
     """One square of pole beans grown to harvest, their vines flexible."""
     params = garden_lab.GardenParams()
     bed, physics, planting, scene = params.bed, params.physics, params.planting, params.scene
     bed.columns, bed.rows, bed.length, bed.width = 1, 1, 0.5, 0.5
-    physics.flexible_stems, physics.segment, physics.fruit_collides = True, segment, fruit_collides
+    physics.flexible_stems, physics.segment = True, segment
+    physics.fruit_collides, physics.leaves_collide = fruit_collides, leaves_collide
     planting.misses, planting.jitter = 0.0, 0.0
     scene.week = 10.0
     params.bed, params.physics, params.planting, params.scene = bed, physics, planting, scene
-    for name in ("lettuce", "kale", "carrot", "bush_bean"):
+    for name in ("lettuce", "kale", "carrot", "bush_bean", "zucchini"):
         crop = getattr(params, name)
         crop.share = 0.0
         setattr(params, name, crop)
@@ -189,13 +192,9 @@ def test_a_vine_clears_its_string_at_every_segment_length(tmp_path, segment):
     assert tuned(path)[2] == 0
 
 
-def test_a_vine_holds_on_its_string_under_vbd(garden):
-    """Settled for four seconds under the solver that steps rods, a vine
-    loaded with its leaves and pods hangs on its string by its turns: no body
-    leaves where it was authored by more than a few centimetres, and it comes
-    to rest."""
-    _, path, _ = garden
-    builder, bodies, _ = tuned(path)
+def settled(builder: ModelBuilder, bodies: list[int], seconds: float):
+    """The rod bodies' positions as authored, half a second before the end
+    of `seconds` under the solver that steps rods, and at the end."""
     model = builder.finalize()
     rods.reserve_contact_slots(model)
     solver = SolverVBD(model, iterations=10, rigid_compliant_alm=False)
@@ -204,15 +203,80 @@ def test_a_vine_holds_on_its_string_under_vbd(garden):
     contacts = collision.contacts()
     rest = state.body_q.numpy()[bodies, :3]
     before = rest
-    for step in range(round(4.0 / DT)):
+    for step in range(round(seconds / DT)):
         collision.collide(state, contacts)
         solver.step(state, nxt, control, contacts, DT)
         state, nxt = nxt, state
-        if step == round(3.5 / DT):
+        if step == round((seconds - 0.5) / DT):
             before = state.body_q.numpy()[bodies, :3]
-    final = state.body_q.numpy()[bodies, :3]
+    return rest, before, state.body_q.numpy()[bodies, :3]
+
+
+def test_a_vine_holds_on_its_string_under_vbd(garden):
+    """Settled for four seconds under the solver that steps rods, a vine
+    loaded with its leaves and pods hangs on its string by its turns: no body
+    leaves where it was authored by more than a few centimetres, and it comes
+    to rest."""
+    _, path, _ = garden
+    builder, bodies, _ = tuned(path)
+    rest, before, final = settled(builder, bodies, 4.0)
     assert np.isfinite(final).all()
     moved = np.linalg.norm(final - rest, axis=1)
     assert moved.max() < 0.06, f"a body moved {moved.max():.3f} m"
     speed = np.linalg.norm(final - before, axis=1).max() / 0.5
     assert speed < 0.01, f"still moving at {speed:.3f} m/s"
+
+
+def test_a_vine_settles_with_its_leaves_boxes_riding_it(tmp_path):
+    """With the leaves colliding, every leaf's box is a `Cube` the importer
+    takes as a box, seated on the segment its leaf rides, and a vine alone in
+    its bed, its boxes clear of its string and of the trellis, settles as it
+    does without them: no body leaves where it was authored by more than a
+    few centimetres. Neighbouring plants' leaves authored through each other
+    push apart, which is why this vine is alone."""
+    from newton import GeoType
+
+    params = beans(fruit_collides=False, leaves_collide=True)
+    bed, pole_bean = params.bed, params.pole_bean
+    bed.length, pole_bean.spacing, pole_bean.height = 1.2, 0.9, 1.5
+    params.bed, params.pole_bean = bed, pole_bean
+    path = tmp_path / "leafy.usda"
+    build_usd(json.loads(params.generate_scene_json()), str(path))
+    builder, bodies, _ = tuned(path)
+    boxes = [
+        shape
+        for shape, label in enumerate(builder.shape_label)
+        if re.search(r"/Leaf_\d+/Collision$", label)
+    ]
+    assert (
+        len({label.rsplit("/", 1)[0] for label in builder.body_label if "_edge_body_" in label})
+        == 1
+    )
+    assert boxes and all(builder.shape_type[shape] == GeoType.BOX for shape in boxes)
+    assert all(builder.shape_body[shape] >= 0 for shape in boxes), "a box left unseated"
+    rest, _, final = settled(builder, bodies, 2.0)
+    assert np.isfinite(final).all()
+    moved = np.linalg.norm(final - rest, axis=1)
+    assert moved.max() < 0.06, f"a body moved {moved.max():.3f} m"
+
+
+def test_a_rod_shape_is_let_through_its_plants_box_by_the_sphere_round_it():
+    """A static box of a rod's own plant is let through when the sphere round
+    it reaches the rod's shape, whatever the box's extents; one out of reach
+    is not, nor another plant's."""
+    import warp as wp
+    from newton import ModelBuilder
+
+    builder = ModelBuilder()
+    own = ModelBuilder.ShapeConfig(collision_group=rods.PLANT_GROUPS)
+    other = ModelBuilder.ShapeConfig(collision_group=rods.PLANT_GROUPS + 1)
+    # A segment up Z, its capsule reaching 2.9 cm, and three thin boxes whose
+    # spheres reach 4.4 cm: one just past the tip, one 30 cm off, and one of
+    # another plant under the foot.
+    body = builder.add_body(xform=wp.transform((0.0, 0.0, 0.0), wp.quat_identity()))
+    builder.add_shape_capsule(body, radius=0.004, half_height=0.025, cfg=own)
+    for z, x, cfg in ((0.06, 0.0, own), (0.0, 0.3, own), (-0.06, 0.0, other)):
+        xform = wp.transform((x, 0.0, z), wp.quat_identity())
+        builder.add_shape_box(-1, xform=xform, hx=0.03, hy=0.03, hz=0.01, cfg=cfg)
+    assert rods.let_rods_out_of_their_wood(builder) == 1
+    assert list(builder.shape_collision_filter_pairs) == [(0, 1)]

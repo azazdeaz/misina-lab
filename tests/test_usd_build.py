@@ -22,7 +22,15 @@ from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
 
 import misina_lab.usd
 from misina_lab.usd import GEOM, build_stage
-from misina_lab.usd.build import CABLE_MATERIAL, MATERIAL, MDL_OPAQUE, MDL_TRANSLUCENT, SHADER
+from misina_lab.usd.build import (
+    CABLE_MATERIAL,
+    FORMAT,
+    MATERIAL,
+    MDL_OPAQUE,
+    MDL_TRANSLUCENT,
+    SHADER,
+    build_usd,
+)
 
 ROOT = "/Vineyard"
 """The fixture document's root: the stage's default prim is named after it."""
@@ -419,6 +427,45 @@ def test_a_collision_proxy_is_a_capsule_no_renderer_draws(stage: Usd.Stage):
     lo, hi = capsule.GetExtentAttr().Get()
     assert tuple(lo) == pytest.approx((-0.05, -0.05, -0.475))
     assert tuple(hi) == pytest.approx((0.05, 0.05, 0.475))
+
+
+def test_a_box_proxy_is_a_cube_sized_by_its_scale(tmp_path):
+    """A box collider is a `Cube` prim with no payload: size 2, so the half
+    extents are the scale its xform carries, marked as a capsule is."""
+    doc = {
+        "format": FORMAT,
+        "up_axis": "Z",
+        "namespace": "boxlab",
+        "parts": [],
+        "root": {
+            "name": "Scene",
+            "type_name": "Xform",
+            "children": [
+                {
+                    "name": "Collision",
+                    "type_name": "Cube",
+                    "xform": {
+                        "translate": [0.0, 0.0, 0.5],
+                        "orient": [0.0, 0.0, 0.0, 1.0],
+                        "scale": [0.15, 0.2, 0.01],
+                    },
+                }
+            ],
+        },
+    }
+    path = tmp_path / "box.usda"
+    build_usd(doc, str(path))
+    stage = Usd.Stage.Open(str(path))
+    prim = stage.GetPrimAtPath("/Scene/Collision")
+    cube = UsdGeom.Cube(prim)
+
+    assert prim.GetTypeName() == "Cube"
+    assert prim.HasAPI(UsdPhysics.CollisionAPI)
+    assert cube.GetPurposeAttr().Get() == UsdGeom.Tokens.guide
+    assert cube.GetSizeAttr().Get() == pytest.approx(2.0)
+    lo, hi = cube.GetExtentAttr().Get()
+    assert tuple(lo) == (-1.0, -1.0, -1.0) and tuple(hi) == (1.0, 1.0, 1.0)
+    assert tuple(prim.GetAttribute("xformOp:scale").Get()) == pytest.approx((0.15, 0.2, 0.01))
 
 
 def test_a_collision_proxy_is_placed_like_any_other_prim(stage: Usd.Stage):

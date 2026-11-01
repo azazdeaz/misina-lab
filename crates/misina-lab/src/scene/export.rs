@@ -204,7 +204,11 @@ fn collect_prims(world: &mut World) -> HashMap<Entity, Prim> {
                     type_name: prim_type.map_or("Xform", |t| t.0).to_string(),
                     xform: transform.and_then(xform_of),
                     reference: reference.map(|r| r.0.clone()),
-                    collider: collider.map(|c| c.0),
+                    // A box carries no payload: its type and its scale say it all.
+                    collider: collider.and_then(|c| match c {
+                        Collider::Capsule(capsule) => Some(*capsule),
+                        Collider::Box => None,
+                    }),
                     cable: cable.map(|c| c.0.clone()),
                     attributes: attributes.map(|a| a.0.clone()).unwrap_or_default(),
                     children: children.map(|c| c.to_vec()).unwrap_or_default(),
@@ -290,7 +294,7 @@ fn build_node(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::scene::capsule;
+    use crate::scene::{block, capsule};
     use bevy::mesh::Indices;
 
     /// A world with the resources the exporter reads and a single named root.
@@ -497,6 +501,31 @@ mod tests {
         assert!(node.reference.is_none() && !node.instanceable);
 
         assert_eq!(doc.root.children[1].collider.unwrap().height, 0.0);
+    }
+
+    /// A box collider is a `Cube` prim with nothing but its transform: its
+    /// scale is the box's half extents, so a scale on its placement
+    /// multiplies in.
+    #[test]
+    fn a_box_collider_becomes_a_cube_prim_scaled_to_its_half_extents() {
+        let mut world = world();
+        let root = root(&mut world);
+        world.spawn((
+            Name::new("Collision"),
+            block(
+                Vec3::new(0.15, 0.2, 0.01),
+                Transform::from_xyz(0.3, 0.0, 0.5).with_scale(Vec3::splat(2.0)),
+            ),
+            ChildOf(root),
+        ));
+
+        let doc = scene_doc(&mut world).unwrap();
+        let node = &doc.root.children[0];
+        assert_eq!(node.type_name, "Cube");
+        assert!(node.collider.is_none() && node.reference.is_none() && !node.instanceable);
+        let xform = node.xform.unwrap();
+        assert_eq!(xform.translate, [0.3, 0.0, 0.5]);
+        assert_eq!(xform.scale, [0.3, 0.4, 0.02]);
     }
 
     /// The invariant `instanceable` rests on: USD would keep the prim and

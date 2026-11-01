@@ -413,8 +413,9 @@ def carry_riders(builder) -> int:
 
 
 def let_rods_out_of_their_wood(builder) -> int:
-    """Let every shape on a rod through each collider of its own plant's
-    wood that it overlaps as authored. Returns how many pairs were let
+    """Let every shape on a rod's body, a segment's own or a rider seated on
+    it, through each static shape of its own plant that it overlaps as
+    authored, its wood or its support. Returns how many pairs were let
     through.
 
     A rod is held where it leaves the wood it grows from, and a wood collider
@@ -424,35 +425,39 @@ def let_rods_out_of_their_wood(builder) -> int:
     simulation starts, at the joint a flush cut is made at.
 
     A pair let through stays so for as long as the model stands, a piece cut
-    free included: such a segment passes through the whole of that collider,
+    free included: such a segment passes through the whole of that shape,
     however long. Every other pair of the rod's shapes and its wood still
-    meets.
+    meets; what rides the rod passes its own rod by `carry_riders`.
 
-    Capsules and spheres only, which is what a rod and a proxy are made of.
+    Capsules and spheres meet by their axes; any other shape, a box, by the
+    sphere round it, so a pair let through on its account need not touch.
     Call it on a builder whose collision groups are set, as `tune_rods` does:
-    a plant's group is what says whose wood a rod's shape may meet.
+    a plant's group is what says whose wood a rod's shape may be let through.
     """
     from newton import GeoType, ShapeFlags
 
     def own(shape: int) -> bool:
         return (
             bool(builder.shape_flags[shape] & ShapeFlags.COLLIDE_SHAPES)
-            and builder.shape_type[shape] in (GeoType.CAPSULE, GeoType.SPHERE)
             and builder.shape_collision_group[shape] >= PLANT_GROUPS
         )
 
     def axis(shape: int) -> tuple[np.ndarray, np.ndarray, float]:
         """The shape's axis, its two ends in the world, and its radius out to
-        where it touches."""
+        where it touches: a capsule's and a sphere's own, any other's the
+        sphere round it."""
         pose = builder.shape_transform[shape]
         if (body := builder.shape_body[shape]) >= 0:
             pose = builder.body_q[body] * pose
         pose = np.array(pose, dtype=float)
         x, y, z, w = pose[3:]
         up = np.array([2 * (x * z + y * w), 2 * (y * z - x * w), 1 - 2 * (x * x + y * y)])
-        scale = builder.shape_scale[shape]
-        reach = up * (scale[1] if builder.shape_type[shape] == GeoType.CAPSULE else 0.0)
-        return pose[:3] - reach, pose[:3] + reach, scale[0] + builder.shape_margin[shape]
+        scale = np.array(builder.shape_scale[shape], dtype=float)
+        kind = builder.shape_type[shape]
+        reach = up * (scale[1] if kind == GeoType.CAPSULE else 0.0)
+        round_ = kind in (GeoType.CAPSULE, GeoType.SPHERE)
+        radius = scale[0] if round_ else float(np.linalg.norm(scale))
+        return pose[:3] - reach, pose[:3] + reach, radius + builder.shape_margin[shape]
 
     woods: dict[int, list[int]] = {}
     for shape in filter(own, builder.body_shapes[-1]):

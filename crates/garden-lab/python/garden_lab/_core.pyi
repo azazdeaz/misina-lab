@@ -47,6 +47,11 @@ class PhysicsParams:
     """
     fruit_collides: bool
     """Whether every fruit and root collides, as a capsule each."""
+    leaves_collide: bool
+    """Whether every leaf collides, as a box round its blade, fitted to the blade's
+    extent in the plane it lies flattest in; the petiole does not. A leaf riding a
+    bending stem carries its box with it.
+    """
     flexible_stems: bool
     """Whether the stems that bend, a pole bean's vine, are rods the solver moves, their
     leaves and pods riding them; off, they are wood like every other stem.
@@ -62,6 +67,7 @@ class PhysicsParams:
         *,
         stems_collide: bool = True,
         fruit_collides: bool = False,
+        leaves_collide: bool = False,
         flexible_stems: bool = False,
         segment: float = 0.05,
     ) -> None: ...
