@@ -48,7 +48,8 @@ class PhysicsCfg:
     leaves_collide: bool = False
     """Whether every leaf collides, as a box round its blade, fitted to the blade's
     extent in the plane it lies flattest in; the petiole does not. A leaf riding a
-    bending stem carries its box with it.
+    bending stem carries its box with it, and two plants authored with their leaves
+    through each other push apart when the solver starts.
     """
     flexible_stems: bool = False
     """Whether the stems that bend, a pole bean's vine, are rods the solver moves, their

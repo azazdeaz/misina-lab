@@ -31,7 +31,7 @@ What a robot bumps into, besides the floor and the beds, and what bends. Scene-w
 |---|---|---|---|---|
 | `stems_collide` | bool | `True` |  | Whether every stem collides, as a chain of capsules along it. A rod collides as itself, whatever this says. |
 | `fruit_collides` | bool | `False` |  | Whether every fruit and root collides, as a capsule each. |
-| `leaves_collide` | bool | `False` |  | Whether every leaf collides, as a box round its blade, fitted to the blade's extent in the plane it lies flattest in; the petiole does not. A leaf riding a bending stem carries its box with it. |
+| `leaves_collide` | bool | `False` |  | Whether every leaf collides, as a box round its blade, fitted to the blade's extent in the plane it lies flattest in; the petiole does not. A leaf riding a bending stem carries its box with it, and two plants authored with their leaves through each other push apart when the solver starts. |
 | `flexible_stems` | bool | `False` |  | Whether the stems that bend, a pole bean's vine, are rods the solver moves, their leaves and pods riding them; off, they are wood like every other stem. |
 | `segment` | float | `0.05` | 0.02 to 0.06 | Length of a rod's segments, in meters: shorter bends smoother and costs a body per segment. No longer than 6 cm, the most a pole bean's vine can be sampled at and still clear its string. |
 
