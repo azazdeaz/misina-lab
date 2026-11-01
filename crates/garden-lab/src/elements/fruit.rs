@@ -40,8 +40,11 @@ pub enum Kind {
     Root,
     /// A pod: snapped off its stalk.
     Pod,
-    /// A berry: cut off its stalk.
+    /// A berry, a rounded cylinder narrowing to its stalk: cut off it.
     Berry,
+    /// A strawberry, widest near its stalk and pointed at its tip: cut off
+    /// it.
+    Strawberry,
 }
 
 impl Kind {
@@ -50,7 +53,7 @@ impl Kind {
         match self {
             Kind::Root => "pull",
             Kind::Pod => "snap",
-            Kind::Berry => "cut",
+            Kind::Berry | Kind::Strawberry => "cut",
         }
     }
 }
@@ -142,6 +145,7 @@ pub fn build<S: Species>(
         Kind::Root => solid::root(config),
         Kind::Pod => solid::pod(config),
         Kind::Berry => solid::berry(config),
+        Kind::Strawberry => solid::strawberry(config),
     });
     let mut geometry = Vec::with_capacity(meshes.len());
     for (index, (config, mesh)) in book.representatives.iter().zip(meshes).enumerate() {

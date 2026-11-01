@@ -29,6 +29,7 @@ pub struct Axis {
     lean: f32,
     wobble: f32,
     bends: bool,
+    grounded: bool,
     tint: [f32; 3],
 }
 
@@ -62,6 +63,7 @@ impl Axis {
             lean: 0.0,
             wobble: 0.0,
             bends: false,
+            grounded: false,
             tint: [0.3, 0.4, 0.2],
         }
     }
@@ -122,7 +124,8 @@ impl Axis {
         self
     }
 
-    /// How far an arc turns upward over its length, in radians.
+    /// How far an arc turns upward over its length, in radians; negative
+    /// turns it down.
     pub fn rise(mut self, radians: f32) -> Self {
         debug_assert!(
             matches!(self.course, Course::Arc { .. }),
@@ -203,6 +206,15 @@ impl Axis {
         self
     }
 
+    /// Keeps the axis out of the soil, the plane z = 0 of the plant's frame:
+    /// a point under it is lifted to lie on it by its radius, so an arc
+    /// turning down runs along the soil from where it lands, as a runner
+    /// does.
+    pub fn grounded(mut self) -> Self {
+        self.grounded = true;
+        self
+    }
+
     /// The axis grown from `foot`. Three draws from `rng` whatever its
     /// course: an upright stem's lean direction, bow direction and bow
     /// phase, which a twine takes for its starting angle and an arc leaves
@@ -211,7 +223,7 @@ impl Axis {
         let lean_toward = rng.range(0.0, TAU as f64) as f32;
         let bow_toward = rng.range(0.0, TAU as f64) as f32;
         let phase = rng.range(0.0, TAU as f64) as f32;
-        let points = match self.course {
+        let mut points = match self.course {
             Course::Upright { height } => {
                 let height = height.max(0.005);
                 let lean = Vec2::from_angle(lean_toward) * height * self.lean.tan();
@@ -242,12 +254,17 @@ impl Axis {
             } => twine(foot, top, reach, pitch, offset, phase),
         };
         let last = points.len() - 1;
-        let radii = (0..=last)
+        let radii: Vec<f32> = (0..=last)
             .map(|i| {
                 let t = i as f32 / last as f32;
                 self.radius.max(1e-4) * (1.0 - t * (1.0 - self.taper))
             })
             .collect();
+        if self.grounded {
+            for (point, radius) in points.iter_mut().zip(&radii) {
+                point.z = point.z.max(*radius);
+            }
+        }
         Grown {
             points,
             radii,
@@ -463,5 +480,41 @@ mod tests {
         assert!((reach - 1.0).abs() < 1e-5, "{reach}");
         let whole = Axis::twine(top, 9.0, 0.004).grow(Vec3::ZERO, &mut rng);
         assert!((whole.tip().dot(dir) - top.length()).abs() < 1e-4);
+    }
+
+    /// A grounded arc turning down humps over, meets the soil and runs
+    /// along it from there, its tube's radius above the soil and never
+    /// under it, still headed its way.
+    #[test]
+    fn a_grounded_arc_runs_along_the_soil() {
+        let mut rng = Rng::new(5);
+        let runner = Axis::arc(0.3, 0.002)
+            .heading(0.0, 0.5)
+            .rise(-1.3)
+            .grounded()
+            .grow(Vec3::ZERO, &mut rng);
+        let on_the_soil = |point: &Vec3, radius: &f32| (point.z - radius).abs() < 1e-6;
+        assert!(
+            runner
+                .points
+                .iter()
+                .zip(&runner.radii)
+                .all(|(point, radius)| point.z >= *radius - 1e-6),
+            "{:?}",
+            runner.points
+        );
+        let landed = runner
+            .points
+            .iter()
+            .zip(&runner.radii)
+            .filter(|(point, radius)| on_the_soil(point, radius))
+            .count();
+        assert!(landed >= 3, "{:?}", runner.points);
+        assert!(runner.points.iter().any(|point| point.z > 0.02), "no hump");
+        let tip = runner.tip();
+        assert!(
+            tip.x > 0.2 && on_the_soil(&tip, runner.radii.last().unwrap()),
+            "{tip}"
+        );
     }
 }

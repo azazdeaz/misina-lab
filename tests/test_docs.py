@@ -32,7 +32,7 @@ LINE = re.compile(r"#L\d+|:\d+$")
 GENERATOR = re.compile(
     r"\b(vine\w*|grape\w*|canes?|cordons?|spurs?|swards?"
     r"|greenhouse\w*|glasshouse\w*|tomato\w*|gutters?|slabs?|truss\w*"
-    r"|garden\w*|beds?|lettuce\w*|kale|carrots?|beans?|zucchinis?)\b",
+    r"|garden\w*|beds?|lettuce\w*|kale|carrots?|beans?|zucchinis?|strawberr\w*)\b",
     re.IGNORECASE,
 )
 """What the generators in this repo go by: the vineyard's names and the parts

@@ -1,9 +1,11 @@
-"""Tests for the physics a garden runs under: its pole beans' vines.
+"""Tests for the physics a garden runs under: its pole beans' vines and its
+strawberries' fruit stalks.
 
 Requires Isaac Lab, and the garden's extension; skipped where either is
 missing. What is pinned here is what the cfg cannot show: that Newton's rod
 importer takes a flexible vine as a rod held at the soil, carrying the weight
-of its leaves and pods, its every body where the prim riding it was authored.
+of its leaves and pods, its every body where the prim riding it was authored,
+and a stalk-sized rod as one rooted on its crown that holds its berry up.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ import pytest
 # module it was asked to import.
 try:
     import garden_lab
-    from garden_lab.isaaclab import BedCfg, GardenCfg, PhysicsCfg, PoleBeanCfg
+    from garden_lab.isaaclab import BedCfg, GardenCfg, PhysicsCfg, PoleBeanCfg, StrawberryCfg
 except ImportError:
     pytest.skip("Isaac Lab or garden_lab is not installed", allow_module_level=True)
 
@@ -45,20 +47,43 @@ def cables(doc) -> int:
     return count
 
 
-def test_a_garden_bends_vines_only_with_flexible_stems_and_a_climber():
+def test_a_garden_bends_stems_only_with_flexible_stems_and_a_crop_that_bends():
     """Its static fallback is the same garden with the stems rigid, and a
-    garden whose one climber is left out, confined to a bed it has not got or
-    not yet sown authors no rod however its stems are; a bed of them does."""
+    garden whose two bending crops are left out, confined to a bed it has not
+    got, not yet sown, or, the strawberry, sown too lately to have set a berry
+    authors no rod however its stems are; a bed of either does, the
+    strawberries from the week their first stalk comes."""
     flexible = PhysicsCfg(flexible_stems=True)
     bent = GardenCfg(physics=flexible)
     assert GardenCfg().without_rods() is None
     assert bent.without_rods().physics.flexible_stems is False
     assert bent.physics.flexible_stems, "the caller's cfg is left as it was"
-    for bean in (PoleBeanCfg(share=0.0), PoleBeanCfg(bed=7), PoleBeanCfg(sown_week=9.0)):
-        assert GardenCfg(physics=flexible, pole_bean=bean).without_rods() is None, bean
+    no_bean, no_strawberry = PoleBeanCfg(share=0.0), StrawberryCfg(share=0.0)
+    for bean in (no_bean, PoleBeanCfg(bed=7), PoleBeanCfg(sown_week=9.0)):
+        cfg = GardenCfg(physics=flexible, pole_bean=bean, strawberry=no_strawberry)
+        assert cfg.without_rods() is None, bean
+    week = GardenCfg().scene.week
+    for strawberry in (
+        no_strawberry,
+        StrawberryCfg(bed=7),
+        StrawberryCfg(sown_week=week + 1.0),
+        StrawberryCfg(fruits=0),
+    ):
+        cfg = GardenCfg(physics=flexible, pole_bean=no_bean, strawberry=strawberry)
+        assert cfg.without_rods() is None, strawberry
     one_bed = GardenCfg(physics=flexible, bed=BedCfg(columns=1, rows=1))
     assert one_bed.without_rods() is not None
     assert cables(json.loads(to_params(one_bed).generate_scene_json())) > 0
+    # Either side of the age the first berry sets at, by a tenth of a week.
+    for age, stalks in ((6.4, False), (6.6, True)):
+        cfg = GardenCfg(
+            physics=flexible,
+            bed=BedCfg(columns=1, rows=1),
+            pole_bean=no_bean,
+            strawberry=StrawberryCfg(sown_week=week - age),
+        )
+        assert (cfg.without_rods() is not None) is stalks, age
+        assert (cables(json.loads(to_params(cfg).generate_scene_json())) > 0) is stalks, age
 
 
 def beans(
@@ -73,7 +98,7 @@ def beans(
     planting.misses, planting.jitter = 0.0, 0.0
     scene.week = 10.0
     params.bed, params.physics, params.planting, params.scene = bed, physics, planting, scene
-    for name in ("lettuce", "kale", "carrot", "bush_bean", "zucchini"):
+    for name in ("lettuce", "kale", "carrot", "bush_bean", "zucchini", "strawberry"):
         crop = getattr(params, name)
         crop.share = 0.0
         setattr(params, name, crop)
@@ -258,6 +283,78 @@ def test_a_vine_settles_with_its_leaves_boxes_riding_it(tmp_path):
     assert np.isfinite(final).all()
     moved = np.linalg.norm(final - rest, axis=1)
     assert moved.max() < 0.06, f"a body moved {moved.max():.3f} m"
+
+
+def strawberries() -> garden_lab.GardenParams:
+    """One square of strawberries grown to harvest, their fruit stalks
+    flexible and their berries colliding."""
+    params = beans()
+    scene, pole_bean, strawberry = params.scene, params.pole_bean, params.strawberry
+    scene.week, pole_bean.share, strawberry.share = 11.0, 0.0, 1.0
+    params.scene, params.pole_bean, params.strawberry = scene, pole_bean, strawberry
+    return params
+
+
+@pytest.fixture(scope="module")
+def strawberry_bed(tmp_path_factory):
+    """The stage built from `strawberries`, and the height of its soil."""
+    params = strawberries()
+    path = tmp_path_factory.mktemp("strawberries") / "strawberries.usda"
+    build_usd(json.loads(params.generate_scene_json()), str(path))
+    return path, params.bed.height - params.bed.rim
+
+
+STALK = re.compile(r"/(Plant_\d+/Rod_\d+)/Cable_edge_body_(\d+)$")
+"""A stalk's rod body label: the stalk, and the body's segment."""
+
+
+def test_a_strawberrys_stalks_are_rods_rooted_on_its_crown_carrying_its_berries(strawberry_bed):
+    """Every berry's stalk is a rod of its own under the plant, a few
+    segments long, its first body static at the crown and its last, which
+    carries the berry, heavier than the rest of the stalk together; the
+    berry's collider is seated on that last segment's body."""
+    path, _ = strawberry_bed
+    builder, bodies, _ = tuned(path)
+    stalks: dict[str, list[tuple[int, float]]] = {}
+    for body in bodies:
+        label = builder.body_label[body]
+        found = STALK.search(label)
+        assert found, label
+        stalks.setdefault(found[1], []).append((int(found[2]), builder.body_mass[body]))
+    assert len(stalks) == 4 * 4
+    for stalk, chain in stalks.items():
+        masses = [mass for _, mass in sorted(chain)]
+        assert len(masses) >= 3 and masses[0] == 0.0, f"{stalk}: {masses}"
+        assert masses[-1] > sum(masses[1:-1]), f"{stalk}: {masses}"
+    berries = [
+        shape
+        for shape, label in enumerate(builder.shape_label)
+        if re.search(r"/Rod_\d+/Cable_edge_body_\d+/Fruit_\d+/Collision$", label)
+    ]
+    assert len(berries) == len(stalks)
+    for shape in berries:
+        label = builder.shape_label[shape]
+        body = builder.body_label[builder.shape_body[shape]]
+        assert body == label.rsplit("/", 2)[0], label
+        stalk, segment = STALK.search(body).groups()
+        assert int(segment) == max(index for index, _ in stalks[stalk]), body
+
+
+def test_strawberry_stalks_hold_their_berries_up_under_vbd(strawberry_bed):
+    """Settled for three seconds under the solver that steps rods, every
+    stalk-sized rod holds its berry: nothing blows up, no rod body drops by
+    more than a centimetre (4 mm on the rig) or ends under the soil, and
+    the bed comes to rest."""
+    path, soil_z = strawberry_bed
+    builder, bodies, _ = tuned(path)
+    rest, before, final = settled(builder, bodies, 3.0)
+    assert np.isfinite(final).all()
+    drop = rest[:, 2] - final[:, 2]
+    assert drop.max() < 0.01, f"a body dropped {drop.max():.4f} m"
+    sunk = soil_z - final[:, 2].min()
+    assert sunk < 0.0, f"a body ended {sunk:.4f} m under the soil"
+    speed = np.linalg.norm(final - before, axis=1).max() / 0.5
+    assert speed < 0.01, f"still moving at {speed:.3f} m/s"
 
 
 def test_a_rod_shape_is_let_through_its_plants_box_by_the_sphere_round_it():

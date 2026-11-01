@@ -54,8 +54,9 @@ class PhysicsParams:
     through each other push apart when the solver starts.
     """
     flexible_stems: bool
-    """Whether the stems that bend, a pole bean's vine, are rods the solver moves, their
-    leaves and pods riding them; off, they are wood like every other stem.
+    """Whether the stems that bend, a pole bean's vine and a strawberry's fruit stalks,
+    are rods the solver moves, their leaves, pods and berries riding them; off, they
+    are wood like every other stem.
     """
     segment: float
     """Length of a rod's segments, in meters: shorter bends smoother and costs a body
@@ -476,6 +477,61 @@ class ZucchiniParams:
     ) -> None: ...
     def __repr__(self) -> str: ...
 
+class StrawberryParams:
+    """Strawberry: a crown of toothed trifoliate leaves on long petioles, every berry
+    hanging from a stalk of its own arching out from the crown and cut when ripe, and
+    runners sent out along the soil, grown to harvest over eleven weeks.
+    """
+
+    leaves: int
+    """Leaves on a harvest-ready plant."""
+    leaf_length: float
+    """Length of a grown leaf, petiole and leaflets, in meters."""
+    fruits: int
+    """Berries a harvest-ready plant bears, each on a stalk of its own, set a week apart
+    once the plant is older than six and a half weeks.
+    """
+    fruit_length: float
+    """Length of a ripe berry, in meters."""
+    runners: int
+    """Runners a plant older than five weeks sends out along the soil."""
+    share: float
+    """Share of the garden's planting squares this crop gets, against the other crops';
+    0 leaves it out.
+    """
+    spacing: float
+    """Distance between plants, in meters: rounded to one, two, three or four per side
+    of a 30 cm square, or, wider than a square, to a plant every two or three
+    squares, on the lattice that fits the most into the crop's block.
+    """
+    sown_week: float
+    """The week it was sown, on the scene's calendar: a plant's age is the scene's week
+    less this, and a bed is bare before it.
+    """
+    bed: int
+    """The one bed it is confined to, counted from 1; 0 plants it anywhere."""
+    variations: int
+    """How many distinct meshes each of its organs, its leaves and its fruit, may share.
+    A budget, not a count: the organs are clustered and this is how many
+    representatives the clustering may keep.
+    """
+
+    def __init__(
+        self,
+        *,
+        leaves: int = 8,
+        leaf_length: float = 0.2,
+        fruits: int = 4,
+        fruit_length: float = 0.03,
+        runners: int = 1,
+        share: float = 0.25,
+        spacing: float = 0.15,
+        sown_week: float = 0.0,
+        bed: int = 0,
+        variations: int = 12,
+    ) -> None: ...
+    def __repr__(self) -> str: ...
+
 # <<< generated: fragments
 
 class GardenParams:
@@ -494,6 +550,7 @@ class GardenParams:
     bush_bean: BushBeanParams
     pole_bean: PoleBeanParams
     zucchini: ZucchiniParams
+    strawberry: StrawberryParams
 
     def __init__(
         self,
@@ -508,6 +565,7 @@ class GardenParams:
         bush_bean: BushBeanParams | None = None,
         pole_bean: PoleBeanParams | None = None,
         zucchini: ZucchiniParams | None = None,
+        strawberry: StrawberryParams | None = None,
     ) -> None: ...
     # <<< generated: aggregate
     def __repr__(self) -> str: ...

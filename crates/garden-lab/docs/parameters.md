@@ -32,7 +32,7 @@ What a robot bumps into, besides the floor and the beds, and what bends. Scene-w
 | `stems_collide` | bool | `True` |  | Whether every stem collides, as a chain of capsules along it. A rod collides as itself, whatever this says. |
 | `fruit_collides` | bool | `False` |  | Whether every fruit and root collides, as a capsule each. |
 | `leaves_collide` | bool | `False` |  | Whether every leaf collides, as a box round its blade, fitted to the blade's extent in the plane it lies flattest in; the petiole does not. A leaf riding a bending stem carries its box with it, and two plants authored with their leaves through each other push apart when the solver starts. |
-| `flexible_stems` | bool | `False` |  | Whether the stems that bend, a pole bean's vine, are rods the solver moves, their leaves and pods riding them; off, they are wood like every other stem. |
+| `flexible_stems` | bool | `False` |  | Whether the stems that bend, a pole bean's vine and a strawberry's fruit stalks, are rods the solver moves, their leaves, pods and berries riding them; off, they are wood like every other stem. |
 | `segment` | float | `0.05` | 0.02 to 0.06 | Length of a rod's segments, in meters: shorter bends smoother and costs a body per segment. No longer than 6 cm, the most a pole bean's vine can be sampled at and still clear its string. |
 
 ## Beds
@@ -182,6 +182,25 @@ Zucchini: a stout, leaning stem under a mound of giant palmate leaves on long ho
 | `fruit_length` | float | `0.2` | 0.1 to 0.35 | Length of a ripe fruit, in meters. |
 | `share` | float | `0.25` | 0 to 1 | Share of the garden's planting squares this crop gets, against the other crops'; 0 leaves it out. |
 | `spacing` | float | `0.9` | 0.03 to 1 | Distance between plants, in meters: rounded to one, two, three or four per side of a 30 cm square, or, wider than a square, to a plant every two or three squares, on the lattice that fits the most into the crop's block. |
+| `sown_week` | float | `0.0` | 0 to 20 | The week it was sown, on the scene's calendar: a plant's age is the scene's week less this, and a bed is bare before it. |
+| `bed` | int | `0` | 0 to 24 | The one bed it is confined to, counted from 1; 0 plants it anywhere. |
+| `variations` | int | `12` | 1 to 64 | How many distinct meshes each of its organs, its leaves and its fruit, may share. A budget, not a count: the organs are clustered and this is how many representatives the clustering may keep. |
+
+## Strawberry
+
+`StrawberryParams` in Python, `StrawberryCfg` in Isaac Lab.
+
+Strawberry: a crown of toothed trifoliate leaves on long petioles, every berry hanging from a stalk of its own arching out from the crown and cut when ripe, and runners sent out along the soil, grown to harvest over eleven weeks.
+
+| Parameter | Type | Default | Slider range | Description |
+|---|---|---|---|---|
+| `leaves` | int | `8` | 4 to 14 | Leaves on a harvest-ready plant. |
+| `leaf_length` | float | `0.2` | 0.1 to 0.35 | Length of a grown leaf, petiole and leaflets, in meters. |
+| `fruits` | int | `4` | 0 to 10 | Berries a harvest-ready plant bears, each on a stalk of its own, set a week apart once the plant is older than six and a half weeks. |
+| `fruit_length` | float | `0.03` | 0.015 to 0.045 | Length of a ripe berry, in meters. |
+| `runners` | int | `1` | 0 to 3 | Runners a plant older than five weeks sends out along the soil. |
+| `share` | float | `0.25` | 0 to 1 | Share of the garden's planting squares this crop gets, against the other crops'; 0 leaves it out. |
+| `spacing` | float | `0.15` | 0.03 to 1 | Distance between plants, in meters: rounded to one, two, three or four per side of a 30 cm square, or, wider than a square, to a plant every two or three squares, on the lattice that fits the most into the crop's block. |
 | `sown_week` | float | `0.0` | 0 to 20 | The week it was sown, on the scene's calendar: a plant's age is the scene's week less this, and a bed is bare before it. |
 | `bed` | int | `0` | 0 to 24 | The one bed it is confined to, counted from 1; 0 plants it anywhere. |
 | `variations` | int | `12` | 1 to 64 | How many distinct meshes each of its organs, its leaves and its fruit, may share. A budget, not a count: the organs are clustered and this is how many representatives the clustering may keep. |

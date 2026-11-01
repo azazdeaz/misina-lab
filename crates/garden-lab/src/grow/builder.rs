@@ -164,6 +164,7 @@ impl LeafConfig {
             width,
             petiole: 0.0,
             pairs: 0,
+            teeth: 0,
             ruffle: 0.0,
             cup: 0.0,
             droop: 0.0,
@@ -207,6 +208,13 @@ impl LeafConfig {
     /// in the leaf's length.
     pub fn petiole(mut self, length: f32) -> Self {
         self.petiole = length;
+        self
+    }
+
+    /// Teeth cut into each edge of a trifoliate leaflet; none leaves it
+    /// entire.
+    pub fn teeth(mut self, teeth: u32) -> Self {
+        self.teeth = teeth;
         self
     }
 
@@ -271,6 +279,17 @@ impl FruitConfig {
         Self {
             kind: Kind::Berry,
             tint: [0.02, 0.09, 0.015],
+            ..Self::root(diameter, length)
+        }
+    }
+
+    /// A strawberry `diameter` across at its widest, a third of the way
+    /// down, and `length` long, its shoulder rounded below its stalk and
+    /// its tip pointed, hanging down its own -Z from its anchor.
+    pub fn strawberry(diameter: f32, length: f32) -> Self {
+        Self {
+            kind: Kind::Strawberry,
+            tint: [0.55, 0.02, 0.03],
             ..Self::root(diameter, length)
         }
     }

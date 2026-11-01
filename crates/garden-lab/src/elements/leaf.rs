@@ -36,8 +36,8 @@ pub enum Template {
     Simple,
     /// A rachis with leaflets in pairs along it and one at its tip.
     Compound,
-    /// Three entire leaflets on a petiole: a pair where it ends and one past
-    /// them.
+    /// Three leaflets on a petiole, entire or toothed: a pair where it ends
+    /// and one past them.
     Trifoliate,
     /// A palmate blade: lobes fanning from a basal notch, hinged down where
     /// its petiole ends.
@@ -59,6 +59,8 @@ pub struct LeafConfig {
     pub petiole: f32,
     /// A compound leaf's pairs of leaflets.
     pub pairs: u32,
+    /// Teeth cut into each edge of a trifoliate leaflet; 0 leaves it entire.
+    pub teeth: u32,
     /// How far a simple blade's margin ruffles, 0 to 1.
     pub ruffle: f32,
     /// How far a simple blade cups about its midrib: the turn across its
@@ -97,12 +99,15 @@ impl Metric<LeafConfig> for LeafMetric {
         let step = |same: bool| if same { 0.0 } else { 10.0 * reach.max(0.1) };
         let simple = (a.template == Template::Simple) as u8 as f32;
         let compound = (a.template == Template::Compound) as u8 as f32;
+        let trifoliate = (a.template == Template::Trifoliate) as u8 as f32;
         [
             a.length - b.length,
             (a.width - b.width) * reach,
             a.petiole - b.petiole,
             // A pair more is two leaflets more.
             (a.pairs as f32 - b.pairs as f32) * reach / 6.0 * compound,
+            // A tooth is a notch a few percent of a leaflet deep.
+            (a.teeth as f32 - b.teeth as f32) * reach / 30.0 * trifoliate,
             // A full ruffle is a few percent of the length deep.
             (a.ruffle - b.ruffle) * reach / 20.0 * simple,
             // The edge's rise under the cup: the turn over half the width.

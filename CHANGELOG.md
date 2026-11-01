@@ -40,15 +40,19 @@ extents, which an earlier builder would author as a plain cube.
   height a bed knob; and zucchini, a stout stem under giant palmate leaves
   on long petioles with the fruit lying low, cut to pick, one plant every
   three squares, since a crop spaced wider than a square now gets a lattice
-  of squares. Weeds, the vineyard's five habits, come up in the beds' soil
-  and on the paths at a pressure of each, `weeds` knobs, named `Weed_` and
-  carrying `crop` false. Scene-wide `physics` switches say what collides, every
-  stem as a chain of capsules and every fruit and root as a capsule, and what
-  bends: with `flexible_stems` a pole bean's vine is a rod in `segment`
-  lengths, its leaves and pods riding the segments with their masses as the
-  cable's loads; `leaves_collide` puts a box round every blade, fitted in
-  the plane it lies flattest in, under `Leaf_NN/Collision` beside the
-  `Blade` that draws it. `cargo run -p garden-lab` opens its viewer, and
+  of squares; and strawberries, a crown of toothed trifoliate leaves with
+  every berry on a stalk of its own arching from the crown, a rod when the
+  stems bend, and runners lying along the soil with a plantlet at the tip.
+  Weeds, the vineyard's five habits, come up in the beds' soil and on the
+  paths at a pressure of each, `weeds` knobs, named `Weed_` and carrying
+  `crop` false. Scene-wide `physics` switches say what collides, every stem
+  as a chain of capsules and every fruit and root as a capsule, and what
+  bends: with `flexible_stems` a pole bean's vine and a strawberry's fruit
+  stalks are rods in `segment` lengths, the leaves, pods and berries riding
+  the segments with their masses as the cable's loads; `leaves_collide` puts
+  a box round every blade, fitted in the plane it lies flattest in, under
+  `Leaf_NN/Collision` beside the `Blade` that draws it. `cargo run -p
+  garden-lab` opens its viewer, and
   `garden_lab.isaaclab.GardenCfg` spawns it in Isaac Lab, its `PLANT` and
   `without_rods()` saying what prim a rod belongs to and whether a cfg
   authors one.

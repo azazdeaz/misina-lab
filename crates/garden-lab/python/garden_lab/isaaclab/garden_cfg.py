@@ -52,8 +52,9 @@ class PhysicsCfg:
     through each other push apart when the solver starts.
     """
     flexible_stems: bool = False
-    """Whether the stems that bend, a pole bean's vine, are rods the solver moves, their
-    leaves and pods riding them; off, they are wood like every other stem.
+    """Whether the stems that bend, a pole bean's vine and a strawberry's fruit stalks,
+    are rods the solver moves, their leaves, pods and berries riding them; off, they
+    are wood like every other stem.
     """
     segment: float = 0.05
     """Length of a rod's segments, in meters: shorter bends smoother and costs a body
@@ -360,7 +361,54 @@ class ZucchiniCfg:
     """
 
 
+@configclass
+class StrawberryCfg:
+    """Strawberry: a crown of toothed trifoliate leaves on long petioles, every berry
+    hanging from a stalk of its own arching out from the crown and cut when ripe, and
+    runners sent out along the soil, grown to harvest over eleven weeks.
+    """
+
+    leaves: int = 8
+    """Leaves on a harvest-ready plant."""
+    leaf_length: float = 0.2
+    """Length of a grown leaf, petiole and leaflets, in meters."""
+    fruits: int = 4
+    """Berries a harvest-ready plant bears, each on a stalk of its own, set a week apart
+    once the plant is older than six and a half weeks.
+    """
+    fruit_length: float = 0.03
+    """Length of a ripe berry, in meters."""
+    runners: int = 1
+    """Runners a plant older than five weeks sends out along the soil."""
+    share: float = 0.25
+    """Share of the garden's planting squares this crop gets, against the other crops';
+    0 leaves it out.
+    """
+    spacing: float = 0.15
+    """Distance between plants, in meters: rounded to one, two, three or four per side
+    of a 30 cm square, or, wider than a square, to a plant every two or three
+    squares, on the lattice that fits the most into the crop's block.
+    """
+    sown_week: float = 0.0
+    """The week it was sown, on the scene's calendar: a plant's age is the scene's week
+    less this, and a bed is bare before it.
+    """
+    bed: int = 0
+    """The one bed it is confined to, counted from 1; 0 plants it anywhere."""
+    variations: int = 12
+    """How many distinct meshes each of its organs, its leaves and its fruit, may share.
+    A budget, not a count: the organs are clustered and this is how many
+    representatives the clustering may keep.
+    """
+
+
 # <<< generated: fragments
+
+
+STRAWBERRY_FRUITS_FROM = 6.5
+"""The age, in weeks, a strawberry has to be older than to have set its first
+berry, whose stalk is its first rod: `FRUITS_FROM` in
+`crates/garden-lab/src/species/strawberry.rs`."""
 
 
 @configclass
@@ -373,8 +421,9 @@ class GardenCfg(GeneratedSceneCfg):
 
     It comes with its own static colliders: the floor, every bed's frame and
     soil, each as its own mesh, and the trellis and strings of a bed that
-    holds a climber. With `PhysicsCfg.flexible_stems` a pole bean's vine is
-    a rod, which only the VBD solver steps; see `for_backend`.
+    holds a climber. With `PhysicsCfg.flexible_stems` a pole bean's vine and
+    a strawberry's fruit stalks are rods, which only the VBD solver steps;
+    see `for_backend`.
 
     .. code-block:: python
 
@@ -392,25 +441,32 @@ class GardenCfg(GeneratedSceneCfg):
 
     def without_rods(self) -> Self | None:
         """The garden with every stem rigid, or `None` when none bends as it
-        stands: flexible stems off, or the one climbing crop, the pole bean,
-        left out, confined to a bed the grid has not got, or not sown by the
-        scene's week.
+        stands: flexible stems off, or both crops that bend, the pole bean
+        and the strawberry, left out, confined to a bed the grid has not
+        got, or not sown by the scene's week, the strawberry early enough to
+        have set its first berry, whose stalk is its first rod, and with
+        berries to set at all.
 
-        What is left is a promise, not a count: a pole bean share can still
-        round to no square of a small bed, every place of it can miss, and
-        a vine too young for two rod segments is wood. The coupled solver
-        refuses an entry that owns no body, at reset, with its own error.
-        Keep the stems rigid for such a scene.
+        What is left is a promise, not a count: a share can still round to
+        no square of a small bed, every place of it can miss, and a vine too
+        young for two rod segments is wood. The coupled solver refuses an
+        entry that owns no body, at reset, with its own error. Keep the
+        stems rigid for such a scene.
         """
         # ponytail: read off the cfg, as the scene itself is only generated
         # inside the app, after the physics config was built.
-        bean, bed = self.pole_bean, self.bed
-        if (
-            not self.physics.flexible_stems
-            or bean.share <= 0.0
-            or bean.bed > bed.columns * bed.rows
-            or bean.sown_week > self.scene.week
-        ):
+        bed, week = self.bed, self.scene.week
+
+        def dealt(crop) -> bool:
+            return crop.share > 0.0 and crop.bed <= bed.columns * bed.rows
+
+        vines = dealt(self.pole_bean) and week >= self.pole_bean.sown_week
+        stalks = (
+            dealt(self.strawberry)
+            and self.strawberry.fruits > 0
+            and week - self.strawberry.sown_week > STRAWBERRY_FRUITS_FROM
+        )
+        if not self.physics.flexible_stems or not (vines or stalks):
             return None
         return self.replace(physics=self.physics.replace(flexible_stems=False))
 
@@ -426,6 +482,7 @@ class GardenCfg(GeneratedSceneCfg):
     bush_bean: BushBeanCfg = BushBeanCfg()
     pole_bean: PoleBeanCfg = PoleBeanCfg()
     zucchini: ZucchiniCfg = ZucchiniCfg()
+    strawberry: StrawberryCfg = StrawberryCfg()
 
     FRAGMENTS: ClassVar[tuple[str, ...]] = (
         "scene",
@@ -439,6 +496,7 @@ class GardenCfg(GeneratedSceneCfg):
         "bush_bean",
         "pole_bean",
         "zucchini",
+        "strawberry",
     )
     """The fragment fields, in the order `GardenParams` takes them: what `to_params`
     converts and the cache key is built from. Everything else on the cfg is applied

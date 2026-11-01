@@ -31,7 +31,9 @@ use misina_lab::Build;
 use misina_lab::geometry::mesh::{MeshData, box_mesh};
 use misina_lab::params::{Label, Slider};
 
-use crate::species::{self, Commons, bush_bean, carrot, kale, lettuce, pole_bean, zucchini};
+use crate::species::{
+    self, Commons, bush_bean, carrot, kale, lettuce, pole_bean, strawberry, zucchini,
+};
 
 /// Build order: the species publish their common knobs, the layout spawns
 /// the bed prims the fixtures fill, planting fills the beds, and each layer
@@ -85,6 +87,7 @@ pub fn plugin(app: &mut App) {
     species::species::<bush_bean::BushBean>(app);
     species::species::<pole_bean::PoleBean>(app);
     species::species::<zucchini::Zucchini>(app);
+    species::species::<strawberry::Strawberry>(app);
 }
 
 /// Scene-wide parameters: the seed, and how far into the season the garden is.
@@ -131,9 +134,9 @@ pub struct PhysicsParams {
     /// authored with their leaves through each other push apart when the
     /// solver starts.
     pub leaves_collide: bool,
-    /// Whether the stems that bend, a pole bean's vine, are rods the solver
-    /// moves, their leaves and pods riding them; off, they are wood like
-    /// every other stem.
+    /// Whether the stems that bend, a pole bean's vine and a strawberry's
+    /// fruit stalks, are rods the solver moves, their leaves, pods and
+    /// berries riding them; off, they are wood like every other stem.
     pub flexible_stems: bool,
     /// Length of a rod's segments, in meters: shorter bends smoother and
     /// costs a body per segment. No longer than 6 cm, the most a pole bean's
@@ -172,6 +175,7 @@ misina_lab::generator! {
         #[reflect(@Label("Pole bean"))]
         pub pole_bean: pole_bean::PoleBeanParams,
         pub zucchini: zucchini::ZucchiniParams,
+        pub strawberry: strawberry::StrawberryParams,
     }
 }
 
@@ -205,6 +209,7 @@ pub(crate) fn bare() -> GardenParams {
         &mut params.bush_bean.share,
         &mut params.pole_bean.share,
         &mut params.zucchini.share,
+        &mut params.strawberry.share,
     ] {
         *share = 0.0;
     }
@@ -345,6 +350,12 @@ mod tests {
             ("zucchini leaf", edited(|p| p.zucchini.leaf_length = 0.9)),
             ("zucchini closer", edited(|p| p.zucchini.spacing = 0.6)),
             ("no zucchini", edited(|p| p.zucchini.share = 0.0)),
+            (
+                "strawberry leaf",
+                edited(|p| p.strawberry.leaf_length = 0.3),
+            ),
+            ("no runners", edited(|p| p.strawberry.runners = 0)),
+            ("no strawberries", edited(|p| p.strawberry.share = 0.0)),
             ("weeds", edited(|p| p.weeds.pressure = 12.0)),
             (
                 "no weeds",
@@ -387,6 +398,7 @@ mod tests {
                 "vine height while flexible",
                 bent(|p| p.pole_bean.height = 1.6),
             ),
+            ("berries while flexible", bent(|p| p.strawberry.fruits = 1)),
         ] {
             let mut app = grown(flexible());
             want.apply(app.world_mut());
@@ -439,6 +451,142 @@ mod tests {
                 "{} lies in the soil: {} to {far}",
                 f.path,
                 f.position()
+            );
+        }
+    }
+
+    /// One square of strawberries alone at harvest, no place missed, the
+    /// stems rigid.
+    fn strawberries() -> GardenParams {
+        let mut params = bare();
+        params.strawberry.share = 1.0;
+        (params.bed.length, params.bed.width) = (0.5, 0.5);
+        (params.planting.misses, params.scene.week) = (0.0, 11.0);
+        params
+    }
+
+    /// A square of strawberries at harvest, at the default sliders and at
+    /// the shortest leaves with the longest berries: every plant a crown of
+    /// toothed trifoliate leaves, berries each at the tip of a stalk from
+    /// the crown with neither end under the soil, and a runner landed on
+    /// the soil with a plantlet of three leaves at its tip, numbered apart
+    /// from the crown's.
+    #[test]
+    fn a_strawberry_hangs_its_berries_clear_of_the_soil_and_runs_a_plantlet() {
+        let number = |name: &str| -> u64 { name.strip_prefix("Leaf_").unwrap().parse().unwrap() };
+        for extreme in [false, true] {
+            let mut params = strawberries();
+            if extreme {
+                (
+                    params.strawberry.leaf_length,
+                    params.strawberry.fruit_length,
+                ) = (0.1, 0.045);
+            }
+            let mut app = grown(params);
+            assert_eq!(organs::<PlantConfig>(app.world_mut()).len(), 4);
+            let leaves = organs::<LeafConfig>(app.world_mut());
+            assert!(leaves.iter().all(|leaf| {
+                leaf.config.template == Template::Trifoliate && leaf.config.teeth > 0
+            }));
+            let plantlet: Vec<Vec3> = leaves
+                .iter()
+                .filter(|leaf| number(&leaf.name) >= 1000)
+                .map(|leaf| leaf.position())
+                .collect();
+            assert_eq!(plantlet.len(), 4 * 3, "{} leaves", leaves.len());
+            assert!(leaves.len() > 4 * 3 + 4 * 6);
+            assert!(
+                plantlet.iter().all(|at| at.z < 0.01),
+                "a plantlet in the air: {plantlet:?}"
+            );
+            let fruit = organs::<FruitConfig>(app.world_mut());
+            assert_eq!(fruit.len(), 4 * 4);
+            for f in &fruit {
+                assert_eq!(f.config.kind, Kind::Strawberry);
+                // In the plant's frame, the soil at z = 0: the berry hangs
+                // down its own -Z from the stalk's tip, and neither end is
+                // under the soil.
+                let far = f.position() + f.transform.rotation * -Vec3::Z * f.config.length;
+                assert!(
+                    f.position().z > 0.0 && far.z > -1e-5,
+                    "{} lies in the soil: {} to {far}",
+                    f.path,
+                    f.position()
+                );
+            }
+        }
+    }
+
+    /// A strawberry sets its first berry, and grows its first stalk, once it
+    /// is older than six and a half weeks: none at week 6.4, one at 6.6,
+    /// which `GardenCfg.without_rods` mirrors.
+    #[test]
+    fn a_strawberry_sets_its_first_berry_past_six_and_a_half_weeks() {
+        for (week, berries) in [(6.4, 0), (6.6, 4)] {
+            let mut params = strawberries();
+            params.scene.week = week;
+            let mut app = grown(params);
+            assert_eq!(
+                organs::<FruitConfig>(app.world_mut()).len(),
+                berries,
+                "week {week}"
+            );
+        }
+    }
+
+    /// With the stems flexible every stalk of a strawberry is a rod of its
+    /// own, at least three segments long, carrying its berry on its last
+    /// segment as the cable's one load, the leaves staying on the plant.
+    #[test]
+    fn flexible_strawberry_stalks_are_rods_carrying_their_berries() {
+        let mut params = strawberries();
+        params.physics.flexible_stems = true;
+        let mut app = grown(params);
+        let plant = prim(app.world_mut(), &["Beds", "Bed_00", "Plant_000"]).unwrap();
+        let children = named_children(app.world_mut(), plant);
+        let rods: Vec<Entity> = children
+            .iter()
+            .filter(|(name, _)| name.starts_with("Rod_"))
+            .map(|(_, rod)| *rod)
+            .collect();
+        assert_eq!(rods.len(), 4, "{children:?}");
+        assert!(
+            children.iter().any(|(name, _)| name.starts_with("Leaf_"))
+                && !children.iter().any(|(name, _)| name.starts_with("Fruit_")),
+            "{children:?}"
+        );
+        for rod in rods {
+            let parts = named_children(app.world_mut(), rod);
+            let cable = parts
+                .iter()
+                .find(|(name, _)| name == "Cable")
+                .map(|(_, cable)| app.world().entity(*cable).get::<Cable>().unwrap().0.clone())
+                .unwrap();
+            let last = parts
+                .iter()
+                .filter_map(|(name, segment)| {
+                    let index: usize = name.strip_prefix("Cable_edge_body_")?.parse().ok()?;
+                    Some((index, *segment))
+                })
+                .max()
+                .unwrap();
+            assert!(last.0 >= 2, "{parts:?}");
+            let berry = named_children(app.world_mut(), last.1)
+                .into_iter()
+                .find(|(name, _)| name.starts_with("Fruit_"))
+                .map(|(_, berry)| {
+                    app.world()
+                        .entity(berry)
+                        .get::<FruitConfig>()
+                        .unwrap()
+                        .mass()
+                })
+                .expect("the berry rides the last segment");
+            let (held, tip) = cable.loads.split_at(cable.loads.len() - 1);
+            assert!(
+                (tip[0] - berry).abs() < 1e-6 && held.iter().all(|load| *load < 1e-6),
+                "{:?} for a {berry} kg berry",
+                cable.loads
             );
         }
     }

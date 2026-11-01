@@ -6,11 +6,11 @@
 //! midrib and its tip drooped, on a stalk when the template has one. A
 //! compound leaf is a rachis with toothed leaflets in pairs along it and one
 //! at its tip, the whole drooped; a trifoliate leaf a petiole with a pair of
-//! entire leaflets where it ends and one past them, the same. A lobed leaf
-//! is a palmate ring, an ellipse carved by sinuses, its lobes sagging from
-//! its centre and the whole hinged down where the petiole ends. A ruffle
-//! displaces the margin out of the plane rather than lengthening it, which a
-//! flat triangulation cannot do.
+//! leaflets, entire or toothed, where it ends and one past them, the same. A
+//! lobed leaf is a palmate ring, an ellipse carved by sinuses, its lobes
+//! sagging from its centre and the whole hinged down where the petiole
+//! ends. A ruffle displaces the margin out of the plane rather than
+//! lengthening it, which a flat triangulation cannot do.
 
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
@@ -347,17 +347,23 @@ fn compound(config: &LeafConfig) -> anyhow::Result<MeshData> {
     Ok(drooped(merge_meshes(&parts), config.droop as f64 / whole))
 }
 
-/// A trifoliate leaf: a petiole, a pair of entire leaflets spread either
-/// side where it ends, and one straight on past them on a short stalk, the
-/// whole drooped.
+/// A trifoliate leaf: a petiole, a pair of leaflets spread either side
+/// where it ends, and one straight on past them on a short stalk, each
+/// entire or cut with the config's teeth, the whole drooped.
 fn trifoliate(config: &LeafConfig) -> anyhow::Result<MeshData> {
     let whole = config.length.max(0.005) as f64;
     let petiole = (config.petiole as f64).clamp(0.0, 0.8 * whole);
     let rachis = TRIFOLIATE_RACHIS * (whole - petiole);
     let terminal = whole - petiole - rachis;
     let cut = |length: f64| -> anyhow::Result<MeshData> {
+        let width = config.width as f64 * length;
+        let ring = if config.teeth > 0 {
+            toothed(length, width, LEAFLET_PEAK, config.teeth as usize)
+        } else {
+            leaf(length, width, LEAFLET_PEAK)
+        };
         bent(
-            leaf(length, config.width as f64 * length, LEAFLET_PEAK),
+            ring,
             TRIFOLIATE_DROOP,
             TRIFOLIATE_KEEL,
             TRIFOLIATE_TRIANGLES,
@@ -426,6 +432,26 @@ mod tests {
     use misina_lab::testing::bounds;
 
     use super::*;
+
+    /// A trifoliate leaf's teeth notch its leaflets' edges: the mesh changes,
+    /// the leaf still reaches its length and stays inside the width the
+    /// entire one spans, and its area is drawn the same.
+    #[test]
+    fn teeth_notch_a_trifoliate_leaflet_inside_its_width() {
+        let entire = LeafConfig::trifoliate(0.2, 0.8).petiole(0.1);
+        let toothed = entire.teeth(7);
+        let (plain, cut) = (mesh(&entire).unwrap(), mesh(&toothed).unwrap());
+        assert!(plain.points != cut.points);
+        let (y0, y1) = bounds(&cut, 1);
+        let (p0, p1) = bounds(&plain, 1);
+        assert!(
+            y0 >= p0 - 1e-3 && y1 <= p1 + 1e-3,
+            "{y0}..{y1} vs {p0}..{p1}"
+        );
+        let (_, x1) = bounds(&cut, 0);
+        assert!(x1 > 0.7 * 0.2 && x1 <= 0.2 + 1e-6, "{x1}");
+        assert_eq!(area(&entire), area(&toothed));
+    }
 
     /// A blade starts at the origin, reaches about its length however it is
     /// deformed, keeps inside its width, and stays a modest mesh; a flat one

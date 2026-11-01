@@ -23,12 +23,19 @@ const POD_END: f32 = 6.0;
 const POD_TAPER: f32 = 0.35;
 const POD_CURVE: f32 = 0.08;
 
-/// A berry: its rings, how round its ends are (the exponent its profile
-/// falls to them with), and how much narrower it is at its stalk than at its
-/// widest.
-const BERRY_RINGS: usize = 12;
+/// Rings along a solid [`turned`] from a profile.
+const PROFILE_RINGS: usize = 12;
+
+/// A berry: how round its ends are (the exponent its profile falls to them
+/// with), and how much narrower it is at its stalk than at its widest.
 const BERRY_END: f32 = 3.0;
 const BERRY_NECK: f32 = 0.4;
+
+/// A strawberry: how round its shoulder is, the exponent its profile rises
+/// from the stalk with, and how fast it narrows to its tip, the power the
+/// way left is raised to.
+const STRAWBERRY_SHOULDER: f32 = 3.0;
+const STRAWBERRY_TAPER: f32 = 0.6;
 
 /// A closed surface through `rings`, from `top` down to `bottom`, every ring
 /// the same number of points counter-clockwise seen from above. Faces wind
@@ -84,26 +91,39 @@ pub fn root(config: &FruitConfig) -> MeshData {
     lathe(Vec3::ZERO, &rings, Vec3::new(0.0, 0.0, -length))
 }
 
+/// `profile`, the radius `t` of the way down as a fraction of the widest,
+/// sampled at [`PROFILE_RINGS`] rings and turned about -Z from the origin
+/// down to `length`, the widest ring `radius` out.
+fn turned(config: &FruitConfig, profile: impl Fn(f32) -> f32) -> MeshData {
+    let (radius, length) = (config.diameter.max(1e-3) / 2.0, config.length.max(1e-3));
+    let stations: Vec<f32> = (0..PROFILE_RINGS)
+        .map(|j| (j as f32 + 0.5) / PROFILE_RINGS as f32)
+        .collect();
+    let widest = stations.iter().map(|&t| profile(t)).fold(0.0, f32::max);
+    let rings: Vec<Vec<Vec3>> = stations
+        .iter()
+        .map(|&t| ring(radius * profile(t) / widest, -length * t))
+        .collect();
+    lathe(Vec3::ZERO, &rings, Vec3::new(0.0, 0.0, -length))
+}
+
 /// A berry hanging from the origin down -Z: a cylinder rounded at both
 /// ends, its diameter toward its far end and narrowing to its stalk.
 pub fn berry(config: &FruitConfig) -> MeshData {
-    let (radius, length) = (config.diameter.max(1e-3) / 2.0, config.length.max(1e-3));
-    let station = |j: usize| (j as f32 + 0.5) / BERRY_RINGS as f32;
-    let profile: Vec<f32> = (0..BERRY_RINGS)
-        .map(|j| {
-            let t = station(j);
-            let ends = (1.0 - t.powf(BERRY_END)).sqrt() * (1.0 - (1.0 - t).powf(BERRY_END)).sqrt();
-            ends * (1.0 - BERRY_NECK * (1.0 - t))
-        })
-        .collect();
-    // Scaled so the widest ring is the diameter.
-    let widest = profile.iter().copied().fold(0.0, f32::max);
-    let rings: Vec<Vec<Vec3>> = profile
-        .iter()
-        .enumerate()
-        .map(|(j, r)| ring(radius * r / widest, -length * station(j)))
-        .collect();
-    lathe(Vec3::ZERO, &rings, Vec3::new(0.0, 0.0, -length))
+    turned(config, |t| {
+        let ends = (1.0 - t.powf(BERRY_END)).sqrt() * (1.0 - (1.0 - t).powf(BERRY_END)).sqrt();
+        ends * (1.0 - BERRY_NECK * (1.0 - t))
+    })
+}
+
+/// A strawberry hanging from the origin down -Z: a shoulder rounding out
+/// from its stalk, widest a third of the way down and narrowing to a point
+/// at its tip.
+pub fn strawberry(config: &FruitConfig) -> MeshData {
+    turned(config, |t| {
+        let left = 1.0 - t;
+        (1.0 - left.powf(STRAWBERRY_SHOULDER)).sqrt() * left.powf(STRAWBERRY_TAPER)
+    })
 }
 
 /// A pod hanging from the origin down -Z: a slender solid rounded at both
@@ -164,7 +184,7 @@ mod tests {
         );
         let widest = mesh.points.iter().find(|p| p[1] > 0.0249).unwrap()[2];
         assert!(widest < -0.1, "widest at {widest}");
-        let stalk_end = -0.2 * 0.5 / BERRY_RINGS as f32;
+        let stalk_end = -0.2 * 0.5 / PROFILE_RINGS as f32;
         let neck = mesh
             .points
             .iter()
@@ -172,6 +192,30 @@ mod tests {
             .map(|p| p[1].abs())
             .fold(0.0, f32::max);
         assert!(neck > 0.005 && neck < 0.6 * 0.025, "{neck}");
+    }
+
+    /// A strawberry hangs its length, is as wide as its diameter in its
+    /// upper half and narrows to a point: its last ring well under half its
+    /// widest.
+    #[test]
+    fn a_strawberry_is_widest_in_its_upper_half_and_pointed() {
+        let mesh = strawberry(&FruitConfig::strawberry(0.025, 0.03));
+        assert_eq!(bounds(&mesh, 2), (-0.03, 0.0));
+        let (y0, y1) = bounds(&mesh, 1);
+        assert!(
+            y1 > 0.01249 && y1 <= 0.0125 + 1e-6 && (y0 + y1).abs() < 1e-6,
+            "{y0}..{y1}"
+        );
+        let widest = mesh.points.iter().find(|p| p[1] > 0.01249).unwrap()[2];
+        assert!(widest > -0.015 && widest < -0.005, "widest at {widest}");
+        let tip_ring = -0.03 * (PROFILE_RINGS as f32 - 0.5) / PROFILE_RINGS as f32;
+        let tip = mesh
+            .points
+            .iter()
+            .filter(|p| (p[2] - tip_ring).abs() < 1e-6)
+            .map(|p| p[1].abs())
+            .fold(0.0, f32::max);
+        assert!(tip > 0.0 && tip < 0.4 * 0.0125, "{tip}");
     }
 
     /// A pod hangs its length, is as wide as its diameter about its middle,

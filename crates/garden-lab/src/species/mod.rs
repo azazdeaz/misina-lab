@@ -133,6 +133,7 @@ pub mod carrot;
 pub mod kale;
 pub mod lettuce;
 pub mod pole_bean;
+pub mod strawberry;
 pub mod zucchini;
 
 /// What a species file writes its recipe in.
