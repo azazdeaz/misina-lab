@@ -2,7 +2,9 @@
 //!
 //! [`author`] deals each bed's soil out in 30 cm squares to the species
 //! [`Commons`] lists, by their shares, and fills every square with as many
-//! plants as its species' spacing asks for, on a grid jittered off exact.
+//! plants as its species' spacing asks for, on a grid jittered off exact; a
+//! species spaced wider than a square gets a plant every two or three
+//! squares instead, on the lattice that fits the most into its block.
 //! It spawns one entity per plant under its bed's prim, carrying the
 //! species' marker and the [`PlantConfig`] its recipe reads; the plant
 //! layers grow the rest. A bed dealt a climbing species gets the trellis
@@ -18,6 +20,8 @@
 //! empty, by the miss rate, by a wider spacing or by a crop not yet sown,
 //! leaves a gap in the numbering, so a config keyed on a path is never
 //! repointed at another plant.
+
+use std::collections::BTreeMap;
 
 use bevy::prelude::*;
 use misina_lab::geometry::mesh::cylinder_mesh;
@@ -164,107 +168,151 @@ fn author(
             });
             commands.spawn((Owned, Name::new("Trellis"), geometry.clone(), ChildOf(bed)));
         }
+        // Each species' block of squares, in cell order.
+        let mut blocks: BTreeMap<&str, (&Entry, Vec<usize>)> = BTreeMap::new();
         for (cell, plot) in plots.into_iter().enumerate() {
-            let Some((name, entry)) = plot else {
-                continue;
-            };
-            let square = Vec2::new(
-                (cell as u32 % squares.x) as f32,
-                (cell as u32 / squares.x) as f32,
-            );
-            let per_side = (SQUARE / entry.common.spacing.max(1e-3))
-                .round()
-                .clamp(1.0, MAX_PER_SIDE as f32) as u32;
-            let pitch = SQUARE / per_side as f32;
-            let age = scene.week - entry.common.sown_week;
-            for k in 0..per_side * per_side {
-                let (col, row) = (k % per_side, k / per_side);
-                let number = cell as u64 * PLACES + (row * MAX_PER_SIDE + col) as u64;
-                let mut rng = Rng::new(scene.seed ^ STREAM ^ salt(bed_index << 32 | number));
-                let missed = rng.unit() < params.misses as f64;
-                let off = Vec2::new(rng.range(-1.0, 1.0) as f32, rng.range(-1.0, 1.0) as f32)
-                    * jitter
-                    * pitch;
-                let vigour = rng.range(1.0 - VIGOUR, 1.0 + VIGOUR) as f32;
-                // Not sown yet, or never came up.
-                if age < 0.0 || missed {
-                    continue;
-                }
-                let slot = Vec2::new(col as f32, row as f32) + Vec2::splat(0.5);
-                let at = corner + square * SQUARE + slot * pitch + off;
-                // The string runs from the plant's foot to under the rail,
-                // straight north.
-                let string = entry.climbs.then(|| {
-                    Vec3::new(
-                        at.x,
-                        trellis_y(layout.bed),
-                        layout.rail_z - TRELLIS_TIMBER / 2.0,
-                    ) - at.extend(layout.soil_z)
-                });
-                let mut plant = commands.spawn((
-                    Owned,
-                    Name::new(format!("Plant_{number:03}")),
-                    Order(bed_index << 32 | number),
-                    PlantConfig {
-                        age,
-                        vigour,
-                        seed: scene.seed ^ PLANT_STREAM ^ salt(bed_index << 32 | number),
-                        string,
-                    },
-                    UsdAttributes::default()
-                        .with("species", name)
-                        .with("crop", true)
-                        .with("age", age),
-                    Transform::from_translation(at.extend(layout.soil_z)),
-                    Visibility::default(),
-                    ChildOf(bed),
-                ));
-                (entry.tag)(&mut plant);
-                if let Some(top) = string {
-                    let twine = string_part
-                        .get_or_insert_with(|| {
-                            let (color, response) = STRING;
-                            library.part(
-                                "String",
-                                0,
-                                cylinder_mesh(1.0, 1.0, 1.0, STRING_SIDES).to_mesh(),
-                                response.surface(srgb(color)),
-                            )
-                        })
-                        .clone();
-                    let length = top.length();
-                    // A unit cylinder up +Z, scaled to the string and turned
-                    // to it, and a capsule the same, its tips at the ends.
-                    plant.with_children(|plant| {
-                        plant
-                            .spawn((
-                                Name::new("String"),
-                                Transform::from_rotation(Quat::from_rotation_arc(
-                                    Vec3::Z,
-                                    top / length,
-                                )),
-                                Visibility::default(),
-                            ))
-                            .with_children(|string| {
-                                string.spawn((
-                                    Name::new("Cord"),
-                                    twine,
-                                    Transform::from_scale(Vec3::new(
-                                        STRING_RADIUS,
-                                        STRING_RADIUS,
-                                        length,
-                                    )),
-                                ));
-                                string.spawn((
-                                    Name::new(COLLISION),
-                                    capsule(STRING_RADIUS, 0.0, length),
-                                ));
-                            });
+            if let Some((name, entry)) = plot {
+                blocks
+                    .entry(name)
+                    .or_insert((entry, Vec::new()))
+                    .1
+                    .push(cell);
+            }
+        }
+        for (name, (entry, cells)) in blocks {
+            let stride = (entry.common.spacing / SQUARE).round().max(1.0) as u32;
+            for cell in lattice(&cells, squares.x, stride) {
+                let square = Vec2::new(
+                    (cell as u32 % squares.x) as f32,
+                    (cell as u32 / squares.x) as f32,
+                );
+                let per_side = (SQUARE / entry.common.spacing.max(1e-3))
+                    .round()
+                    .clamp(1.0, MAX_PER_SIDE as f32) as u32;
+                let pitch = SQUARE / per_side as f32;
+                let age = scene.week - entry.common.sown_week;
+                for k in 0..per_side * per_side {
+                    let (col, row) = (k % per_side, k / per_side);
+                    let number = cell as u64 * PLACES + (row * MAX_PER_SIDE + col) as u64;
+                    let mut rng = Rng::new(scene.seed ^ STREAM ^ salt(bed_index << 32 | number));
+                    let missed = rng.unit() < params.misses as f64;
+                    let off = Vec2::new(rng.range(-1.0, 1.0) as f32, rng.range(-1.0, 1.0) as f32)
+                        * jitter
+                        * pitch;
+                    let vigour = rng.range(1.0 - VIGOUR, 1.0 + VIGOUR) as f32;
+                    // Not sown yet, or never came up.
+                    if age < 0.0 || missed {
+                        continue;
+                    }
+                    let slot = Vec2::new(col as f32, row as f32) + Vec2::splat(0.5);
+                    let at = corner + square * SQUARE + slot * pitch + off;
+                    // The string runs from the plant's foot to under the rail,
+                    // straight north.
+                    let string = entry.climbs.then(|| {
+                        Vec3::new(
+                            at.x,
+                            trellis_y(layout.bed),
+                            layout.rail_z - TRELLIS_TIMBER / 2.0,
+                        ) - at.extend(layout.soil_z)
                     });
+                    let mut plant = commands.spawn((
+                        Owned,
+                        Name::new(format!("Plant_{number:03}")),
+                        Order(bed_index << 32 | number),
+                        PlantConfig {
+                            age,
+                            vigour,
+                            seed: scene.seed ^ PLANT_STREAM ^ salt(bed_index << 32 | number),
+                            string,
+                        },
+                        UsdAttributes::default()
+                            .with("species", name)
+                            .with("crop", true)
+                            .with("age", age),
+                        Transform::from_translation(at.extend(layout.soil_z)),
+                        Visibility::default(),
+                        ChildOf(bed),
+                    ));
+                    (entry.tag)(&mut plant);
+                    if let Some(top) = string {
+                        let twine = string_part
+                            .get_or_insert_with(|| {
+                                let (color, response) = STRING;
+                                library.part(
+                                    "String",
+                                    0,
+                                    cylinder_mesh(1.0, 1.0, 1.0, STRING_SIDES).to_mesh(),
+                                    response.surface(srgb(color)),
+                                )
+                            })
+                            .clone();
+                        let length = top.length();
+                        // A unit cylinder up +Z, scaled to the string and turned
+                        // to it, and a capsule the same, its tips at the ends.
+                        plant.with_children(|plant| {
+                            plant
+                                .spawn((
+                                    Name::new("String"),
+                                    Transform::from_rotation(Quat::from_rotation_arc(
+                                        Vec3::Z,
+                                        top / length,
+                                    )),
+                                    Visibility::default(),
+                                ))
+                                .with_children(|string| {
+                                    string.spawn((
+                                        Name::new("Cord"),
+                                        twine,
+                                        Transform::from_scale(Vec3::new(
+                                            STRING_RADIUS,
+                                            STRING_RADIUS,
+                                            length,
+                                        )),
+                                    ));
+                                    string.spawn((
+                                        Name::new(COLLISION),
+                                        capsule(STRING_RADIUS, 0.0, length),
+                                    ));
+                                });
+                        });
+                    }
                 }
             }
         }
     }
+}
+
+/// The squares of a species' block, `cells` on a bed `columns` squares
+/// wide, that a plant stands in: every one at a stride of one; else those
+/// on the lattice `stride` squares apart at the phase that fits the most
+/// plants into the block, the most central of the phases that tie, so a
+/// block a single row deep still holds a plant.
+fn lattice(cells: &[usize], columns: u32, stride: u32) -> Vec<usize> {
+    if stride <= 1 {
+        return cells.to_vec();
+    }
+    let on = |(px, py): (u32, u32)| -> Vec<usize> {
+        cells
+            .iter()
+            .copied()
+            .filter(|&cell| {
+                let (x, y) = (cell as u32 % columns, cell as u32 / columns);
+                x % stride == px && y % stride == py
+            })
+            .collect()
+    };
+    let centre = (stride / 2) as i32;
+    let mut phases: Vec<(u32, u32)> = (0..stride)
+        .flat_map(|x| (0..stride).map(move |y| (x, y)))
+        .collect();
+    phases.sort_by_key(|&(x, y)| (x as i32 - centre).abs() + (y as i32 - centre).abs());
+    // `max_by_key` keeps the last of equals, so the most central comes last.
+    phases
+        .into_iter()
+        .rev()
+        .map(on)
+        .max_by_key(Vec::len)
+        .unwrap_or_default()
 }
 
 /// Which species holds each of a bed's `squares`: the species allowed in
@@ -352,5 +400,19 @@ mod tests {
         );
         commons.0.clear();
         assert_eq!(names(&commons, 1), vec![None; 8]);
+    }
+
+    /// On a bed seven squares long and three deep, a crop three squares
+    /// apart stands in the middle row at the phase that fits three plants,
+    /// one two squares apart in the outer rows, where eight fit, and a block
+    /// one row deep still holds what fits in it.
+    #[test]
+    fn a_wide_spaced_crop_stands_on_the_lattice_that_fits_the_most() {
+        let whole: Vec<usize> = (0..21).collect();
+        assert_eq!(lattice(&whole, 7, 1), whole);
+        assert_eq!(lattice(&whole, 7, 3), [7, 10, 13]);
+        assert_eq!(lattice(&(14..21).collect::<Vec<_>>(), 7, 3), [14, 17, 20]);
+        assert_eq!(lattice(&(17..21).collect::<Vec<_>>(), 7, 3), [17, 20]);
+        assert_eq!(lattice(&whole, 7, 2), [0, 2, 4, 6, 14, 16, 18, 20]);
     }
 }

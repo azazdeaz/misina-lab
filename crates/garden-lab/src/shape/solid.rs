@@ -1,4 +1,5 @@
-//! Solids — fruit and roots: a profile turned about an axis.
+//! Solids — fruit and roots: a profile turned about an axis, every one
+//! hanging from the origin down -Z.
 
 use std::f32::consts::TAU;
 
@@ -21,6 +22,13 @@ const POD_RINGS: usize = 14;
 const POD_END: f32 = 6.0;
 const POD_TAPER: f32 = 0.35;
 const POD_CURVE: f32 = 0.08;
+
+/// A berry: its rings, how round its ends are (the exponent its profile
+/// falls to them with), and how much narrower it is at its stalk than at its
+/// widest.
+const BERRY_RINGS: usize = 12;
+const BERRY_END: f32 = 3.0;
+const BERRY_NECK: f32 = 0.4;
 
 /// A closed surface through `rings`, from `top` down to `bottom`, every ring
 /// the same number of points counter-clockwise seen from above. Faces wind
@@ -53,6 +61,16 @@ pub fn lathe(top: Vec3, rings: &[Vec<Vec3>], bottom: Vec3) -> MeshData {
     }
 }
 
+/// A ring of [`SECTORS`] points `radius` out, at `z`.
+fn ring(radius: f32, z: f32) -> Vec<Vec3> {
+    (0..SECTORS)
+        .map(|i| {
+            let a = TAU * i as f32 / SECTORS as f32;
+            Vec3::new(radius * a.cos(), radius * a.sin(), z)
+        })
+        .collect()
+}
+
 /// A taproot hanging from the origin down -Z: as wide as its shoulder near
 /// the top, tapering to a point at its length.
 pub fn root(config: &FruitConfig) -> MeshData {
@@ -60,14 +78,30 @@ pub fn root(config: &FruitConfig) -> MeshData {
     let rings: Vec<Vec<Vec3>> = (0..RINGS)
         .map(|j| {
             let t = (j as f32 + 0.5) / RINGS as f32;
-            let r = radius * (1.0 - t.powf(SHOULDER)).sqrt();
-            (0..SECTORS)
-                .map(|i| {
-                    let a = TAU * i as f32 / SECTORS as f32;
-                    Vec3::new(r * a.cos(), r * a.sin(), -length * t)
-                })
-                .collect()
+            ring(radius * (1.0 - t.powf(SHOULDER)).sqrt(), -length * t)
         })
+        .collect();
+    lathe(Vec3::ZERO, &rings, Vec3::new(0.0, 0.0, -length))
+}
+
+/// A berry hanging from the origin down -Z: a cylinder rounded at both
+/// ends, its diameter toward its far end and narrowing to its stalk.
+pub fn berry(config: &FruitConfig) -> MeshData {
+    let (radius, length) = (config.diameter.max(1e-3) / 2.0, config.length.max(1e-3));
+    let station = |j: usize| (j as f32 + 0.5) / BERRY_RINGS as f32;
+    let profile: Vec<f32> = (0..BERRY_RINGS)
+        .map(|j| {
+            let t = station(j);
+            let ends = (1.0 - t.powf(BERRY_END)).sqrt() * (1.0 - (1.0 - t).powf(BERRY_END)).sqrt();
+            ends * (1.0 - BERRY_NECK * (1.0 - t))
+        })
+        .collect();
+    // Scaled so the widest ring is the diameter.
+    let widest = profile.iter().copied().fold(0.0, f32::max);
+    let rings: Vec<Vec<Vec3>> = profile
+        .iter()
+        .enumerate()
+        .map(|(j, r)| ring(radius * r / widest, -length * station(j)))
         .collect();
     lathe(Vec3::ZERO, &rings, Vec3::new(0.0, 0.0, -length))
 }
@@ -115,6 +149,29 @@ mod tests {
             mesh.face_vertex_counts.len(),
             2 * SECTORS + (RINGS - 1) * SECTORS
         );
+    }
+
+    /// A berry hangs its length, is as wide as its diameter below its middle
+    /// and well under it at its stalk.
+    #[test]
+    fn a_berry_is_widest_below_its_middle_and_narrow_at_its_stalk() {
+        let mesh = berry(&FruitConfig::berry(0.05, 0.2));
+        assert_eq!(bounds(&mesh, 2), (-0.2, 0.0));
+        let (y0, y1) = bounds(&mesh, 1);
+        assert!(
+            y1 > 0.0249 && y1 <= 0.025 && (y0 + y1).abs() < 1e-6,
+            "{y0}..{y1}"
+        );
+        let widest = mesh.points.iter().find(|p| p[1] > 0.0249).unwrap()[2];
+        assert!(widest < -0.1, "widest at {widest}");
+        let stalk_end = -0.2 * 0.5 / BERRY_RINGS as f32;
+        let neck = mesh
+            .points
+            .iter()
+            .filter(|p| (p[2] - stalk_end).abs() < 1e-5)
+            .map(|p| p[1].abs())
+            .fold(0.0, f32::max);
+        assert!(neck > 0.005 && neck < 0.6 * 0.025, "{neck}");
     }
 
     /// A pod hangs its length, is as wide as its diameter about its middle,

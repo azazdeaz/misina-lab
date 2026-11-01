@@ -195,6 +195,14 @@ impl LeafConfig {
         Self::template(Template::Trifoliate, length, width)
     }
 
+    /// A palmate blade, five lobes fanning from a basal notch, `length`
+    /// long from its base to its middle lobe's tip and `width` of its
+    /// blade's length across; its droop turns the blade down whole where
+    /// the petiole ends.
+    pub fn lobed(length: f32, width: f32) -> Self {
+        Self::template(Template::Lobed, length, width)
+    }
+
     /// A bare stalk `length` long between the anchor and the blade, counted
     /// in the leaf's length.
     pub fn petiole(mut self, length: f32) -> Self {
@@ -252,6 +260,17 @@ impl FruitConfig {
         Self {
             kind: Kind::Pod,
             tint: [0.25, 0.45, 0.1],
+            ..Self::root(diameter, length)
+        }
+    }
+
+    /// A berry `diameter` across at its widest and `length` long, narrower
+    /// toward its stalk, hanging down its own -Z from its anchor: a
+    /// zucchini, which its recipe lays out near level.
+    pub fn berry(diameter: f32, length: f32) -> Self {
+        Self {
+            kind: Kind::Berry,
+            tint: [0.02, 0.09, 0.015],
             ..Self::root(diameter, length)
         }
     }

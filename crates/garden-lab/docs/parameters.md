@@ -64,6 +64,20 @@ How a bed is filled, beyond what each crop says for itself.
 | `jitter` | float | `0.2` | 0 to 0.5 | How far a plant stands off its exact place, as a fraction of the distance to its neighbours: 0 is a stamped grid. |
 | `misses` | float | `0.05` | 0 to 0.5 | Share of planting places left empty: seeds that never came up. |
 
+## Weeds
+
+`WeedParams` in Python, `WeedCfg` in Isaac Lab.
+
+The plants that come up where nothing was sown: in the beds' soil and on the paths, so many to the square metre of each. Every plant is one mesh: `variations` is the budget of distinct ones and `detail` the triangles a leaf is cut into.
+
+| Parameter | Type | Default | Slider range | Description |
+|---|---|---|---|---|
+| `pressure` | float | `3.0` | 0 to 25 | Plants per square metre of bed soil. Zero is a weeded bed; the ceiling is one plant per slot of the 20 cm grid, about twenty-five. |
+| `path_pressure` | float | `1.0` | 0 to 25 | Plants per square metre of path, the floor off the beds. |
+| `tall` | float | `0.3` | 0 to 1 | The share of plants that are tall, bolters and broadleaves, against low tufts, mats and rosettes. |
+| `variations` | int | `24` | 1 to 64 | How many distinct plant meshes the scene may hold. A budget, not a count: the plants are clustered by species, stage and size and this is how many representatives the clustering may keep. |
+| `detail` | int | `16` | 4 to 64 | Triangles a leaf is cut into. |
+
 ## Lettuce
 
 `LettuceParams` in Python, `LettuceCfg` in Isaac Lab.
@@ -78,7 +92,7 @@ Lettuce, loose-leaf or heading: a rosette of entire blades, ruffled or smooth, r
 | `heading` | bool | `False` |  | Whether the inner blades close over the crown into a head. |
 | `tint` | str | `"green"` | `green`, `red`, `mix` | Foliage colour: `green`, `red`, or a `mix` of plants of either across the bed. |
 | `share` | float | `0.25` | 0 to 1 | Share of the garden's planting squares this crop gets, against the other crops'; 0 leaves it out. |
-| `spacing` | float | `0.15` | 0.03 to 1 | Distance between plants, in meters, rounded to one, two, three or four per side of a 30 cm square. |
+| `spacing` | float | `0.15` | 0.03 to 1 | Distance between plants, in meters: rounded to one, two, three or four per side of a 30 cm square, or, wider than a square, to a plant every two or three squares, on the lattice that fits the most into the crop's block. |
 | `sown_week` | float | `0.0` | 0 to 20 | The week it was sown, on the scene's calendar: a plant's age is the scene's week less this, and a bed is bare before it. |
 | `bed` | int | `0` | 0 to 24 | The one bed it is confined to, counted from 1; 0 plants it anywhere. |
 | `variations` | int | `12` | 1 to 64 | How many distinct meshes each of its organs, its leaves and its fruit, may share. A budget, not a count: the organs are clustered and this is how many representatives the clustering may keep. |
@@ -96,7 +110,7 @@ Kale: an upright stem carrying a crown of large curled blades on long petioles, 
 | `leaf_length` | float | `0.35` | 0.15 to 0.6 | Length of a grown leaf, petiole and blade, in meters. |
 | `curl` | float | `0.8` | 0 to 1 | How tightly the margin curls: 0 is a flat lacinato, 1 a curly kale. |
 | `share` | float | `0.25` | 0 to 1 | Share of the garden's planting squares this crop gets, against the other crops'; 0 leaves it out. |
-| `spacing` | float | `0.3` | 0.03 to 1 | Distance between plants, in meters, rounded to one, two, three or four per side of a 30 cm square. |
+| `spacing` | float | `0.3` | 0.03 to 1 | Distance between plants, in meters: rounded to one, two, three or four per side of a 30 cm square, or, wider than a square, to a plant every two or three squares, on the lattice that fits the most into the crop's block. |
 | `sown_week` | float | `0.0` | 0 to 20 | The week it was sown, on the scene's calendar: a plant's age is the scene's week less this, and a bed is bare before it. |
 | `bed` | int | `0` | 0 to 24 | The one bed it is confined to, counted from 1; 0 plants it anywhere. |
 | `variations` | int | `12` | 1 to 64 | How many distinct meshes each of its organs, its leaves and its fruit, may share. A budget, not a count: the organs are clustered and this is how many representatives the clustering may keep. |
@@ -114,7 +128,7 @@ Carrot: a rosette of finely divided leaves over a taproot whose shoulder shows a
 | `root_length` | float | `0.18` | 0.08 to 0.3 | Length of a harvest-ready root, in meters. |
 | `root_diameter` | float | `0.03` | 0.015 to 0.06 | Diameter of a harvest-ready root at its shoulder, in meters. |
 | `share` | float | `0.25` | 0 to 1 | Share of the garden's planting squares this crop gets, against the other crops'; 0 leaves it out. |
-| `spacing` | float | `0.075` | 0.03 to 1 | Distance between plants, in meters, rounded to one, two, three or four per side of a 30 cm square. |
+| `spacing` | float | `0.075` | 0.03 to 1 | Distance between plants, in meters: rounded to one, two, three or four per side of a 30 cm square, or, wider than a square, to a plant every two or three squares, on the lattice that fits the most into the crop's block. |
 | `sown_week` | float | `0.0` | 0 to 20 | The week it was sown, on the scene's calendar: a plant's age is the scene's week less this, and a bed is bare before it. |
 | `bed` | int | `0` | 0 to 24 | The one bed it is confined to, counted from 1; 0 plants it anywhere. |
 | `variations` | int | `12` | 1 to 64 | How many distinct meshes each of its organs, its leaves and its fruit, may share. A budget, not a count: the organs are clustered and this is how many representatives the clustering may keep. |
@@ -132,7 +146,7 @@ Bush bean: a short stem branching from its lowest nodes into a bush of trifoliat
 | `leaf_length` | float | `0.18` | 0.08 to 0.3 | Length of a grown leaf, petiole and leaflets, in meters. |
 | `pod_length` | float | `0.13` | 0.06 to 0.2 | Length of a ripe pod, in meters. |
 | `share` | float | `0.25` | 0 to 1 | Share of the garden's planting squares this crop gets, against the other crops'; 0 leaves it out. |
-| `spacing` | float | `0.1` | 0.03 to 1 | Distance between plants, in meters, rounded to one, two, three or four per side of a 30 cm square. |
+| `spacing` | float | `0.1` | 0.03 to 1 | Distance between plants, in meters: rounded to one, two, three or four per side of a 30 cm square, or, wider than a square, to a plant every two or three squares, on the lattice that fits the most into the crop's block. |
 | `sown_week` | float | `0.0` | 0 to 20 | The week it was sown, on the scene's calendar: a plant's age is the scene's week less this, and a bed is bare before it. |
 | `bed` | int | `0` | 0 to 24 | The one bed it is confined to, counted from 1; 0 plants it anywhere. |
 | `variations` | int | `12` | 1 to 64 | How many distinct meshes each of its organs, its leaves and its fruit, may share. A budget, not a count: the organs are clustered and this is how many representatives the clustering may keep. |
@@ -149,7 +163,24 @@ Pole bean: a vine twining up a string from its bed's trellis, a large trifoliate
 | `leaf_length` | float | `0.25` | 0.1 to 0.4 | Length of a grown leaf, petiole and leaflets, in meters. |
 | `pod_length` | float | `0.16` | 0.08 to 0.25 | Length of a ripe pod, in meters. |
 | `share` | float | `0.25` | 0 to 1 | Share of the garden's planting squares this crop gets, against the other crops'; 0 leaves it out. |
-| `spacing` | float | `0.15` | 0.03 to 1 | Distance between plants, in meters, rounded to one, two, three or four per side of a 30 cm square. |
+| `spacing` | float | `0.15` | 0.03 to 1 | Distance between plants, in meters: rounded to one, two, three or four per side of a 30 cm square, or, wider than a square, to a plant every two or three squares, on the lattice that fits the most into the crop's block. |
+| `sown_week` | float | `0.0` | 0 to 20 | The week it was sown, on the scene's calendar: a plant's age is the scene's week less this, and a bed is bare before it. |
+| `bed` | int | `0` | 0 to 24 | The one bed it is confined to, counted from 1; 0 plants it anywhere. |
+| `variations` | int | `12` | 1 to 64 | How many distinct meshes each of its organs, its leaves and its fruit, may share. A budget, not a count: the organs are clustered and this is how many representatives the clustering may keep. |
+
+## Zucchini
+
+`ZucchiniParams` in Python, `ZucchiniCfg` in Isaac Lab.
+
+Zucchini: a stout, leaning stem under a mound of giant palmate leaves on long hollow petioles, the fruit lying low in the canopy and cut as they ripen, grown to harvest over eight weeks.
+
+| Parameter | Type | Default | Slider range | Description |
+|---|---|---|---|---|
+| `height` | float | `0.14` | 0.05 to 0.3 | Height of a harvest-ready stem, in meters; the leaves stand well above it. |
+| `leaf_length` | float | `0.65` | 0.3 to 1 | Length of a grown leaf, petiole and blade, in meters. |
+| `fruit_length` | float | `0.2` | 0.1 to 0.35 | Length of a ripe fruit, in meters. |
+| `share` | float | `0.25` | 0 to 1 | Share of the garden's planting squares this crop gets, against the other crops'; 0 leaves it out. |
+| `spacing` | float | `0.9` | 0.03 to 1 | Distance between plants, in meters: rounded to one, two, three or four per side of a 30 cm square, or, wider than a square, to a plant every two or three squares, on the lattice that fits the most into the crop's block. |
 | `sown_week` | float | `0.0` | 0 to 20 | The week it was sown, on the scene's calendar: a plant's age is the scene's week less this, and a bed is bare before it. |
 | `bed` | int | `0` | 0 to 24 | The one bed it is confined to, counted from 1; 0 plants it anywhere. |
 | `variations` | int | `12` | 1 to 64 | How many distinct meshes each of its organs, its leaves and its fruit, may share. A budget, not a count: the organs are clustered and this is how many representatives the clustering may keep. |

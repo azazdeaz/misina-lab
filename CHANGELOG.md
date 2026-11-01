@@ -34,9 +34,14 @@ Scene document format 11.
   compound leaves over a taproot whose shoulder shows at the soil, carrying
   its ripeness, how it is picked and a `Cut` frame; bush beans, a stem
   branching into a bush of trifoliate leaves with pods in clusters under the
-  upper ones; and pole beans, a vine twining up a string to a trellis on its
+  upper ones; pole beans, a vine twining up a string to a trellis on its
   bed's north edge, posts and rail with a string to every plant, the rail's
-  height a bed knob. Scene-wide `physics` switches say what collides, every
+  height a bed knob; and zucchini, a stout stem under giant palmate leaves
+  on long petioles with the fruit lying low, cut to pick, one plant every
+  three squares, since a crop spaced wider than a square now gets a lattice
+  of squares. Weeds, the vineyard's five habits, come up in the beds' soil
+  and on the paths at a pressure of each, `weeds` knobs, named `Weed_` and
+  carrying `crop` false. Scene-wide `physics` switches say what collides, every
   stem as a chain of capsules and every fruit and root as a capsule, and what
   bends: with `flexible_stems` a pole bean's vine is a rod in `segment`
   lengths, its leaves and pods riding the segments with their masses as the

@@ -25,6 +25,8 @@ from .garden_cfg import (
     PlantingCfg,
     PoleBeanCfg,
     SceneCfg,
+    WeedCfg,
+    ZucchiniCfg,
 )
 
 # <<< generated: imports
@@ -41,5 +43,7 @@ __all__ = [
     "PlantingCfg",
     "PoleBeanCfg",
     "SceneCfg",
+    "WeedCfg",
+    "ZucchiniCfg",
     # <<< generated: all
 ]

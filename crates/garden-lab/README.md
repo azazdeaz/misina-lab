@@ -3,12 +3,13 @@
 Raised vegetable beds, generated for robotics simulation and authored to USD
 for Isaac Lab: a level floor, a grid of timber-framed beds filled with soil a
 path apart, and the crops in them, grown to the garden's week: lettuce, kale,
-carrots, bush beans and pole beans on their trellis so far, the toolset being
-built one species at a time. It is the newest of
+carrots, bush beans, pole beans on their trellis and zucchini so far, with the
+weeds between them, the toolset being built one species at a time. It is the
+newest of
 [Misina Lab's generators](../../README.md#reference-generators).
 
 > [!WARNING]
-> **Under construction.** Five crops so far, one that bends. Expect breaking
+> **Under construction.** Six crops so far, one that bends. Expect breaking
 > changes.
 
 ## What the garden holds
@@ -17,12 +18,14 @@ built one species at a time. It is the newest of
 | --- | --- | --- |
 | Floor | a level slab reaching a path's width past the outermost beds, its own collider | — |
 | Beds | timber frames on posts, in columns along X and rows across Y, a path apart, each filled with soil up to below its rim; the frame and the soil each its own collider; a bed dealt a climber's squares gets a trellis on its north edge, two posts and a rail, its own collider | width, length, height, soil below the rim, path width, columns, rows, trellis height |
-| Planting | every bed's soil dealt out in 30 cm squares to the crops by their shares, the climbers last so they take the north squares, each square holding one, four, nine or sixteen plants as the crop's spacing asks, jittered off the grid; every climber gets a string from its foot to the rail | jitter, misses |
+| Planting | every bed's soil dealt out in 30 cm squares to the crops by their shares, the climbers last so they take the north squares, each square holding one, four, nine or sixteen plants as the crop's spacing asks, or, for a crop spaced wider than a square, a plant every two or three squares on the lattice that fits the most into its block, jittered off the grid; every climber gets a string from its foot to the rail | jitter, misses |
+| Weeds | the plants nobody sowed, on a 20 cm slot grid over every bed's soil and over the floor off the beds, so many to the square metre of each: a tuft of grass, a mat, a dandelion's rosette, a bolter sending up a wand and a sprawling broadleaf, each one mesh, at any stage whatever the week | bed pressure, path pressure, tall share, mesh variations, leaf detail |
 | Lettuce | a rosette of entire, ruffled blades one golden angle apart on a stub of a stem, the outer blades flat and drooping, the inner upright, a head closing over the crown when asked; every plant its own size, phase and vigour, red or green | leaves, blade length, ruffle, heading, tint; share, spacing, sowing week, bed, mesh variations |
 | Kale | an upright stem, leaning and bowing a little, with a crown of large curled blades on long petioles up it one golden angle apart, upright at the head and spreading and drooping below, the nodes under the leaves kept stripped bare | height, leaves kept, leaf length, curl; the common knobs |
 | Carrot | a rosette of compound leaves, a rachis with toothed leaflets in pairs, arching over a taproot whose orange shoulder pushes up through the soil as it swells; the root carries its ripeness and a `Cut` frame at the shoulder | leaves, leaf length, root length and diameter; the common knobs |
 | Bush bean | a short stem branching from its lowest nodes into a bush, a trifoliate leaf at every node of every axis, pods in clusters hanging under the leaves from the fourth node up once the plant is older than five weeks, growing out as they ripen | height, branches, leaf length, pod length; the common knobs |
 | Pole bean | a vine twining anticlockwise up its string to the trellis rail, a large trifoliate leaf at every node and pods hanging from the fourth node up once the vine is older than six weeks; the vine is the garden's one bending stem | height, leaf length, pod length; the common knobs |
+| Zucchini | a stout, leaning stem with a palmate five-lobed blade on a long petiole every 1.2 cm up it, the oldest leaves lying out near level and the youngest standing steep, each blade hinged down where its petiole ends; three fruit at most, on the fourth to sixth nodes, set a week apart once the plant is older than five weeks, lying out from the stem a little above level, growing as they ripen and cut to pick; one plant every three squares at its default spacing | height, leaf length, fruit length; the common knobs |
 | Physics | what a robot bumps into besides the floor and the beds, and what bends, scene-wide: every stem as a chain of capsules, every fruit and root as a capsule, and the stems that bend as rods the solver moves, their leaves and pods riding them | stems collide, fruit collides, flexible stems, segment length |
 
 +Y is north, beds run east–west along X, the garden is centred on the origin
@@ -32,10 +35,10 @@ and the top of the floor is z = 0.
 
 The scene has one calendar, `scene.week`, and every crop a sowing week on
 it. A plant's age is the difference, and its recipe grows it from a seedling
-to harvest-ready over the crop's own weeks, eight for lettuce and bush beans,
-ten for kale and pole beans and twelve for carrots, so one garden holds a bed
-just sown beside a bed ready to pick. A bed is bare before its crop's sowing
-week.
+to harvest-ready over the crop's own weeks, eight for lettuce, bush beans and
+zucchini, ten for kale and pole beans and twelve for carrots, so one garden
+holds a bed just sown beside a bed ready to pick. A bed is bare before its
+crop's sowing week. The weeds take no notice of it.
 
 ## Running it
 
@@ -86,6 +89,9 @@ parameter, with its default and range.
       /Leaf_00 …                  one leaf each, numbered by node; a branch's from a thousand times the branch's number
       /Fruit_00 …                 a fruit or root, a stemmed plant's eight to a node: garden_lab:ripeness, :pick, :harvest_ready
         /Skin  /Cut  /Collision   the mesh, the frame a harvester takes it by, its capsule
+  /Weeds                          a Scope, absent when no weed grew
+    /Bed_00/Weed_0017 …           a weed in the soil of Bed_00, one mesh, named by its slot; garden_lab:species, :crop false
+    /Paths/Weed_0042 …            one on the floor off the beds
 ```
 
 Beds are numbered along the south row first, west to east. Every bed carries
@@ -97,6 +103,6 @@ or a wider spacing left empty is a gap in the numbers
 rather than a shift; every plant carries `garden_lab:species`,
 `garden_lab:crop` and `garden_lab:age`, its weeks since sowing. A fruit or
 root carries `garden_lab:ripeness`, 0 to 1, `garden_lab:pick`, how a
-harvester takes it (`pull` for a root, `snap` for a pod), and `garden_lab:harvest_ready`, true
+harvester takes it (`pull` for a root, `snap` for a pod, `cut` for a zucchini), and `garden_lab:harvest_ready`, true
 from a ripeness of 0.9; its `Cut` frame sits where it is taken, +X up the
 stalk.

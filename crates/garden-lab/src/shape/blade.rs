@@ -6,7 +6,9 @@
 //! midrib and its tip drooped, on a stalk when the template has one. A
 //! compound leaf is a rachis with toothed leaflets in pairs along it and one
 //! at its tip, the whole drooped; a trifoliate leaf a petiole with a pair of
-//! entire leaflets where it ends and one past them, the same. A ruffle
+//! entire leaflets where it ends and one past them, the same. A lobed leaf
+//! is a palmate ring, an ellipse carved by sinuses, its lobes sagging from
+//! its centre and the whole hinged down where the petiole ends. A ruffle
 //! displaces the margin out of the plane rather than lengthening it, which a
 //! flat triangulation cannot do.
 
@@ -85,6 +87,15 @@ const TRIFOLIATE_RISE: f32 = 0.2;
 const TRIFOLIATE_DROOP: f64 = 0.35;
 const TRIFOLIATE_KEEL: f64 = 3.0;
 
+/// A lobed blade: its lobes; how deep the sinuses between them cut, as a
+/// fraction of the way from the margin to the blade's centre; how narrow
+/// they are, the power the sinus profile is raised to; and how far a lobe's
+/// tip sags below the centre, as a fraction of the blade's length.
+const LOBES: usize = 5;
+const SINUS: f64 = 0.45;
+const SINUS_SHARPNESS: i32 = 2;
+const LOBE_SAG: f64 = 0.08;
+
 /// The share of its box a blade or a leaflet fills: [`profile`]'s hump.
 const OUTLINE_FILL: f32 = 0.62;
 
@@ -94,6 +105,10 @@ pub fn area(config: &LeafConfig) -> f32 {
     let whole = config.length.max(0.0);
     let blade = (whole - config.petiole.max(0.0)).max(0.0);
     let boxes = match config.template {
+        // The ring itself: a lobed blade's fill depends on its sinuses.
+        Template::Lobed => {
+            return lobed_outline(blade as f64, (config.width * blade) as f64).area() as f32;
+        }
         Template::Simple => blade * config.width * whole,
         Template::Compound => {
             let pairs = config.pairs.max(1);
@@ -119,6 +134,7 @@ pub fn mesh(config: &LeafConfig) -> anyhow::Result<MeshData> {
         Template::Simple => simple(config),
         Template::Compound => compound(config),
         Template::Trifoliate => trifoliate(config),
+        Template::Lobed => lobed(config),
     }
 }
 
@@ -154,6 +170,34 @@ fn outline(length: f64, width: f64, peak: f64) -> Outline {
     }
     points.push(Point2::new(0.0, half(0)));
     Outline { points }
+}
+
+/// A palmate ring `length` long and `width` across: an ellipse with
+/// [`LOBES`] lobes fanning from its basal notch, [`SINUS`]-deep sinuses
+/// between them, centred so that the notch, where the petiole joins, sits
+/// on the origin and the middle lobe's tip at `length`. Counter-clockwise
+/// from the notch, as [`outline`] runs.
+fn lobed_outline(length: f64, width: f64) -> Outline {
+    let (a, centre) = lobed_axes(length);
+    let count = 2 * STATIONS;
+    let points = (0..count)
+        .map(|i| {
+            let theta = TAU * i as f64 / count as f64 - PI;
+            let sinus = ((1.0 - (LOBES as f64 * theta).cos()) / 2.0).powi(SINUS_SHARPNESS);
+            let (sin, cos) = theta.sin_cos();
+            let out = 1.0 - SINUS * sinus;
+            Point2::new(centre + a * cos * out, width / 2.0 * sin * out)
+        })
+        .collect();
+    Outline { points }
+}
+
+/// A lobed blade's ellipse: its semi-axis along the blade and its centre's
+/// station, placed so the tip, at `centre + a`, is at `length` and the
+/// notch, at `centre - a (1 - SINUS)`, on the origin.
+fn lobed_axes(length: f64) -> (f64, f64) {
+    let a = length / (2.0 - SINUS);
+    (a, length - a)
 }
 
 /// A stalk from the origin out along +X, `length` long and `radius` thick
@@ -299,6 +343,34 @@ fn trifoliate(config: &LeafConfig) -> anyhow::Result<MeshData> {
     Ok(drooped(merge_meshes(&parts), config.droop as f64 / whole))
 }
 
+/// A lobed blade on its petiole: the ring filled flat, its lobes sagging
+/// from the centre by the square of how far out they reach, the notch held
+/// level with the petiole, and the whole turned down `droop` where the
+/// petiole ends.
+fn lobed(config: &LeafConfig) -> anyhow::Result<MeshData> {
+    let whole = config.length.max(0.005) as f64;
+    let petiole = (config.petiole as f64).clamp(0.0, 0.9 * whole);
+    let length = whole - petiole;
+    let width = (config.width as f64 * length).max(0.001);
+    let ring = lobed_outline(length, width);
+    let mut mesh = outline_mesh(&ring, ring.area() / TRIANGLES)?;
+    let (a, centre) = lobed_axes(length);
+    let reach = |x: f64, y: f64| ((x - centre) / a).hypot(y / (width / 2.0));
+    let notch = reach(0.0, 0.0);
+    let hinge = Quat::from_rotation_y(config.droop);
+    for point in &mut mesh.points {
+        let (x, y) = (point[0] as f64, point[1] as f64);
+        let out = reach(x, y);
+        let z = -LOBE_SAG * length * (out * out - notch * notch);
+        let p = hinge * Vec3::new(x as f32, y as f32, z as f32);
+        *point = [p.x + petiole as f32, p.y, p.z];
+    }
+    if petiole > 0.0 {
+        mesh = merge_meshes(&[stalk(petiole, STALK_RADIUS * whole), mesh]);
+    }
+    Ok(mesh)
+}
+
 /// `mesh` bent over its length by the curvature `droop`, tip down.
 fn drooped(mut mesh: MeshData, droop: f64) -> MeshData {
     if droop != 0.0 {
@@ -387,6 +459,53 @@ mod tests {
         let drooped = super::mesh(&leaf.droop(1.5)).unwrap();
         assert!(bounds(&drooped, 2).0 < -0.05, "{:?}", bounds(&drooped, 2));
         assert!(mesh.face_vertex_counts.len() < 1200);
+    }
+
+    /// A lobed ring has its notch on the origin and its tip at its length,
+    /// five lobes, and about two thirds of its ellipse's area; the leaf on
+    /// its petiole turns down whole at the petiole's end, keeps inside its
+    /// width, and weighs by its ring.
+    #[test]
+    fn a_lobed_blade_fans_five_lobes_from_its_notch_and_hinges_at_its_petiole() {
+        let ring = lobed_outline(0.3, 0.33);
+        let at = |x: f64, y: f64| {
+            ring.points
+                .iter()
+                .any(|p| (p.x - x).abs() < 1e-9 && (p.y - y).abs() < 1e-9)
+        };
+        assert!(at(0.0, 0.0) && at(0.3, 0.0));
+        let (a, centre) = lobed_axes(0.3);
+        let radii: Vec<f64> = ring
+            .points
+            .iter()
+            .map(|p| (p.x - centre).hypot(p.y))
+            .collect();
+        let n = radii.len();
+        let lobes = (0..n)
+            .filter(|&i| radii[i] > radii[(i + n - 1) % n] && radii[i] >= radii[(i + 1) % n])
+            .count();
+        assert_eq!(lobes, LOBES);
+        let fill = ring.area() / (PI * a * 0.33 / 2.0);
+        assert!((0.55..0.85).contains(&fill), "{fill}");
+
+        let leaf = LeafConfig::lobed(0.65, 1.1).petiole(0.35).droop(0.7);
+        let mesh = mesh(&leaf).unwrap();
+        let (x0, x1) = bounds(&mesh, 0);
+        let (y0, y1) = bounds(&mesh, 1);
+        let (z0, _) = bounds(&mesh, 2);
+        let (blade, hinge) = (0.3f32, 0.7f32);
+        assert!(
+            x0.abs() < 1e-6 && (x1 - (0.35 + blade * hinge.cos())).abs() < 0.02,
+            "{x0}..{x1}"
+        );
+        let half = 1.1 * blade / 2.0;
+        assert!(
+            y0 < -0.9 * half && y1 <= half + 1e-6 && (y0 + y1).abs() < 1e-4,
+            "{y0}..{y1}"
+        );
+        assert!(z0 < -0.9 * blade * hinge.sin(), "{z0}");
+        assert!((area(&leaf) - lobed_outline(0.3, 0.33).area() as f32).abs() < 1e-6);
+        assert!(mesh.face_vertex_counts.len() < 900);
     }
 
     /// A trifoliate leaf reaches its length, its pair spreads both sides

@@ -135,6 +135,41 @@ class PlantingParams:
     ) -> None: ...
     def __repr__(self) -> str: ...
 
+class WeedParams:
+    """The plants that come up where nothing was sown: in the beds' soil and on the
+    paths, so many to the square metre of each. Every plant is one mesh: `variations`
+    is the budget of distinct ones and `detail` the triangles a leaf is cut into.
+    """
+
+    pressure: float
+    """Plants per square metre of bed soil. Zero is a weeded bed; the ceiling is one
+    plant per slot of the 20 cm grid, about twenty-five.
+    """
+    path_pressure: float
+    """Plants per square metre of path, the floor off the beds."""
+    tall: float
+    """The share of plants that are tall, bolters and broadleaves, against low tufts,
+    mats and rosettes.
+    """
+    variations: int
+    """How many distinct plant meshes the scene may hold. A budget, not a count: the
+    plants are clustered by species, stage and size and this is how many
+    representatives the clustering may keep.
+    """
+    detail: int
+    """Triangles a leaf is cut into."""
+
+    def __init__(
+        self,
+        *,
+        pressure: float = 3.0,
+        path_pressure: float = 1.0,
+        tall: float = 0.3,
+        variations: int = 24,
+        detail: int = 16,
+    ) -> None: ...
+    def __repr__(self) -> str: ...
+
 class LettuceParams:
     """Lettuce, loose-leaf or heading: a rosette of entire blades, ruffled or smooth,
     round a stub of stem a couple of centimetres tall, grown to harvest over eight
@@ -156,8 +191,9 @@ class LettuceParams:
     0 leaves it out.
     """
     spacing: float
-    """Distance between plants, in meters, rounded to one, two, three or four per side
-    of a 30 cm square.
+    """Distance between plants, in meters: rounded to one, two, three or four per side
+    of a 30 cm square, or, wider than a square, to a plant every two or three
+    squares, on the lattice that fits the most into the crop's block.
     """
     sown_week: float
     """The week it was sown, on the scene's calendar: a plant's age is the scene's week
@@ -207,8 +243,9 @@ class KaleParams:
     0 leaves it out.
     """
     spacing: float
-    """Distance between plants, in meters, rounded to one, two, three or four per side
-    of a 30 cm square.
+    """Distance between plants, in meters: rounded to one, two, three or four per side
+    of a 30 cm square, or, wider than a square, to a plant every two or three
+    squares, on the lattice that fits the most into the crop's block.
     """
     sown_week: float
     """The week it was sown, on the scene's calendar: a plant's age is the scene's week
@@ -255,8 +292,9 @@ class CarrotParams:
     0 leaves it out.
     """
     spacing: float
-    """Distance between plants, in meters, rounded to one, two, three or four per side
-    of a 30 cm square.
+    """Distance between plants, in meters: rounded to one, two, three or four per side
+    of a 30 cm square, or, wider than a square, to a plant every two or three
+    squares, on the lattice that fits the most into the crop's block.
     """
     sown_week: float
     """The week it was sown, on the scene's calendar: a plant's age is the scene's week
@@ -304,8 +342,9 @@ class BushBeanParams:
     0 leaves it out.
     """
     spacing: float
-    """Distance between plants, in meters, rounded to one, two, three or four per side
-    of a 30 cm square.
+    """Distance between plants, in meters: rounded to one, two, three or four per side
+    of a 30 cm square, or, wider than a square, to a plant every two or three
+    squares, on the lattice that fits the most into the crop's block.
     """
     sown_week: float
     """The week it was sown, on the scene's calendar: a plant's age is the scene's week
@@ -353,8 +392,9 @@ class PoleBeanParams:
     0 leaves it out.
     """
     spacing: float
-    """Distance between plants, in meters, rounded to one, two, three or four per side
-    of a 30 cm square.
+    """Distance between plants, in meters: rounded to one, two, three or four per side
+    of a 30 cm square, or, wider than a square, to a plant every two or three
+    squares, on the lattice that fits the most into the crop's block.
     """
     sown_week: float
     """The week it was sown, on the scene's calendar: a plant's age is the scene's week
@@ -382,6 +422,53 @@ class PoleBeanParams:
     ) -> None: ...
     def __repr__(self) -> str: ...
 
+class ZucchiniParams:
+    """Zucchini: a stout, leaning stem under a mound of giant palmate leaves on long
+    hollow petioles, the fruit lying low in the canopy and cut as they ripen, grown
+    to harvest over eight weeks.
+    """
+
+    height: float
+    """Height of a harvest-ready stem, in meters; the leaves stand well above it."""
+    leaf_length: float
+    """Length of a grown leaf, petiole and blade, in meters."""
+    fruit_length: float
+    """Length of a ripe fruit, in meters."""
+    share: float
+    """Share of the garden's planting squares this crop gets, against the other crops';
+    0 leaves it out.
+    """
+    spacing: float
+    """Distance between plants, in meters: rounded to one, two, three or four per side
+    of a 30 cm square, or, wider than a square, to a plant every two or three
+    squares, on the lattice that fits the most into the crop's block.
+    """
+    sown_week: float
+    """The week it was sown, on the scene's calendar: a plant's age is the scene's week
+    less this, and a bed is bare before it.
+    """
+    bed: int
+    """The one bed it is confined to, counted from 1; 0 plants it anywhere."""
+    variations: int
+    """How many distinct meshes each of its organs, its leaves and its fruit, may share.
+    A budget, not a count: the organs are clustered and this is how many
+    representatives the clustering may keep.
+    """
+
+    def __init__(
+        self,
+        *,
+        height: float = 0.14,
+        leaf_length: float = 0.65,
+        fruit_length: float = 0.2,
+        share: float = 0.25,
+        spacing: float = 0.9,
+        sown_week: float = 0.0,
+        bed: int = 0,
+        variations: int = 12,
+    ) -> None: ...
+    def __repr__(self) -> str: ...
+
 # <<< generated: fragments
 
 class GardenParams:
@@ -393,11 +480,13 @@ class GardenParams:
     physics: PhysicsParams
     bed: BedParams
     planting: PlantingParams
+    weeds: WeedParams
     lettuce: LettuceParams
     kale: KaleParams
     carrot: CarrotParams
     bush_bean: BushBeanParams
     pole_bean: PoleBeanParams
+    zucchini: ZucchiniParams
 
     def __init__(
         self,
@@ -405,11 +494,13 @@ class GardenParams:
         physics: PhysicsParams | None = None,
         bed: BedParams | None = None,
         planting: PlantingParams | None = None,
+        weeds: WeedParams | None = None,
         lettuce: LettuceParams | None = None,
         kale: KaleParams | None = None,
         carrot: CarrotParams | None = None,
         bush_bean: BushBeanParams | None = None,
         pole_bean: PoleBeanParams | None = None,
+        zucchini: ZucchiniParams | None = None,
     ) -> None: ...
     # <<< generated: aggregate
     def __repr__(self) -> str: ...

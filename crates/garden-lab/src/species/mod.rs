@@ -70,8 +70,10 @@ macro_rules! species {
             /// the other crops'; 0 leaves it out.
             #[reflect(@Slider { min: 0.0, max: 1.0, step: 0.05 })]
             pub share: f32,
-            /// Distance between plants, in meters, rounded to one, two, three
-            /// or four per side of a 30 cm square.
+            /// Distance between plants, in meters: rounded to one, two, three
+            /// or four per side of a 30 cm square, or, wider than a square,
+            /// to a plant every two or three squares, on the lattice that
+            /// fits the most into the crop's block.
             #[reflect(@Slider { min: 0.03, max: 1.0, step: 0.01 })]
             pub spacing: f32,
             /// The week it was sown, on the scene's calendar: a plant's age is
@@ -131,6 +133,7 @@ pub mod carrot;
 pub mod kale;
 pub mod lettuce;
 pub mod pole_bean;
+pub mod zucchini;
 
 /// What a species file writes its recipe in.
 pub mod prelude {

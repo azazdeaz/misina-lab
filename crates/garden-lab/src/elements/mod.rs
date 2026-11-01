@@ -3,7 +3,8 @@
 //! [`layout`] solves where the beds go and spawns a prim for each; the
 //! fixtures fill them, [`floor`] the ground the garden stands on and [`bed`]
 //! the frame and the soil of every bed; [`planting`] puts a plant of some
-//! species in every planting place; and the crop grows on them, a system
+//! species in every planting place and [`weed`] the plants nobody sowed in
+//! the beds and on the paths; and the crop grows on them, a system
 //! per species in each layer: [`plant`] runs a species' recipe into organs,
 //! [`leaf`] meshes its leaves and [`fruit`] its fruit and roots. Every
 //! element holds its params and a
@@ -23,13 +24,14 @@ pub mod layout;
 pub mod leaf;
 pub mod plant;
 pub mod planting;
+pub mod weed;
 
 use bevy::prelude::*;
 use misina_lab::Build;
 use misina_lab::geometry::mesh::{MeshData, box_mesh};
 use misina_lab::params::{Label, Slider};
 
-use crate::species::{self, Commons, bush_bean, carrot, kale, lettuce, pole_bean};
+use crate::species::{self, Commons, bush_bean, carrot, kale, lettuce, pole_bean, zucchini};
 
 /// Build order: the species publish their common knobs, the layout spawns
 /// the bed prims the fixtures fill, planting fills the beds, and each layer
@@ -42,7 +44,7 @@ pub enum Grow {
     Layout,
     /// The floor, and the frame and the soil of every bed.
     Fixtures,
-    /// A plant in every planting place.
+    /// A plant in every planting place, and the weeds.
     Planting,
     /// Every plant's organs, from its species' recipe.
     Plants,
@@ -70,12 +72,19 @@ pub fn plugin(app: &mut App) {
                 .chain()
                 .in_set(Build),
         )
-        .add_plugins((layout::plugin, floor::plugin, bed::plugin, planting::plugin));
+        .add_plugins((
+            layout::plugin,
+            floor::plugin,
+            bed::plugin,
+            planting::plugin,
+            weed::plugin,
+        ));
     species::species::<lettuce::Lettuce>(app);
     species::species::<kale::Kale>(app);
     species::species::<carrot::Carrot>(app);
     species::species::<bush_bean::BushBean>(app);
     species::species::<pole_bean::PoleBean>(app);
+    species::species::<zucchini::Zucchini>(app);
 }
 
 /// Scene-wide parameters: the seed, and how far into the season the garden is.
@@ -147,6 +156,7 @@ misina_lab::generator! {
         #[reflect(@Label("Beds"))]
         pub bed: layout::BedParams,
         pub planting: planting::PlantingParams,
+        pub weeds: weed::WeedParams,
         pub lettuce: lettuce::LettuceParams,
         pub kale: kale::KaleParams,
         pub carrot: carrot::CarrotParams,
@@ -154,6 +164,7 @@ misina_lab::generator! {
         pub bush_bean: bush_bean::BushBeanParams,
         #[reflect(@Label("Pole bean"))]
         pub pole_bean: pole_bean::PoleBeanParams,
+        pub zucchini: zucchini::ZucchiniParams,
     }
 }
 
@@ -172,6 +183,24 @@ pub(crate) fn grown(params: GardenParams) -> App {
 pub(crate) fn small() -> GardenParams {
     let mut params = GardenParams::default();
     (params.bed.columns, params.bed.rows) = (1, 1);
+    params
+}
+
+/// [`small`] with no crop dealt a square: a test turns on the crop it looks
+/// at.
+#[cfg(test)]
+pub(crate) fn bare() -> GardenParams {
+    let mut params = small();
+    for share in [
+        &mut params.lettuce.share,
+        &mut params.kale.share,
+        &mut params.carrot.share,
+        &mut params.bush_bean.share,
+        &mut params.pole_bean.share,
+        &mut params.zucchini.share,
+    ] {
+        *share = 0.0;
+    }
     params
 }
 
@@ -199,8 +228,8 @@ mod tests {
     use misina_lab::scene::{COLLISION, Cable, Collider};
     use misina_lab::testing::{check_params, named_children, nudged, organs, prim};
 
-    use super::fruit::FruitConfig;
-    use super::leaf::LeafConfig;
+    use super::fruit::{FruitConfig, Kind};
+    use super::leaf::{LeafConfig, Template};
     use super::planting::{PlantConfig, SQUARE};
     use super::*;
 
@@ -302,6 +331,15 @@ mod tests {
             ("pod length", edited(|p| p.bush_bean.pod_length = 0.2)),
             ("pole bean height", edited(|p| p.pole_bean.height = 1.5)),
             ("no pole beans", edited(|p| p.pole_bean.share = 0.0)),
+            ("zucchini leaf", edited(|p| p.zucchini.leaf_length = 0.9)),
+            ("zucchini closer", edited(|p| p.zucchini.spacing = 0.6)),
+            ("no zucchini", edited(|p| p.zucchini.share = 0.0)),
+            ("weeds", edited(|p| p.weeds.pressure = 12.0)),
+            (
+                "no weeds",
+                edited(|p| (p.weeds.pressure, p.weeds.path_pressure) = (0.0, 0.0)),
+            ),
+            ("weed budget", edited(|p| p.weeds.variations = 3)),
             (
                 "flexible stems",
                 edited(|p| p.physics.flexible_stems = true),
@@ -348,10 +386,50 @@ mod tests {
 
     /// The default params on one bed of lettuce alone.
     fn lettuce_bed() -> GardenParams {
-        let mut params = small();
-        (params.kale.share, params.carrot.share) = (0.0, 0.0);
-        (params.bush_bean.share, params.pole_bean.share) = (0.0, 0.0);
+        let mut params = bare();
+        params.lettuce.share = 1.0;
         params
+    }
+
+    /// A bed of zucchini alone: at 0.9 m spacing a plant every three squares
+    /// along the middle row, each a stem under lobed leaves and, at harvest,
+    /// berries lying out from the stem clear of the soil.
+    #[test]
+    fn a_zucchini_bed_holds_a_plant_every_three_squares() {
+        let mut params = bare();
+        params.zucchini.share = 1.0;
+        (params.planting.jitter, params.planting.misses) = (0.0, 0.0);
+        let mut app = grown(params);
+        let plants = organs::<PlantConfig>(app.world_mut());
+        let xs: Vec<f32> = plants.iter().map(|p| p.position().x).collect();
+        assert_eq!(xs.len(), 3, "{xs:?}");
+        assert!(
+            xs.windows(2)
+                .all(|w| (w[1] - w[0] - 3.0 * SQUARE).abs() < 1e-4),
+            "{xs:?}"
+        );
+        assert!(plants.iter().all(|p| p.position().y.abs() < 1e-5));
+        let leaves = organs::<LeafConfig>(app.world_mut());
+        assert!(
+            leaves.len() >= 3 * 8 && leaves.iter().all(|l| l.config.template == Template::Lobed),
+            "{}",
+            leaves.len()
+        );
+        let fruit = organs::<FruitConfig>(app.world_mut());
+        assert!(fruit.len() >= 3, "{}", fruit.len());
+        for f in &fruit {
+            assert_eq!(f.config.kind, Kind::Berry);
+            // In the plant's frame, the soil at z = 0: the fruit hangs down
+            // its own -Z from its stalk end, and neither end lies in the soil.
+            let radius = f.config.diameter / 2.0;
+            let far = f.position() + f.transform.rotation * -Vec3::Z * f.config.length;
+            assert!(
+                f.position().z > 0.8 * radius && far.z > radius,
+                "{} lies in the soil: {} to {far}",
+                f.path,
+                f.position()
+            );
+        }
     }
 
     /// Four lettuces to every whole 30 cm square of a bed's soil, each on the
@@ -470,16 +548,9 @@ mod tests {
     #[test]
     fn a_pole_bean_vine_bends_into_a_rod_carrying_its_organs() {
         let beans = |flexible: bool| {
-            let mut params = small();
+            let mut params = bare();
+            params.pole_bean.share = 1.0;
             (params.bed.length, params.bed.width) = (0.5, 0.5);
-            for share in [
-                &mut params.lettuce.share,
-                &mut params.kale.share,
-                &mut params.carrot.share,
-                &mut params.bush_bean.share,
-            ] {
-                *share = 0.0;
-            }
             (params.planting.misses, params.scene.week) = (0.0, 10.0);
             params.physics.flexible_stems = flexible;
             grown(params)

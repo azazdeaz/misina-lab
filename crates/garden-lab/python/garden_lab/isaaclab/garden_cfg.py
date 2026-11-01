@@ -107,6 +107,32 @@ class PlantingCfg:
 
 
 @configclass
+class WeedCfg:
+    """The plants that come up where nothing was sown: in the beds' soil and on the
+    paths, so many to the square metre of each. Every plant is one mesh: `variations`
+    is the budget of distinct ones and `detail` the triangles a leaf is cut into.
+    """
+
+    pressure: float = 3.0
+    """Plants per square metre of bed soil. Zero is a weeded bed; the ceiling is one
+    plant per slot of the 20 cm grid, about twenty-five.
+    """
+    path_pressure: float = 1.0
+    """Plants per square metre of path, the floor off the beds."""
+    tall: float = 0.3
+    """The share of plants that are tall, bolters and broadleaves, against low tufts,
+    mats and rosettes.
+    """
+    variations: int = 24
+    """How many distinct plant meshes the scene may hold. A budget, not a count: the
+    plants are clustered by species, stage and size and this is how many
+    representatives the clustering may keep.
+    """
+    detail: int = 16
+    """Triangles a leaf is cut into."""
+
+
+@configclass
 class LettuceCfg:
     """Lettuce, loose-leaf or heading: a rosette of entire blades, ruffled or smooth,
     round a stub of stem a couple of centimetres tall, grown to harvest over eight
@@ -128,8 +154,9 @@ class LettuceCfg:
     0 leaves it out.
     """
     spacing: float = 0.15
-    """Distance between plants, in meters, rounded to one, two, three or four per side
-    of a 30 cm square.
+    """Distance between plants, in meters: rounded to one, two, three or four per side
+    of a 30 cm square, or, wider than a square, to a plant every two or three
+    squares, on the lattice that fits the most into the crop's block.
     """
     sown_week: float = 0.0
     """The week it was sown, on the scene's calendar: a plant's age is the scene's week
@@ -165,8 +192,9 @@ class KaleCfg:
     0 leaves it out.
     """
     spacing: float = 0.3
-    """Distance between plants, in meters, rounded to one, two, three or four per side
-    of a 30 cm square.
+    """Distance between plants, in meters: rounded to one, two, three or four per side
+    of a 30 cm square, or, wider than a square, to a plant every two or three
+    squares, on the lattice that fits the most into the crop's block.
     """
     sown_week: float = 0.0
     """The week it was sown, on the scene's calendar: a plant's age is the scene's week
@@ -200,8 +228,9 @@ class CarrotCfg:
     0 leaves it out.
     """
     spacing: float = 0.075
-    """Distance between plants, in meters, rounded to one, two, three or four per side
-    of a 30 cm square.
+    """Distance between plants, in meters: rounded to one, two, three or four per side
+    of a 30 cm square, or, wider than a square, to a plant every two or three
+    squares, on the lattice that fits the most into the crop's block.
     """
     sown_week: float = 0.0
     """The week it was sown, on the scene's calendar: a plant's age is the scene's week
@@ -236,8 +265,9 @@ class BushBeanCfg:
     0 leaves it out.
     """
     spacing: float = 0.1
-    """Distance between plants, in meters, rounded to one, two, three or four per side
-    of a 30 cm square.
+    """Distance between plants, in meters: rounded to one, two, three or four per side
+    of a 30 cm square, or, wider than a square, to a plant every two or three
+    squares, on the lattice that fits the most into the crop's block.
     """
     sown_week: float = 0.0
     """The week it was sown, on the scene's calendar: a plant's age is the scene's week
@@ -272,8 +302,44 @@ class PoleBeanCfg:
     0 leaves it out.
     """
     spacing: float = 0.15
-    """Distance between plants, in meters, rounded to one, two, three or four per side
-    of a 30 cm square.
+    """Distance between plants, in meters: rounded to one, two, three or four per side
+    of a 30 cm square, or, wider than a square, to a plant every two or three
+    squares, on the lattice that fits the most into the crop's block.
+    """
+    sown_week: float = 0.0
+    """The week it was sown, on the scene's calendar: a plant's age is the scene's week
+    less this, and a bed is bare before it.
+    """
+    bed: int = 0
+    """The one bed it is confined to, counted from 1; 0 plants it anywhere."""
+    variations: int = 12
+    """How many distinct meshes each of its organs, its leaves and its fruit, may share.
+    A budget, not a count: the organs are clustered and this is how many
+    representatives the clustering may keep.
+    """
+
+
+@configclass
+class ZucchiniCfg:
+    """Zucchini: a stout, leaning stem under a mound of giant palmate leaves on long
+    hollow petioles, the fruit lying low in the canopy and cut as they ripen, grown
+    to harvest over eight weeks.
+    """
+
+    height: float = 0.14
+    """Height of a harvest-ready stem, in meters; the leaves stand well above it."""
+    leaf_length: float = 0.65
+    """Length of a grown leaf, petiole and blade, in meters."""
+    fruit_length: float = 0.2
+    """Length of a ripe fruit, in meters."""
+    share: float = 0.25
+    """Share of the garden's planting squares this crop gets, against the other crops';
+    0 leaves it out.
+    """
+    spacing: float = 0.9
+    """Distance between plants, in meters: rounded to one, two, three or four per side
+    of a 30 cm square, or, wider than a square, to a plant every two or three
+    squares, on the lattice that fits the most into the crop's block.
     """
     sown_week: float = 0.0
     """The week it was sown, on the scene's calendar: a plant's age is the scene's week
@@ -347,22 +413,26 @@ class GardenCfg(GeneratedSceneCfg):
     physics: PhysicsCfg = PhysicsCfg()
     bed: BedCfg = BedCfg()
     planting: PlantingCfg = PlantingCfg()
+    weeds: WeedCfg = WeedCfg()
     lettuce: LettuceCfg = LettuceCfg()
     kale: KaleCfg = KaleCfg()
     carrot: CarrotCfg = CarrotCfg()
     bush_bean: BushBeanCfg = BushBeanCfg()
     pole_bean: PoleBeanCfg = PoleBeanCfg()
+    zucchini: ZucchiniCfg = ZucchiniCfg()
 
     FRAGMENTS: ClassVar[tuple[str, ...]] = (
         "scene",
         "physics",
         "bed",
         "planting",
+        "weeds",
         "lettuce",
         "kale",
         "carrot",
         "bush_bean",
         "pole_bean",
+        "zucchini",
     )
     """The fragment fields, in the order `GardenParams` takes them: what `to_params`
     converts and the cache key is built from. Everything else on the cfg is applied

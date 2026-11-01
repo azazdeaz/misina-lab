@@ -59,7 +59,7 @@ so name them with `-p greenhouse-lab` or `-p garden-lab`, or reach them with
 | [greenhouse-lab/src/lib.rs](crates/greenhouse-lab/src/lib.rs) | crate root: the `Greenhouse` generator and its `_core` Python module |
 | [greenhouse-lab/src/elements/](crates/greenhouse-lab/src/elements/) | the layout, the floor, one module per fixture and one per layer of the crop, and `leaflet.rs`, a leaflet's outline built from its veins; `mod.rs` holds the stage sets and the `generator!` call |
 | [garden-lab/src/lib.rs](crates/garden-lab/src/lib.rs) | crate root: the `Garden` generator and its `_core` Python module |
-| [garden-lab/src/elements/](crates/garden-lab/src/elements/) | the layout, the floor, the beds, the planting, and one generic layer per organ of the crop, instantiated per species; `mod.rs` holds the stage sets and the `generator!` call |
+| [garden-lab/src/elements/](crates/garden-lab/src/elements/) | the layout, the floor, the beds, the planting, the weeds, and one generic layer per organ of the crop, instantiated per species; `mod.rs` holds the stage sets and the `generator!` call |
 | [garden-lab/src/species/](crates/garden-lab/src/species/) | one file per crop: its params struct, which is its schema, and its recipe; `mod.rs` holds the `Species` and `Recipe` traits and the registry the planting reads |
 | [garden-lab/src/grow/](crates/garden-lab/src/grow/), [garden-lab/src/shape/](crates/garden-lab/src/shape/) | the vocabulary a recipe is written in, and the organ geometry it becomes |
 

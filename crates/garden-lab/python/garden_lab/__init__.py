@@ -21,6 +21,8 @@ from ._core import (
     PlantingParams,
     PoleBeanParams,
     SceneParams,
+    WeedParams,
+    ZucchiniParams,
     __version__,
 )
 
@@ -35,6 +37,8 @@ __all__ = [
     "PlantingParams",
     "PoleBeanParams",
     "SceneParams",
+    "WeedParams",
+    "ZucchiniParams",
     "__version__",
 ]
 # <<< generated: exports

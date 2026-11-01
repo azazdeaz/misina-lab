@@ -35,6 +35,9 @@ pub enum Template {
     /// Three entire leaflets on a petiole: a pair where it ends and one past
     /// them.
     Trifoliate,
+    /// A palmate blade: lobes fanning from a basal notch, hinged down where
+    /// its petiole ends.
+    Lobed,
 }
 
 /// One leaf's shape, as its recipe specified it; the constructors are in
@@ -45,8 +48,8 @@ pub struct LeafConfig {
     /// From the anchor to the tip, petiole included, in meters.
     pub length: f32,
     /// A simple blade's width at its widest or a compound leaf's leaflet's
-    /// length, as a fraction of the length; a trifoliate leaflet's width as
-    /// a fraction of its own length.
+    /// length, as a fraction of the length; a trifoliate leaflet's or a
+    /// lobed blade's width as a fraction of its own length.
     pub width: f32,
     /// The bare stalk between the anchor and the blade, in meters.
     pub petiole: f32,
@@ -59,7 +62,8 @@ pub struct LeafConfig {
     /// face.
     pub cup: f32,
     /// How far the tip turns down, away from the face, in radians; negative
-    /// turns it over the face.
+    /// turns it over the face. A lobed blade turns down by it whole, at its
+    /// petiole's end.
     pub droop: f32,
     /// The leaf's colour, linear RGB.
     pub tint: [f32; 3],
