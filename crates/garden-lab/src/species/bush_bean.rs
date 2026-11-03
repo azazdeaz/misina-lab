@@ -1,5 +1,6 @@
 //! Bush bean — a short stem branching from its lowest nodes into a bush of
-//! trifoliate leaves, pods hanging in clusters under the upper leaves.
+//! trifoliate leaves, every stem ending in a young one, pods hanging in
+//! clusters under the upper leaves.
 
 use super::prelude::*;
 
@@ -12,12 +13,15 @@ const STEM: u32 = 0x6E9A48;
 const POD: u32 = 0x5F9A3A;
 
 /// The main stem: a grown stem's radius at its foot, in meters, how much it
-/// thins to the tip, how far it leans and bows, and its internode.
-const RADIUS: f32 = 0.006;
+/// thins to the tip, how far it leans and bows, its internode, and how far
+/// below the tip of a stem or a branch its youngest leaf leaves it, in
+/// meters.
+const RADIUS: f32 = 0.003;
 const TAPER: f32 = 0.6;
 const LEAN: f32 = 0.15;
 const WOBBLE: f32 = 0.05;
 const INTERNODE: f32 = 0.05;
+const TIP: f32 = 0.008;
 
 /// A branch: its length as a fraction of the stem's, its radius as a
 /// fraction of the stem's, how far off level it leaves and how far it turns
@@ -107,7 +111,8 @@ impl Recipe for BushBean {
                 .wobble(WOBBLE)
                 .tint(srgb(STEM)),
         );
-        let nodes = stem.nodes(&Spiral::golden(INTERNODE).phased(b.rng()));
+        let spiral = Spiral::golden(INTERNODE).phased(b.rng());
+        let nodes = stem.nodes(&spiral);
         let bush = Bush {
             p,
             size,
@@ -117,6 +122,7 @@ impl Recipe for BushBean {
         for node in &nodes {
             bush.node(b, &stem, node, node.rank as u64);
         }
+        bush.tip(b, &stem, &spiral, nodes.len() as u32, 0);
         // Branches from the lowest nodes, each leaving on its node's side.
         for (i, node) in nodes.iter().take(p.branches as usize).enumerate() {
             let (foot, at_radius) = stem.at(node.station);
@@ -129,9 +135,12 @@ impl Recipe for BushBean {
                     .tint(srgb(STEM)),
             );
             let first = (i as u64 + 1) * BRANCH_LEAVES;
-            for node in branch.nodes(&Spiral::golden(INTERNODE).phased(b.rng())) {
-                bush.node(b, &branch, &node, first + node.rank as u64);
+            let spiral = Spiral::golden(INTERNODE).phased(b.rng());
+            let along = branch.nodes(&spiral);
+            for node in &along {
+                bush.node(b, &branch, node, first + node.rank as u64);
             }
+            bush.tip(b, &branch, &spiral, along.len() as u32, first);
         }
     }
 }
@@ -145,6 +154,21 @@ struct Bush<'a> {
 }
 
 impl Bush<'_> {
+    /// The leaf of the node of `rank` on `spiral`, the next past the last of
+    /// `axis`, grown early [`TIP`] below the axis's tip, facing that node's
+    /// way and numbered by it from `first`, so it is the same leaf once the
+    /// axis grows the node: a node alone, so the youngest, and below
+    /// [`FIRST_POD`], so bearing no pods.
+    fn tip(&self, b: &mut Builder, axis: &Grown, spiral: &Spiral, rank: u32, first: u64) {
+        let node = AxisNode {
+            rank: 0,
+            count: 1,
+            station: (axis.length() - TIP).max(0.0),
+            azimuth: spiral.azimuth(rank),
+        };
+        self.node(b, axis, &node, first + rank as u64);
+    }
+
     /// The leaf at `node` and, at a bearing node once the pods have set, its
     /// pods, numbered from `index`: the leaf by it and the pods under it.
     fn node(&self, b: &mut Builder, axis: &Grown, node: &AxisNode, index: u64) {
@@ -182,6 +206,37 @@ impl Bush<'_> {
                 axis.hang(node, azimuth + spread, tilt),
                 pod,
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every axis of a grown bush, its stem and each branch, ends in a
+    /// leaf [`TIP`] below its tip, its highest.
+    #[test]
+    fn every_axis_ends_in_a_leaf_below_its_tip() {
+        let plant = PlantConfig {
+            age: 8.0,
+            vigour: 1.0,
+            seed: 0x1234,
+            string: None,
+        };
+        let mut b = Builder::new(&plant);
+        BushBean::grow(&BushBeanParams::default(), &plant, &mut b);
+        assert_eq!(b.axes.len(), 4);
+        for axis in &b.axes {
+            let highest = b
+                .leaves
+                .iter()
+                .filter_map(|(_, anchor, _)| anchor.on)
+                .filter(|(on, _)| *on == axis.index)
+                .map(|(_, station)| station)
+                .fold(0.0, f32::max);
+            let below = axis.length() - highest;
+            assert!((below - TIP).abs() < 1e-5, "axis {}: {below}", axis.index);
         }
     }
 }

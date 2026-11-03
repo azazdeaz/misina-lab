@@ -8,17 +8,18 @@ use std::f32::consts::{FRAC_PI_2, TAU};
 use super::prelude::*;
 
 /// Foliage: a grown leaf's green and a young one's, its veins' paler green,
-/// a stalk's, and a berry's skin unripe and ripe; a berry colours from its
-/// tip, so it wears both until it is ripe.
+/// a stalk's, the crown's brownish green, and a berry's skin unripe and
+/// ripe; a berry colours from its tip, so it wears both until it is ripe.
 const LEAF: u32 = 0x2F6B2A;
 const YOUNG: u32 = 0x6FAE4E;
 const VEIN: u32 = 0x9DC37C;
 const STEM: u32 = 0x7FA860;
+const CROWN_TINT: u32 = 0x585030;
 const UNRIPE: u32 = 0xD8E4B0;
 const RIPE: u32 = 0xC0122A;
 
 /// A grown crown's radius, in meters.
-const CROWN: f32 = 0.015;
+const CROWN: f32 = 0.012;
 
 /// A leaf: the petiole as a fraction of its length, a leaflet's width as a
 /// fraction of its own length, its teeth to an edge, how far the petioles
@@ -122,7 +123,7 @@ impl Recipe for Strawberry {
     fn grow(p: &StrawberryParams, plant: &PlantConfig, b: &mut Builder) {
         let stage = plant.grown(Self::HARVEST);
         let size = (stage * plant.vigour).max(0.1);
-        let crown = b.crown(CROWN * size.max(0.2), 0.0);
+        let crown = b.crown(CROWN * size.max(0.2), 0.0, srgb(CROWN_TINT));
         let tint = mix(srgb(LEAF), srgb(YOUNG), 1.0 - stage);
         let leaves = (p.leaves as f32 * stage).round().max(2.0) as u32;
         let rosette = Rosette::golden(leaves).phased(b.rng());
@@ -146,9 +147,8 @@ impl Recipe for Strawberry {
             let mut rng = b.stream(RUNNER_STREAM + k as u64);
             let azimuth = rng.range(0.0, TAU as f64) as f32;
             let rise = RUNNER_RISE + rng.range(-RISE_JITTER, RISE_JITTER) as f32;
-            let foot = (Vec2::from_angle(azimuth) * crown.radius).extend(crown.base);
             let runner = b.axis(
-                foot,
+                crown.side(azimuth, 0.0),
                 Axis::arc(
                     RUNNER * p.leaf_length * plant.vigour * running,
                     RUNNER_RADIUS,
@@ -186,10 +186,8 @@ impl Recipe for Strawberry {
             let azimuth = rng.range(0.0, TAU as f64) as f32;
             let rise = STALK_RISE + rng.range(-RISE_JITTER, RISE_JITTER) as f32;
             let ripeness = ((plant.age - set(k)) / RIPENING).clamp(0.0, 1.0);
-            let foot = (Vec2::from_angle(azimuth) * crown.radius)
-                .extend(crown.base + crown.height() / 2.0);
             let stalk = b.axis(
-                foot,
+                crown.side(azimuth, 0.5),
                 Axis::arc(STALK * p.leaf_length * size, STALK_RADIUS * size.max(0.5))
                     .heading(azimuth, rise)
                     .rise(-STALK_SAG)

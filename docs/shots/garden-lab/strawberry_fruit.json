@@ -1,0 +1,38 @@
+{
+  "size": [
+    1600,
+    1000
+  ],
+  "warmup": 8,
+  "start": {
+    "note": "Strawberries up close: achenes set in the skin, the calyx over the shoulder.",
+    "set": {
+      "bed.length": 1.2,
+      "bed.columns": 1,
+      "bed.rows": 1,
+      "planting.misses": 0.0,
+      "planting.jitter": 0.0,
+      "weeds.pressure": 0.0,
+      "weeds.path_pressure": 0.0,
+      "scene.week": 11.0,
+      "lettuce.share": 0.0,
+      "kale.share": 0.0,
+      "carrot.share": 0.0,
+      "bush_bean.share": 0.0,
+      "pole_bean.share": 0.0,
+      "zucchini.share": 0.0,
+      "strawberry.share": 1.0
+    },
+    "camera": {
+      "focus": [
+        0.075,
+        0.075,
+        0.27
+      ],
+      "yaw": -35,
+      "pitch": 20,
+      "radius": 0.3,
+      "fov": 40
+    }
+  }
+}

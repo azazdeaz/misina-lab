@@ -15,18 +15,19 @@
 //! plant is grown in its own frame: its foot at the origin, +Z up.
 //!
 //! The wood is meshed to the scene's `detail`: its rings where its shape
-//! needs them, swelling at every node an organ leaves it at and toward that
-//! organ's stalk, so a petiole or a pedicel grows out of the stem rather
-//! than poking through it, and ridged along its length where the recipe
-//! asked. A rod's segments are plain tubes, shared by size.
+//! needs them, swelling at every node an organ leaves it at, or left a scar
+//! at, and toward that organ's stalk, so a petiole or a pedicel grows out of
+//! the stem rather than poking through it, ridged along its length where the
+//! recipe asked, and rounding off to a point past its highest organ. A rod's
+//! segments are plain tubes, shared by size.
 
 use std::collections::HashMap;
-use std::f32::consts::FRAC_PI_2;
+use std::f32::consts::{FRAC_PI_2, TAU};
 
 use bevy::prelude::*;
-use misina_lab::geometry::mesh::{MeshData, cylinder_mesh, merge_meshes};
+use misina_lab::geometry::mesh::{MeshData, lathe, merge_meshes};
 use misina_lab::geometry::strand::{Bark, Bulge, Collar, Strand, sides_within, strand_mesh};
-use misina_lab::palette::{Response, srgb};
+use misina_lab::palette::Response;
 use misina_lab::rng::{Rng, salt};
 use misina_lab::scene::{
     COLLISION, Geometry, Library, Order, UsdAttributes, cable, capsule, capsule_between, rebase,
@@ -38,7 +39,7 @@ use super::fruit::{READY, Skin};
 use super::planting::PlantConfig;
 use super::{PhysicsParams, SceneParams};
 use crate::grow::axis::{Anchor, Grown};
-use crate::grow::builder::Builder;
+use crate::grow::builder::{Builder, Crown};
 use crate::shape::blade;
 use crate::species::{Of, OrganOf, Recipe, Species};
 
@@ -46,23 +47,21 @@ use crate::species::{Of, OrganOf, Recipe, Species};
 #[derive(Component)]
 pub struct Organ;
 
-/// A crown stub: its sides, how much it narrows toward its top, and its
-/// pale green.
-const CROWN_SIDES: usize = 8;
-const CROWN_TAPER: f32 = 0.85;
-const CROWN: (u32, Response) = (
-    0xB7C4A0,
-    Response {
-        roughness: 0.7,
-        reflectance: 0.3,
-    },
-);
+/// A crown: its sides, its rings from its top down to its foot, and how it
+/// answers light.
+const CROWN_SIDES: usize = 10;
+const CROWN_RINGS: usize = 6;
+const CROWN: Response = Response {
+    roughness: 0.7,
+    reflectance: 0.3,
+};
 
 /// How an axis is meshed: how far its tube may stray from its shape at a
-/// detail of 1, in meters, which also sets its sides, and the rings per
-/// meter its strand is built with before the tolerance places them; and how
-/// it answers light.
+/// detail of 1, in meters and at most this share of its thickest radius,
+/// which also sets its sides, and the rings per meter its strand is built
+/// with before the tolerance places them; and how it answers light.
 const WOOD_TOLERANCE: f64 = 0.0015;
+const WOOD_ROUNDNESS: f64 = 0.2;
 const WOOD_RINGS: f64 = 40.0;
 const WOOD: Response = Response {
     roughness: 0.75,
@@ -74,6 +73,10 @@ const WOOD: Response = Response {
 /// at a third of the way to the next node so dense nodes stay distinct.
 const NODE_SWELL: f64 = 0.1;
 const NODE_WIDTH: f64 = 1.0;
+
+/// How far short of its tip an axis starts rounding off, in its radii
+/// there, and never below its highest organ.
+const APEX: f64 = 3.0;
 
 /// The stream an axis's ridges are laid out from, salted with the axis's
 /// index.
@@ -151,7 +154,7 @@ pub fn grow<S: Recipe>(
             .iter()
             .partition(|axis| physics.flexible_stems && axis.bends && axis.length() > 2.0 * HELD);
         // Where every organ leaves its axis, which the wood swells toward: a
-        // leaf along its frame's +X, a fruit down its -Z.
+        // leaf, or the scar of one, along its frame's +X, a fruit down its -Z.
         let stalks: Vec<Stalk> = builder
             .leaves
             .iter()
@@ -164,6 +167,11 @@ pub fn grow<S: Recipe>(
                 anchor: *anchor,
                 toward: anchor.frame.rotation * -Vec3::Z,
                 radius: fruit.stalk_radius(),
+            }))
+            .chain(builder.scars.iter().map(|(anchor, radius)| Stalk {
+                anchor: *anchor,
+                toward: anchor.frame.rotation * Vec3::X,
+                radius: *radius,
             }))
             .collect();
         // The plant's rigid axes, as one mesh of its own in the first axis's
@@ -207,18 +215,18 @@ pub fn grow<S: Recipe>(
         built.push((order, plant, builder, wood, rods));
     }
 
-    // One stub for the species, a unit radius and height, scaled per plant;
-    // registered only if some plant grew one, so no part goes undrawn.
+    // One crown for the species, a unit radius and height, scaled per plant
+    // and in the first one's tint; registered only if some plant grew one,
+    // so no part goes undrawn.
     let crown = built
         .iter()
-        .any(|(_, _, builder, ..)| builder.crown.is_some())
-        .then(|| {
-            let (color, response) = CROWN;
+        .find_map(|(_, _, builder, ..)| builder.crown)
+        .map(|first| {
             library.part(
                 &crown_prefix,
                 0,
-                cylinder_mesh(1.0, CROWN_TAPER, 1.0, CROWN_SIDES).to_mesh(),
-                response.surface(srgb(color)),
+                dome().to_mesh(),
+                CROWN.surface(first.tint),
             )
         });
 
@@ -462,10 +470,31 @@ struct Stalk {
     radius: f32,
 }
 
+/// The crown of a unit radius and height: a dome turned from
+/// [`Crown::profile`], its rings closer together toward its top, where it
+/// turns, and a disc under its foot.
+fn dome() -> MeshData {
+    let rings: Vec<Vec<Vec3>> = (1..=CROWN_RINGS)
+        .map(|k| {
+            let up = 1.0 - (k as f32 / CROWN_RINGS as f32).powi(2);
+            let radius = Crown::profile(up);
+            (0..CROWN_SIDES)
+                .map(|i| {
+                    let angle = TAU * i as f32 / CROWN_SIDES as f32;
+                    Vec3::new(radius * angle.cos(), radius * angle.sin(), up)
+                })
+                .collect()
+        })
+        .collect();
+    lathe(Vec3::Z, &rings, Vec3::ZERO)
+}
+
 /// An axis as a tube to mesh: within [`WOOD_TOLERANCE`] of its shape at
-/// `detail`, its rings where the shape needs them, swollen at every node
-/// one of `stalks` leaves it at and toward each of them, and ridged from
-/// the plant's `seed` and its own index if its recipe asked.
+/// `detail`, or [`WOOD_ROUNDNESS`] of its radius if that is less, its
+/// rings where the shape needs them, swollen at every node
+/// one of `stalks` leaves it at and toward each of them, ridged from the
+/// plant's `seed` and its own index if its recipe asked, and rounding off
+/// over its last [`APEX`] radii, or what is left past its highest stalk.
 fn strand(axis: &Grown, stalks: &[Stalk], seed: u64, detail: f32) -> Strand {
     let points = axis
         .points
@@ -474,7 +503,7 @@ fn strand(axis: &Grown, stalks: &[Stalk], seed: u64, detail: f32) -> Strand {
         .collect();
     let radii = axis.radii.iter().map(|r| *r as f64).collect();
     let thickest = axis.radii.iter().copied().fold(0.0, f32::max) as f64;
-    let tolerance = WOOD_TOLERANCE / detail as f64;
+    let tolerance = WOOD_TOLERANCE.min(WOOD_ROUNDNESS * thickest) / detail as f64;
     let sides = sides_within(thickest, tolerance);
     let bark = if axis.ridges > 0.0 {
         let mut rng = Rng::new(seed ^ SURFACE_STREAM ^ salt(axis.index as u64));
@@ -521,10 +550,13 @@ fn strand(axis: &Grown, stalks: &[Stalk], seed: u64, detail: f32) -> Strand {
             }
         })
         .collect();
+    let highest = nodes.last().copied().unwrap_or(0.0);
+    let tip = *axis.radii.last().unwrap() as f64;
     Strand {
         bulges,
         collars,
         tolerance: Some(tolerance),
+        apex: (APEX * tip).min((axis.length() - highest).max(0.0) as f64),
         ..Strand::new(points, radii, sides, WOOD_RINGS, bark)
     }
 }
@@ -573,8 +605,9 @@ mod tests {
     /// A stem's strand is meshed to the wood tolerance at the scene's
     /// detail, swells once at every node its leaves leave it at, however
     /// many, and toward each leaf's petiole, so it is wider at a node than
-    /// between two; an axis grown with ridges is ridged, one without is
-    /// round.
+    /// between two, and rounds off over its last radii, or what is left past
+    /// a leaf near its tip; an axis grown with ridges is ridged, one without
+    /// is round up to its apex.
     #[test]
     fn a_stem_swells_at_its_nodes_toward_its_leaves_and_may_be_ridged() {
         let mut rng = Rng::new(2);
@@ -582,27 +615,32 @@ mod tests {
             .taper(1.0)
             .grow(Vec3::ZERO, &mut rng);
         let leaf = LeafConfig::simple(0.2, 0.6).petiole(0.08);
-        let stalks: Vec<Stalk> = [(0.2, 0.0), (0.2, PI), (0.35, 1.0)]
-            .into_iter()
-            .map(|(station, azimuth)| {
-                let node = AxisNode {
-                    rank: 0,
-                    count: 1,
-                    station,
-                    azimuth,
-                };
-                let anchor = stem.anchor(&node, 0.3);
-                Stalk {
-                    anchor,
-                    toward: anchor.frame.rotation * Vec3::X,
-                    radius: blade::stalk_radius(&leaf),
-                }
-            })
-            .collect();
+        let stalk = |station: f32, azimuth: f32| {
+            let node = AxisNode {
+                rank: 0,
+                count: 1,
+                station,
+                azimuth,
+            };
+            let anchor = stem.anchor(&node, 0.3);
+            Stalk {
+                anchor,
+                toward: anchor.frame.rotation * Vec3::X,
+                radius: blade::stalk_radius(&leaf),
+            }
+        };
+        let stalks = [stalk(0.2, 0.0), stalk(0.2, PI), stalk(0.35, 1.0)];
         let swollen = strand(&stem, &stalks, 1, 2.0);
         assert_eq!(swollen.bulges.len(), 2, "one bulge per node");
         assert_eq!(swollen.collars.len(), 3, "a collar per leaf");
-        assert_eq!(swollen.tolerance, Some(WOOD_TOLERANCE / 2.0));
+        let tolerance = |strand: &Strand| strand.tolerance.unwrap();
+        assert!((tolerance(&swollen) - WOOD_TOLERANCE / 2.0).abs() < 1e-9);
+        let thin = Axis::upright(0.5, 0.003).grow(Vec3::ZERO, &mut rng);
+        let thin = strand(&thin, &[], 1, 2.0);
+        assert!((tolerance(&thin) - WOOD_ROUNDNESS * 0.003 / 2.0).abs() < 1e-9);
+        assert!((swollen.apex - APEX * 0.01).abs() < 1e-9);
+        let topped = strand(&stem, &[stalk(0.49, 0.0)], 1, 2.0);
+        assert!((topped.apex - 0.01).abs() < 1e-6, "{}", topped.apex);
         let mesh = strand_mesh(&swollen).unwrap();
         let widest_near = |z: f32| {
             mesh.points
@@ -618,10 +656,16 @@ mod tests {
         );
         assert!(widest_near(0.45) < 0.0102, "{} between", widest_near(0.45));
 
-        // How far the radius strays round a tube of one radius throughout.
+        // How far the radius strays round a tube of one radius up to its
+        // apex.
         let roundness = |axis: &Grown| {
             let mesh = strand_mesh(&strand(axis, &[], 1, 1.0)).unwrap();
-            let radii: Vec<f32> = mesh.points.iter().map(|p| p[0].hypot(p[1])).collect();
+            let radii: Vec<f32> = mesh
+                .points
+                .iter()
+                .filter(|p| p[2] < 0.5 - APEX as f32 * 0.01)
+                .map(|p| p[0].hypot(p[1]))
+                .collect();
             radii.iter().copied().fold(0.0, f32::max) - radii.iter().copied().fold(1.0, f32::min)
         };
         let ridged = Axis::upright(0.5, 0.01)

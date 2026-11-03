@@ -111,9 +111,15 @@ impl Spiral {
                 rank,
                 count,
                 station: (rank + 1) as f32 * self.internode,
-                azimuth: (self.phase + rank as f32 * GOLDEN) % TAU,
+                azimuth: self.azimuth(rank),
             })
             .collect()
+    }
+
+    /// Where the node of `rank` faces, in radians about +Z from +X, whether
+    /// or not the spiral puts one there.
+    pub fn azimuth(&self, rank: u32) -> f32 {
+        (self.phase + rank as f32 * GOLDEN) % TAU
     }
 }
 
