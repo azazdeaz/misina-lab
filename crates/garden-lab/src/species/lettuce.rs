@@ -5,7 +5,7 @@ use super::prelude::*;
 
 /// Foliage: a green loose-leaf's, a red one's at the margins over a blade
 /// this far from the green toward it, the yellow-green of a young plant
-/// either way, and the pale of the midribs and petioles.
+/// either way, and the pale of the midribs, the petioles and the crown.
 const GREEN: u32 = 0x6FA83C;
 const RED: u32 = 0x7A2A3A;
 const RED_BLEND: f32 = 0.3;
@@ -130,7 +130,7 @@ impl Recipe for Lettuce {
             srgb(GREEN)
         };
         let tint = mix(blade, srgb(YOUNG), 1.0 - stage);
-        let crown = b.crown(CROWN * size.max(0.15), 0.0);
+        let crown = b.crown(CROWN * size.max(0.15), 0.0, srgb(VEIN));
         let rosette = Rosette::golden(leaves).phased(b.rng());
         for mut node in rosette.nodes() {
             let rng = b.rng();

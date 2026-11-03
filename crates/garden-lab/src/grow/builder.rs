@@ -25,8 +25,15 @@ pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
 }
 
-/// Where a crown's leaves attach, as a fraction of its radius.
+/// A crown: its height as a fraction of its radius, short, a rosette's
+/// internodes being millimetres; how blunt its dome is, the exponent its
+/// side falls to its top with; where its leaves attach, as a fraction of its
+/// radius at their height; and how far up it the innermost leaf leaves it,
+/// as a fraction of its height.
+const CROWN_HEIGHT: f32 = 1.5;
+const DOME: f32 = 2.0;
 const ATTACH: f32 = 0.8;
+const INNERMOST: f32 = 0.8;
 
 /// Fruit seeds are salted apart from leaf seeds by this bit.
 const FRUIT_SALT: u64 = 1 << 40;
@@ -46,6 +53,8 @@ pub struct Builder {
     pub(crate) leaves: Vec<(u64, Anchor, LeafConfig)>,
     /// Each fruit's index on the plant, its anchor, and its config.
     pub(crate) fruits: Vec<(u64, Anchor, FruitConfig)>,
+    /// Where a leaf was taken off, and how thick its stalk was.
+    pub(crate) scars: Vec<(Anchor, f32)>,
 }
 
 impl Builder {
@@ -57,6 +66,7 @@ impl Builder {
             axes: Vec::new(),
             leaves: Vec::new(),
             fruits: Vec::new(),
+            scars: Vec::new(),
         }
     }
 
@@ -74,11 +84,13 @@ impl Builder {
     }
 
     /// The stub of stem at the plant's foot, `radius` across and standing
-    /// on `base`, that a rosette's leaves anchor on.
-    pub fn crown(&mut self, radius: f32, base: f32) -> Crown {
+    /// on `base`, that a rosette's leaves anchor on, in `tint`, linear RGB:
+    /// a species' crowns are one part, in the first one's tint.
+    pub fn crown(&mut self, radius: f32, base: f32, tint: [f32; 3]) -> Crown {
         let crown = Crown {
             radius: radius.max(0.001),
             base,
+            tint,
         };
         self.crown = Some(crown);
         crown
@@ -121,28 +133,51 @@ impl Builder {
         fruit.seed = salt(self.seed ^ FRUIT_SALT ^ index);
         self.fruits.push((index, anchor.into(), fruit));
     }
+
+    /// The scar a leaf leaves where it is taken off at `anchor`, its stalk
+    /// `radius` thick: the stem swells there as though the leaf still grew
+    /// from it.
+    pub fn scar(&mut self, anchor: impl Into<Anchor>, radius: f32) {
+        self.scars.push((anchor.into(), radius));
+    }
 }
 
-/// A crown, as the anchor of a rosette's leaves.
+/// A crown, as the anchor of a rosette's leaves: a dome on its foot, its
+/// leaves leaving its side, higher the further in.
 #[derive(Clone, Copy, Debug)]
 pub struct Crown {
     pub radius: f32,
     /// The height of its foot above the plant's.
     pub base: f32,
+    /// Its colour, linear RGB.
+    pub tint: [f32; 3],
 }
 
 impl Crown {
-    /// Its height: short, a rosette's internodes being millimetres.
+    /// Its height.
     pub fn height(&self) -> f32 {
-        1.5 * self.radius
+        CROWN_HEIGHT * self.radius
+    }
+
+    /// Its radius `up` of the way from its foot to its top, as a fraction
+    /// of its foot's.
+    pub fn profile(up: f32) -> f32 {
+        (1.0 - up.clamp(0.0, 1.0).powf(DOME)).sqrt()
+    }
+
+    /// The point on its side `up` of the way from its foot to its top,
+    /// facing `azimuth`.
+    pub fn side(&self, azimuth: f32, up: f32) -> Vec3 {
+        (Vec2::from_angle(azimuth) * self.radius * Self::profile(up))
+            .extend(self.base + self.height() * up)
     }
 
     /// Where a leaf at `node` leaves the crown, pointing out along the
     /// node's azimuth and rising `elevation` radians off level, its face
-    /// turned up and in: on the crown's side, higher the further in.
+    /// turned up and in: in from its side, higher the further in.
     pub fn anchor(&self, node: &Node, elevation: f32) -> Transform {
-        let foot = (Vec2::from_angle(node.azimuth) * self.radius * ATTACH)
-            .extend(self.base + self.height() * node.inner());
+        let side = self.side(node.azimuth, INNERMOST * node.inner());
+        let foot = (side.xy() * ATTACH).extend(side.z);
         leaf_frame(foot, node.azimuth, elevation)
     }
 }
@@ -299,8 +334,9 @@ impl FruitConfig {
     }
 
     /// A berry `diameter` across at its widest and `length` long, narrower
-    /// toward its stalk, hanging down its own -Z from its anchor: a
-    /// zucchini, which its recipe lays out near level.
+    /// toward its stalk, faintly ribbed, a scar on its blossom end, hanging
+    /// down its own -Z from its anchor: a zucchini, which its recipe lays
+    /// out near level. Its stalk is stout and ridged, flaring into it.
     pub fn berry(diameter: f32, length: f32) -> Self {
         Self {
             kind: Kind::Berry,

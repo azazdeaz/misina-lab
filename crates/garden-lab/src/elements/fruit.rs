@@ -34,9 +34,10 @@ pub const READY: f32 = 0.9;
 const DENSITY: f32 = 1000.0;
 const FILL: f32 = 0.6;
 
-/// A fruit's stalk's radius as a fraction of its diameter, and the least it
-/// is, in meters.
+/// A fruit's stalk's radius as a fraction of its diameter, a berry's
+/// stouter, and the least it is, in meters.
 const STALK_RADIUS: f32 = 0.12;
+const PEDUNCLE_RADIUS: f32 = 0.17;
 const MIN_STALK_RADIUS: f32 = 0.001;
 
 /// What a fruit is, which decides its solid and how it is picked.
@@ -99,7 +100,11 @@ impl FruitConfig {
     /// Its stalk's radius, in meters: what it leaves its stem by, and what
     /// the stem swells toward there, whether or not the stalk is drawn.
     pub fn stalk_radius(&self) -> f32 {
-        (STALK_RADIUS * self.diameter).max(MIN_STALK_RADIUS)
+        let fraction = match self.kind {
+            Kind::Berry => PEDUNCLE_RADIUS,
+            _ => STALK_RADIUS,
+        };
+        (fraction * self.diameter).max(MIN_STALK_RADIUS)
     }
 }
 

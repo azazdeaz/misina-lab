@@ -1,6 +1,6 @@
 //! Kale — an upright stem with a crown of large curled blades on long
-//! petioles, stripped bare below as the lower leaves are picked. Its
-//! leaves, the crop, carry no harvest frame yet.
+//! petioles, stripped below as the lower leaves are picked, a scar at
+//! every node they left. Its leaves, the crop, carry no harvest frame yet.
 
 use super::prelude::*;
 
@@ -33,6 +33,11 @@ const RISE: (f32, f32) = (0.3, 1.3);
 
 /// Leaves from the head over which a leaf grows to full size.
 const GROWING: f32 = 6.0;
+
+/// How thick the base was that a picked leaf left its scar by, as a
+/// fraction of the leaf's length: a petiole widening where it clasps the
+/// stem.
+const SCAR: f32 = 0.025;
 
 /// How far each leaf strays from its rank's: in length as a fraction, in
 /// elevation and azimuth in radians.
@@ -89,7 +94,11 @@ impl Recipe for Kale {
             let length = 1.0 + rng.range(-LENGTH_JITTER, LENGTH_JITTER) as f32;
             let elevation = rng.range(-ELEVATION_JITTER, ELEVATION_JITTER) as f32;
             node.azimuth += rng.range(-AZIMUTH_JITTER, AZIMUTH_JITTER) as f32;
+            // A stripped node keeps the scar of its leaf, grown and spreading
+            // when it was picked.
             if i < stripped {
+                let picked = p.leaf_length * size * length;
+                b.scar(stem.anchor(&node, RISE.0 + elevation), SCAR * picked);
                 continue;
             }
 
@@ -113,5 +122,39 @@ impl Recipe for Kale {
                 config,
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A grown kale keeps the leaves asked for at its head and a scar at
+    /// every node below them.
+    #[test]
+    fn a_stripped_node_keeps_the_scar_of_its_leaf() {
+        let plant = PlantConfig {
+            age: 10.0,
+            vigour: 1.0,
+            seed: 7,
+            string: None,
+        };
+        let p = KaleParams::default();
+        let mut b = Builder::new(&plant);
+        Kale::grow(&p, &plant, &mut b);
+        assert_eq!(b.leaves.len(), p.leaves_kept as usize);
+        let lowest = b
+            .leaves
+            .iter()
+            .map(|(_, anchor, _)| anchor.on.unwrap().1)
+            .fold(f32::INFINITY, f32::min);
+        let stripped = (lowest / INTERNODE).round() as usize - 1;
+        assert!(stripped > 0);
+        assert_eq!(b.scars.len(), stripped);
+        assert!(
+            b.scars
+                .iter()
+                .all(|(anchor, radius)| anchor.on.unwrap().1 < lowest && *radius > 0.0)
+        );
     }
 }

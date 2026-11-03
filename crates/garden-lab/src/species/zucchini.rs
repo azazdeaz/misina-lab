@@ -35,12 +35,13 @@ const RISE: (f32, f32) = (0.45, 1.25);
 const HINGE: f32 = 0.7;
 const GROWING: f32 = 4.0;
 
-/// Fruit: a ripe fruit's diameter as a fraction of its length, the lowest
-/// node that bears one and how many nodes up from it do, the week the first
-/// sets and the weeks between one and the next, the weeks one takes from
-/// setting to ripe, how far it turns round its node's azimuth, and how far
-/// it rises off level, in radians.
+/// Fruit: a ripe fruit's diameter and its stalk as fractions of its length,
+/// the lowest node that bears one and how many nodes up from it do, the
+/// week the first sets and the weeks between one and the next, the weeks
+/// one takes from setting to ripe, how far it turns round its node's
+/// azimuth, and how far it rises off level, in radians.
 const FRUIT_ASPECT: f32 = 0.22;
+const PEDUNCLE: f32 = 0.18;
 const FIRST_FRUIT: u32 = 3;
 const FRUITS: u32 = 3;
 const FRUITS_FROM: f32 = 5.0;
@@ -130,6 +131,7 @@ impl Recipe for Zucchini {
                     index,
                     stem.hang(&node, azimuth + FRUIT_SWING + swing, FRAC_PI_2 + FRUIT_RISE),
                     FruitConfig::berry(FRUIT_ASPECT * length, length)
+                        .stalk(PEDUNCLE * length)
                         .ripeness(ripeness)
                         .tint(srgb(FRUIT))
                         .shoulder(srgb(FLECK)),

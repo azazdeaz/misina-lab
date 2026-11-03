@@ -4,8 +4,8 @@
 use super::prelude::*;
 
 /// Foliage: a grown leaf's green and a young one's; the root's skin from
-/// pale to full orange as it ripens, and the green its shoulder turns above
-/// the soil.
+/// pale to full orange as it ripens, and the green its shoulder and crown
+/// turn above the soil.
 const LEAF: u32 = 0x4A8A3A;
 const YOUNG: u32 = 0x86B85C;
 const PALE: u32 = 0xE8A060;
@@ -75,7 +75,7 @@ impl Recipe for Carrot {
                 .shoulder(srgb(GREENED)),
         );
         let radius = diameter / 2.0 * 0.8;
-        let crown = b.crown(radius, (shoulder - SUNK * radius).max(0.0));
+        let crown = b.crown(radius, (shoulder - SUNK * radius).max(0.0), srgb(GREENED));
         let tint = mix(srgb(LEAF), srgb(YOUNG), 1.0 - stage);
         let leaves = (p.leaves as f32 * stage).round().max(2.0) as u32;
         let rosette = Rosette::golden(leaves).phased(b.rng());
