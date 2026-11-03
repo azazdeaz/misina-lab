@@ -35,6 +35,11 @@ const ELEVATION: f32 = 0.35;
 const DROOP: f32 = 0.5;
 const GROWING: f32 = 4.0;
 
+/// A leaflet's secondary veins along each side, and how high it stands
+/// between two, as a fraction of the gap between them.
+const VEINS: u32 = 5;
+const RELIEF: f32 = 0.15;
+
 /// Pods: a ripe pod's diameter and the stalk it hangs by, in meters, the
 /// lowest node that bears them, how many hang at a node at least and at
 /// most, how many numbers a node's pods take after its leaf's (which the
@@ -110,6 +115,7 @@ impl Recipe for PoleBean {
             let whole = p.leaf_length * size * (0.3 + 0.7 * grown) * length;
             let leaf = LeafConfig::trifoliate(whole, WIDTH)
                 .petiole(PETIOLE * whole)
+                .relief(VEINS, RELIEF)
                 .droop(DROOP)
                 .tint(tint)
                 .vein(srgb(VEIN));

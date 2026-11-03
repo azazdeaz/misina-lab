@@ -51,14 +51,16 @@ extents, which an earlier builder would author as a plain cube.
   stalks are rods in `segment` lengths, the leaves, pods and berries riding
   the segments with their masses as the cable's loads; `leaves_collide` puts
   a box round every blade, fitted in the plane it lies flattest in, under
-  `Leaf_NN/Collision` beside the `Blade` that draws it. Every stem swells
-  at its nodes and toward its leaves' petioles and its fruits' stalks, a
-  zucchini's is ridged, and every leaf and fruit is painted per point, a
-  vertex `displayColor`: blades with a midrib and vein and edge colours,
-  red at a red lettuce's margins, strawberries colouring from the tip under
-  a calyx and pitted by their achenes, carrots' greened shoulders, striped
-  zucchini, pods swelling at their beans and hanging by stalks;
-  `scene.detail` sets how finely the crop is meshed. `cargo run -p
+  `Leaf_NN/Collision` beside the `Blade` that draws it. Every rigid stem
+  swells at its nodes and toward its leaves' petioles and its fruits'
+  stalks, a zucchini's is ridged; blades are pleated on their veins, deep
+  on a strawberry leaflet, frilled at a curly kale's and a loose-leaf
+  lettuce's margin, fanning from a zucchini blade's middle, whose margin is
+  toothed, and a simple blade carries a midrib; strawberries hang under a
+  calyx, pitted by their achenes, and pods swell at their beans and hang by
+  stalks. Leaves and fruit carry a vertex `displayColor`, a strawberry's
+  colouring from its tip as it ripens. `scene.detail` sets how finely the
+  crop is meshed. `cargo run -p
   garden-lab` opens its viewer, and
   `garden_lab.isaaclab.GardenCfg` spawns it in Isaac Lab, its `PLANT` and
   `without_rods()` saying what prim a rod belongs to and whether a cfg
@@ -69,7 +71,10 @@ extents, which an earlier builder would author as a plain cube.
   sets, so a generator paints a part instead of building its mesh by hand;
   `geometry::mesh::lathe`, a closed solid through rings, and
   `geometry::shapes::fold`, the keel and droop a leaf blade takes, are the
-  framework's, with `shapes::ring` and `shapes::profile` public.
+  framework's, with `shapes::ring` and `shapes::profile` public;
+  `shapes::pinnate` lays a midrib's veins and the crests between them out
+  as creases for `outline::creased_mesh`, and `shapes::between_veins` says
+  where a point lies between them, so a filled blade pleats on its edges.
 - **greenhouse-lab**: Stems collide, as a chain of capsules along each
   stem's axis from where it takes off from the lowered bundle,
   `Stem_n/Collision_00 …`, each straight from one of the axis's points to

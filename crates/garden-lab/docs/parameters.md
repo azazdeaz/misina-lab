@@ -14,7 +14,7 @@ generator can build. Lengths are in meters.
 
 `SceneParams` in Python, `SceneCfg` in Isaac Lab.
 
-Scene-wide parameters: the seed, and how far into the season the garden is.
+Scene-wide parameters: the seed, how far into the season the garden is, and how finely the crop is meshed.
 
 | Parameter | Type | Default | Slider range | Description |
 |---|---|---|---|---|
@@ -110,7 +110,7 @@ Kale: an upright stem carrying a crown of large curled blades on long petioles, 
 | `height` | float | `0.6` | 0.3 to 1 | Height of a harvest-ready stem, in meters. |
 | `leaves_kept` | int | `10` | 4 to 20 | Leaves left on the stem, counted down from its head; the nodes below are stripped. A stem grows a node every 3.5 cm. |
 | `leaf_length` | float | `0.35` | 0.15 to 0.6 | Length of a grown leaf, petiole and blade, in meters. |
-| `curl` | float | `0.8` | 0 to 1 | How tightly the margin curls: 0 is a flat lacinato, 1 a curly kale. |
+| `curl` | float | `0.8` | 0 to 1 | How tightly the margin curls: 0 is a flat lacinato, 1 a curly kale, its edges notched past halfway. |
 | `share` | float | `0.25` | 0 to 1 | Share of the garden's planting squares this crop gets, against the other crops'; 0 leaves it out. |
 | `spacing` | float | `0.3` | 0.03 to 1 | Distance between plants, in meters: rounded to one, two, three or four per side of a 30 cm square, or, wider than a square, to a plant every two or three squares, on the lattice that fits the most into the crop's block. |
 | `sown_week` | float | `0.0` | 0 to 20 | The week it was sown, on the scene's calendar: a plant's age is the scene's week less this, and a bed is bare before it. |

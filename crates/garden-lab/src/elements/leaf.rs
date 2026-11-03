@@ -59,8 +59,21 @@ pub struct LeafConfig {
     pub petiole: f32,
     /// A compound leaf's pairs of leaflets.
     pub pairs: u32,
-    /// Teeth cut into each edge of a trifoliate leaflet; 0 leaves it entire.
+    /// Notches cut into each edge of a simple blade, teeth into each edge
+    /// of a trifoliate leaflet, or round a lobed blade's margin; 0 leaves
+    /// it entire.
     pub teeth: u32,
+    /// Secondary veins along each side of a simple blade or a leaflet, the
+    /// lines its pleats fold on; a lobed blade pleats on its main veins.
+    pub veins: u32,
+    /// How far the blade stands up between two veins, as a fraction of the
+    /// gap between them (of the distance out from its middle, on a lobed
+    /// blade); 0 leaves it smooth.
+    pub relief: f32,
+    /// How much higher a simple blade's or a leaflet's pleats stand at its
+    /// margin than off its midrib, as a multiple of its relief: a frilled
+    /// edge.
+    pub frill: f32,
     /// How far a simple blade's margin ruffles, 0 to 1.
     pub ruffle: f32,
     /// How far a simple blade cups about its midrib: the turn across its
@@ -108,7 +121,6 @@ impl Metric<LeafConfig> for LeafMetric {
         let step = |same: bool| if same { 0.0 } else { 10.0 * reach.max(0.1) };
         let simple = (a.template == Template::Simple) as u8 as f32;
         let compound = (a.template == Template::Compound) as u8 as f32;
-        let trifoliate = (a.template == Template::Trifoliate) as u8 as f32;
         [
             a.length - b.length,
             (a.width - b.width) * reach,
@@ -116,7 +128,11 @@ impl Metric<LeafConfig> for LeafMetric {
             // A pair more is two leaflets more.
             (a.pairs as f32 - b.pairs as f32) * reach / 6.0 * compound,
             // A tooth is a notch a few percent of a leaflet deep.
-            (a.teeth as f32 - b.teeth as f32) * reach / 30.0 * trifoliate,
+            (a.teeth as f32 - b.teeth as f32) * reach / 30.0,
+            // A pleat stands a fraction of the gap between two veins high.
+            (a.relief - b.relief) * reach / 10.0,
+            (a.frill - b.frill) * (a.relief + b.relief) * reach / 20.0,
+            (a.veins as f32 - b.veins as f32) * reach / 20.0,
             // A full ruffle is a few percent of the length deep.
             (a.ruffle - b.ruffle) * reach / 20.0 * simple,
             // The edge's rise under the cup: the turn over half the width.

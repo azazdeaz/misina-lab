@@ -20,7 +20,9 @@ from misina_lab.isaaclab.spawn import GeneratedSceneCfg
 # >>> generated: fragments
 @configclass
 class SceneCfg:
-    """Scene-wide parameters: the seed, and how far into the season the garden is."""
+    """Scene-wide parameters: the seed, how far into the season the garden is, and how
+    finely the crop is meshed.
+    """
 
     seed: int = 0
     """The one seed the whole scene is generated from. Each element salts it with a
@@ -199,7 +201,9 @@ class KaleCfg:
     leaf_length: float = 0.35
     """Length of a grown leaf, petiole and blade, in meters."""
     curl: float = 0.8
-    """How tightly the margin curls: 0 is a flat lacinato, 1 a curly kale."""
+    """How tightly the margin curls: 0 is a flat lacinato, 1 a curly kale, its edges
+    notched past halfway.
+    """
     share: float = 0.25
     """Share of the garden's planting squares this crop gets, against the other crops';
     0 leaves it out.

@@ -37,6 +37,11 @@ const ELEVATION: f32 = 0.45;
 const DROOP: f32 = 0.4;
 const GROWING: f32 = 4.0;
 
+/// A leaflet's secondary veins along each side, and how high it stands
+/// between two, as a fraction of the gap between them.
+const VEINS: u32 = 5;
+const RELIEF: f32 = 0.15;
+
 /// Pods: a ripe pod's diameter and the stalk it hangs by, in meters, the
 /// lowest node that bears them, how many hang at a node at least and at
 /// most, how far they tilt outward, in radians, and the week they set.
@@ -152,6 +157,7 @@ impl Bush<'_> {
         let whole = self.p.leaf_length * self.size * (0.3 + 0.7 * grown) * length;
         let leaf = LeafConfig::trifoliate(whole, WIDTH)
             .petiole(PETIOLE * whole)
+            .relief(VEINS, RELIEF)
             .droop(DROOP)
             .tint(self.tint)
             .vein(srgb(VEIN));

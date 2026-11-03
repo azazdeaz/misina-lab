@@ -11,8 +11,16 @@ const YOUNG: u32 = 0x7FA85A;
 const VEIN: u32 = 0xB9C8A4;
 const STEM: u32 = 0x9AA68A;
 
-/// How far a blade twists about its midrib by its tip, in radians.
+/// How far a blade twists about its midrib by its tip, in radians; its
+/// secondary veins along each side and how high it blisters between them,
+/// as a fraction of the gap between two; how many times higher a curly
+/// blade's pleats frill at its margin; and the notches cut along each edge
+/// of a curly blade.
 const TWIST: f32 = 0.3;
+const VEINS: u32 = 16;
+const RELIEF: f32 = 0.35;
+const FRILL: f32 = 3.0;
+const NOTCHES: u32 = 6;
 
 /// A grown stem's radius at its foot, in meters, how much it thins to the
 /// head, how far it leans and bows, and its internode.
@@ -56,7 +64,7 @@ species! {
         #[reflect(@Slider { min: 0.15, max: 0.6, step: 0.01 })]
         pub leaf_length: f32 = 0.35,
         /// How tightly the margin curls: 0 is a flat lacinato, 1 a curly
-        /// kale.
+        /// kale, its edges notched past halfway.
         #[reflect(@Slider { min: 0.0, max: 1.0, step: 0.05 })]
         pub curl: f32 = 0.8,
     }
@@ -105,6 +113,9 @@ impl Recipe for Kale {
                 .cup(CUP)
                 .droop(DROOP * settled)
                 .twist(TWIST)
+                .relief(VEINS, RELIEF)
+                .frill(FRILL * p.curl)
+                .teeth(if p.curl > 0.5 { NOTCHES } else { 0 })
                 .tint(tint)
                 .vein(srgb(VEIN));
             b.leaf_at(

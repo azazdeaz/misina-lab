@@ -12,8 +12,14 @@ const RED_BLEND: f32 = 0.3;
 const YOUNG: u32 = 0xA8CF5A;
 const VEIN: u32 = 0xD8E6AE;
 
-/// How far a blade twists about its midrib by its tip, in radians.
+/// How far a blade twists about its midrib by its tip, in radians; its
+/// secondary veins along each side and how high it puckers between them,
+/// as a fraction of the gap between two; and how many times higher a fully
+/// ruffled blade's pleats frill at its margin.
 const TWIST: f32 = 0.25;
+const VEINS: u32 = 10;
+const RELIEF: f32 = 0.3;
+const FRILL: f32 = 1.5;
 
 /// A grown crown's radius, in meters.
 const CROWN: f32 = 0.012;
@@ -156,6 +162,8 @@ impl Recipe for Lettuce {
                 .cup(lerp(CUP, HEAD_CUP, closing))
                 .droop(lerp(drooping, HEAD_TURN, closing))
                 .twist(TWIST)
+                .relief(VEINS, RELIEF)
+                .frill(FRILL * p.ruffle)
                 .tint(tint)
                 .vein(srgb(VEIN));
             if red {

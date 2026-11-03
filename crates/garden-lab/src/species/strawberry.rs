@@ -30,6 +30,10 @@ const TEETH: u32 = 7;
 const RISE: (f32, f32) = (0.6, 1.3);
 const DROOP: f32 = 0.8;
 
+/// How high a leaflet stands between two of its veins, one running out to
+/// every tooth, as a fraction of the gap between them: deeply pleated.
+const RELIEF: f32 = 0.45;
+
 /// A fruit stalk: its length as a fraction of the leaves', its radius at
 /// the crown, in meters, how much it thins to the tip, how far it rises off
 /// level at the crown and how far it turns down on its way, in radians; and
@@ -220,6 +224,7 @@ fn leaf(whole: f32, tint: [f32; 3]) -> LeafConfig {
     LeafConfig::trifoliate(whole, WIDTH)
         .petiole(PETIOLE * whole)
         .teeth(TEETH)
+        .relief(TEETH, RELIEF)
         .droop(DROOP)
         .tint(tint)
         .vein(srgb(VEIN))

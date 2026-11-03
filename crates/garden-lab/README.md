@@ -43,22 +43,30 @@ bed is bare before its crop's sowing week. The weeds take no notice of it.
 
 ## How it is meshed
 
-Every stem is a tube rung where its shape needs it, swelling at every node
-an organ leaves it at and toward that organ's stalk, so a petiole grows out
-of the stem rather than poking through it; a zucchini's is ridged. Every
-leaf and fruit is painted, a colour per point, which USD carries as a vertex
-`displayColor`: a blade pales toward its vein colour beside its midrib, a
-tapered tube laid along a simple blade, and along the veins a lobed blade
-fans from its notch, and fades to its edge colour at the margin and the tip,
-red on a red lettuce; a strawberry colours from its tip as it ripens under a
-calyx of seven sepals, pitted and flecked by its achenes; a carrot's
-shoulder greens above the soil; a zucchini is striped paler; a pod swells at
-its beans and hangs by a stalk. `scene.detail` sets how finely all of it is
-meshed: at 1 a stem's tube strays about a pixel from its shape to a camera
-half a meter away and a blade is a few hundred triangles, 4 is four times as
-fine and 0.1 the coarsest at which every organ still shows. The weeds have a
-detail of their own. The shots under `docs/shots/garden-lab/` frame one crop
-each at harvest, close enough to judge all this;
+Every rigid stem is a tube rung where its shape needs it, swelling at every
+node an organ leaves it at and toward that organ's stalk, so a petiole grows
+out of the stem rather than poking through it; a zucchini's is ridged. A rod,
+with `flexible_stems`, is plain segment tubes shared by size. A blade is
+pleated on its veins, each vein a valley and the blade standing up to a crest
+between two: a simple blade or a leaflet on secondary veins leaving its
+midrib, a strawberry leaflet deeply, a loose-leaf lettuce and a curly kale
+frilled at the margin, and a zucchini blade on the main veins fanning from
+its middle. The veins and the crests are lines of edges through the fill, so
+the pleats fold sharply however coarse the fill is. A zucchini blade is
+toothed all round and a curly kale's notched along its edges; a simple blade
+carries a tapered midrib. A strawberry sits under a calyx of seven sepals,
+pitted by its achenes; a pod swells at its beans and hangs by a stalk.
+
+Leaves and fruit carry a colour per point, which USD carries as a vertex
+`displayColor`: a strawberry colours from its tip as it ripens, and blades
+pale along their midribs and veins.
+
+`scene.detail` sets how finely the crop is meshed: at 1 a rigid stem's tube
+strays about a pixel from its shape to a camera half a meter away and a
+blade is a few hundred triangles, 4 is four times as fine and 0.1 the
+coarsest at which every organ still shows. The weeds have a detail of their
+own. The shots under `docs/shots/garden-lab/` frame one crop each at
+harvest, close enough to judge all this;
 `docs/shots/render.sh docs/shots/garden-lab/*.json` renders them.
 
 ## Running it

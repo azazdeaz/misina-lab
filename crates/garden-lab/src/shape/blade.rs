@@ -12,6 +12,14 @@
 //! ends. A ruffle displaces the margin out of the plane rather than
 //! lengthening it, which a flat triangulation cannot do.
 //!
+//! A blade with relief is pleated on its veins before it is deformed: a
+//! simple blade or a leaflet on secondary veins leaving its midrib, a lobed
+//! blade on the main veins fanning from its middle, every vein a valley
+//! and the blade standing up to a rounded crest between two. The veins and
+//! the crests are lines of edges through the fill, so the pleats fold on
+//! them however coarse the fill is, and a lobed blade's margin may be
+//! toothed.
+//!
 //! Every leaf is painted, a colour per point: the blade its tint, paling to
 //! the vein colour beside the midrib, along the veins a lobed blade fans
 //! from its notch, and fading to the edge colour toward the margin and the
@@ -23,8 +31,10 @@ use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
 use bevy::prelude::*;
 use misina_lab::geometry::mesh::{MeshData, bend, cylinder_mesh, merge_meshes};
-use misina_lab::geometry::outline::{Outline, outline_mesh};
-use misina_lab::geometry::shapes::{BASE, fold, leaf, profile, ring, toothed};
+use misina_lab::geometry::outline::{Outline, creased_mesh, outline_mesh};
+use misina_lab::geometry::shapes::{
+    BASE, between_veins, fold, leaf, pinnate, profile, ring, toothed,
+};
 use misina_lab::geometry::strand::{Bark, Strand, strand_mesh};
 use misina_lab::palette::mix;
 use misina_lab::rng::Rng;
@@ -65,6 +75,20 @@ const MIDRIB_REACH: f64 = 0.85;
 const MIDRIB_TAPER: f64 = 0.3;
 const MIDRIB_SIDES: usize = 5;
 const MIDRIB_RINGS: f64 = 40.0;
+
+/// The pleats: the angle secondary veins leave the midrib at, in radians,
+/// and how far off the midrib a pleat rises to its full height, as a
+/// fraction of the half-width there: the midrib is stiff.
+const SECONDARY: f64 = 0.9;
+const RELIEF_CLEAR: f64 = 0.25;
+
+/// How a frill grows toward the margin: the power of the way out from the
+/// midrib it rises with.
+const FRILL_RISE: i32 = 3;
+
+/// How deep a simple blade's notches cut, as a fraction of its half-width
+/// there.
+const NOTCH: f64 = 0.35;
 
 /// Waves summed into the ruffle, their wavelengths as fractions of the
 /// blade's length at no ruffle, how far a full ruffle shortens them, and
@@ -124,6 +148,9 @@ const SINUS: f64 = 0.45;
 const SINUS_SHARPNESS: i32 = 2;
 const LOBE_SAG: f64 = 0.08;
 
+/// How deep a lobed blade's teeth cut, as a fraction of its radius there.
+const LOBE_TOOTH: f64 = 0.04;
+
 /// The share of its box a blade or a leaflet fills: [`profile`]'s hump.
 const OUTLINE_FILL: f32 = 0.62;
 
@@ -139,7 +166,8 @@ pub fn area(config: &LeafConfig) -> f32 {
     let boxes = match config.template {
         // The ring itself: a lobed blade's fill depends on its sinuses.
         Template::Lobed => {
-            return lobed_outline(blade as f64, (config.width * blade) as f64).area() as f32;
+            let ring = lobed_outline(blade as f64, (config.width * blade) as f64, config.teeth);
+            return ring.area() as f32;
         }
         Template::Simple => blade * config.width * whole,
         Template::Compound => {
@@ -257,9 +285,54 @@ fn painted(
     sheet
 }
 
-/// A simple blade's ring: obovate, [`STATIONS`] along each edge.
-fn outline(length: f64, width: f64) -> Outline {
-    ring(length, width, STATIONS, |_, t| profile(t, PEAK))
+/// A simple blade's ring: obovate, `stations` along each edge, `teeth`
+/// [`NOTCH`]-deep notches spaced evenly along each.
+fn outline(length: f64, width: f64, stations: usize, teeth: u32) -> Outline {
+    let period = stations / (teeth as usize).clamp(1, stations);
+    ring(length, width, stations, |i, t| {
+        let notched = teeth > 0 && i % period == period / 2;
+        profile(t, PEAK) * if notched { 1.0 - NOTCH } else { 1.0 }
+    })
+}
+
+/// Whether a simple blade or a leaflet is pleated on secondary veins.
+fn pleated(config: &LeafConfig) -> bool {
+    config.relief > 0.0 && config.veins > 0
+}
+
+/// `ring`, a blade `length` long and at most `reach` either side of its
+/// midrib, filled at `area` a triangle, creased on its secondary veins and
+/// the crests between them when it is pleated.
+fn fill(
+    config: &LeafConfig,
+    ring: &Outline,
+    length: f64,
+    reach: f64,
+    area: f64,
+) -> anyhow::Result<MeshData> {
+    if pleated(config) {
+        let spacing = length / config.veins as f64;
+        creased_mesh(ring, &pinnate(length, reach, spacing, SECONDARY), area)
+    } else {
+        outline_mesh(ring, area)
+    }
+}
+
+/// How far a blade `length` long, its half-width `half` there, stands up
+/// at `(x, y)` on its pleats: nothing on a secondary vein, the config's
+/// relief of the gap between two on the crest midway, rounded over it, and
+/// nothing on the midrib, rising to it over [`RELIEF_CLEAR`], and the
+/// config's frill times higher again at the margin.
+fn pleat(config: &LeafConfig, x: f64, y: f64, half: f64, length: f64) -> f64 {
+    if !pleated(config) {
+        return 0.0;
+    }
+    let spacing = length / config.veins as f64;
+    let crest = 1.0 - (1.0 - between_veins(x, y, spacing, SECONDARY)).powi(2);
+    let out = y.abs() / half.max(1e-9);
+    let frill = 1.0 + config.frill as f64 * out.min(1.0).powi(FRILL_RISE);
+    let height = config.relief as f64 * spacing * SECONDARY.sin();
+    height * crest * ease(out / RELIEF_CLEAR) * frill
 }
 
 /// A simple blade's half-width `s` of the way along, as a fraction of its
@@ -271,21 +344,37 @@ fn half_width(s: f64) -> f64 {
 /// A palmate ring `length` long and `width` across: an ellipse with
 /// [`LOBES`] lobes fanning from its basal notch, [`SINUS`]-deep sinuses
 /// between them, centred so that the notch, where the petiole joins, sits
-/// on the origin and the middle lobe's tip at `length`. Counter-clockwise
-/// from the notch, as [`outline`] runs.
-fn lobed_outline(length: f64, width: f64) -> Outline {
+/// on the origin and the middle lobe's tip at `length`, and `teeth` notches
+/// [`LOBE_TOOTH`] deep spaced evenly round it. Counter-clockwise from the
+/// notch, as [`outline`] runs.
+fn lobed_outline(length: f64, width: f64, teeth: u32) -> Outline {
     let (a, centre) = lobed_axes(length);
-    let count = 2 * STATIONS;
+    let teeth = teeth as usize;
+    let count = 2 * STATIONS.max(teeth);
+    let period = count / teeth.max(1);
     let points = (0..count)
         .map(|i| {
             let theta = TAU * i as f64 / count as f64 - PI;
-            let sinus = ((1.0 - (LOBES as f64 * theta).cos()) / 2.0).powi(SINUS_SHARPNESS);
-            let (sin, cos) = theta.sin_cos();
-            let out = 1.0 - SINUS * sinus;
-            Point2::new(centre + a * cos * out, width / 2.0 * sin * out)
+            let notched = teeth > 0 && i % period == period / 2;
+            let out = lobed_reach(theta) * if notched { 1.0 - LOBE_TOOTH } else { 1.0 };
+            lobed_point(a, centre, width, theta, out)
         })
         .collect();
     Outline { points }
+}
+
+/// How far out a lobed blade's margin lies `theta` round its centre from
+/// its middle lobe's tip, as a fraction of its ellipse: 1 at a lobe's tip,
+/// `1 - SINUS` at the foot of a sinus.
+fn lobed_reach(theta: f64) -> f64 {
+    1.0 - SINUS * ((1.0 - (LOBES as f64 * theta).cos()) / 2.0).powi(SINUS_SHARPNESS)
+}
+
+/// The point `out` of the way to a lobed blade's ellipse `theta` round its
+/// centre: its semi-axis `a` along the blade, its centre at `centre`.
+fn lobed_point(a: f64, centre: f64, width: f64, theta: f64, out: f64) -> Point2<f64> {
+    let (sin, cos) = theta.sin_cos();
+    Point2::new(centre + a * cos * out, width / 2.0 * sin * out)
 }
 
 /// A lobed blade's ellipse: its semi-axis along the blade and its centre's
@@ -368,8 +457,11 @@ fn simple(config: &LeafConfig, detail: f64) -> anyhow::Result<MeshData> {
     let petiole = (config.petiole as f64).clamp(0.0, 0.9 * whole);
     let length = whole - petiole;
     let width = (config.width as f64 * whole).max(0.001);
-    let ring = outline(length, width);
-    let sheet = outline_mesh(&ring, ring.area() / (TRIANGLES * detail))?;
+    // Every vein and crest needs margin points to meet.
+    let stations = STATIONS.max(4 * config.veins as usize);
+    let ring = outline(length, width, stations, config.teeth);
+    let area = ring.area() / (TRIANGLES * detail);
+    let sheet = fill(config, &ring, length, width / 2.0, area)?;
     let mut mesh = painted(sheet, config, length, |s| half_width(s) * width / 2.0);
 
     let mut rng = Rng::new(RUFFLE_STREAM ^ config.seed);
@@ -396,7 +488,8 @@ fn simple(config: &LeafConfig, detail: f64) -> anyhow::Result<MeshData> {
             * waves
                 .iter()
                 .map(|(k, phase, depth)| depth * (k * x + phase).sin())
-                .sum::<f64>();
+                .sum::<f64>()
+            + pleat(config, x, y, half, length);
         if keel != 0.0 {
             (y, z) = bend(y, z, -keel);
         }
@@ -419,9 +512,9 @@ fn simple(config: &LeafConfig, detail: f64) -> anyhow::Result<MeshData> {
 }
 
 /// A leaflet from its `ring`, `length` long and `width` across at its
-/// widest `peak` of the way along, filled at `triangles`, painted, and
-/// folded: keeled by the curvature `keel` and drooped `droop` radians by its
-/// tip.
+/// widest `peak` of the way along, filled at `triangles`, painted, pleated
+/// and folded: keeled by the curvature `keel` and drooped `droop` radians
+/// by its tip.
 #[allow(clippy::too_many_arguments)]
 fn leaflet(
     config: &LeafConfig,
@@ -433,10 +526,15 @@ fn leaflet(
     droop: f64,
     keel: f64,
 ) -> anyhow::Result<MeshData> {
-    let sheet = outline_mesh(&ring, ring.area() / triangles.max(1.0))?;
-    let mut sheet = painted(sheet, config, length, |s| {
-        profile(s, peak).max(BASE) * width / 2.0
-    });
+    let half = |s: f64| profile(s, peak).max(BASE) * width / 2.0;
+    let area = ring.area() / triangles.max(1.0);
+    let sheet = fill(config, &ring, length, width / 2.0, area)?;
+    let mut sheet = painted(sheet, config, length, half);
+    for point in &mut sheet.points {
+        let (x, y) = (point[0] as f64, point[1] as f64);
+        let s = (x / length.max(1e-6)).clamp(0.0, 1.0);
+        point[2] += pleat(config, x, y, half(s), length) as f32;
+    }
     fold(&mut sheet, keel, droop / length.max(1e-6));
     Ok(sheet)
 }
@@ -531,43 +629,67 @@ fn trifoliate(config: &LeafConfig, detail: f64) -> anyhow::Result<MeshData> {
     Ok(drooped(merge_meshes(&parts), config.droop as f64 / whole))
 }
 
-/// A lobed blade on its petiole: the ring filled flat and painted along the
-/// veins fanning from its notch to the lobes' tips, its lobes sagging from
-/// the centre by the square of how far out they reach, the notch held
-/// level with the petiole, and the whole turned down `droop` where the
-/// petiole ends.
+/// A lobed blade on its petiole: the ring filled flat, creased on the main
+/// veins fanning from its middle to the lobes' tips and on the lines to the
+/// sinuses' feet between them, and painted along the veins; pleated on
+/// them, its lobes sagging from the centre by the square of how far out
+/// they reach, the notch held level with the petiole, and the whole turned
+/// down `droop` where the petiole ends.
 fn lobed(config: &LeafConfig, detail: f64) -> anyhow::Result<MeshData> {
     let whole = config.length.max(0.005) as f64;
     let petiole = (config.petiole as f64).clamp(0.0, 0.9 * whole);
     let length = whole - petiole;
     let width = (config.width as f64 * length).max(0.001);
-    let ring = lobed_outline(length, width);
-    let mut mesh = outline_mesh(&ring, ring.area() / (TRIANGLES * detail))?;
+    let ring = lobed_outline(length, width, config.teeth);
     let (a, centre) = lobed_axes(length);
-    let reach = |x: f64, y: f64| ((x - centre) / a).hypot(y / (width / 2.0));
-    let notch = reach(0.0, 0.0);
-    // A vein runs out to every lobe's tip, at the angles the sinuses are
-    // cut between; a point is near one by the angle between them, over the
-    // width the vein paints at its reach.
-    let lobe = TAU / LOBES as f64;
+    // The main veins and the lines to the sinuses' feet between them, every
+    // half lobe round the blade's middle from the middle lobe's tip, short
+    // of the margin so each crease stays inside it; the last runs back to
+    // the notch, the sinus the petiole joins at.
+    let middle = Point2::new(centre, 0.0);
+    let half_lobe = PI / LOBES as f64;
+    let creases: Vec<_> = (1 - LOBES as i64..=LOBES as i64)
+        .map(|j| {
+            let theta = j as f64 * half_lobe;
+            let tip = lobed_point(a, centre, width, theta, 0.97 * lobed_reach(theta));
+            vec![middle, tip]
+        })
+        .collect();
+    let area = ring.area() / (TRIANGLES * detail);
+    let mut mesh = if config.relief > 0.0 {
+        creased_mesh(&ring, &creases, area)?
+    } else {
+        outline_mesh(&ring, area)?
+    };
+    // A point's reach out from the middle as a fraction of the ellipse,
+    // and its angle round it from the nearest main vein, which every point
+    // along a crease shares: 0 on a vein, half a lobe on a sinus's line.
+    let polar = |x: f64, y: f64| {
+        let (u, v) = ((x - centre) / a, y / (width / 2.0));
+        let off = ((v.atan2(u) + half_lobe).rem_euclid(2.0 * half_lobe) - half_lobe).abs();
+        (u.hypot(v), off)
+    };
+    let at_notch = polar(0.0, 0.0).0;
     mesh.colors = Some(
         mesh.points
             .iter()
             .map(|p| {
-                let (x, y) = (p[0] as f64, p[1] as f64);
-                let out = reach(x, y).min(1.0);
-                let theta = (y / (width / 2.0)).atan2((x - centre) / a);
-                let off = ((theta + lobe / 2.0).rem_euclid(lobe) - lobe / 2.0).abs();
-                let near = (-(off * out / VEIN_ANGLE).powi(2)).exp();
-                paint(config, near, (out - (1.0 - EDGE_BAND)) / EDGE_BAND)
+                let (out, off) = polar(p[0] as f64, p[1] as f64);
+                let near = (-(off * out.min(1.0) / VEIN_ANGLE).powi(2)).exp();
+                paint(config, near, (out.min(1.0) - (1.0 - EDGE_BAND)) / EDGE_BAND)
             })
             .collect(),
     );
     let hinge = Quat::from_rotation_y(config.droop);
     for point in &mut mesh.points {
         let (x, y) = (point[0] as f64, point[1] as f64);
-        let out = reach(x, y);
-        let z = -LOBE_SAG * length * (out * out - notch * notch);
+        let (out, off) = polar(x, y);
+        // Pleated up toward the sinuses' lines, the notch held on the
+        // petiole.
+        let crest = 1.0 - (1.0 - off / half_lobe).powi(2);
+        let held = ease(x.hypot(y) / centre);
+        let z = -LOBE_SAG * length * (out * out - at_notch * at_notch)
+            + config.relief as f64 * a * out * crest * held;
         let p = hinge * Vec3::new(x as f32, y as f32, z as f32);
         *point = [p.x + petiole as f32, p.y, p.z];
     }
@@ -617,18 +739,21 @@ mod tests {
 
     /// A blade starts at the origin, reaches about its length however it is
     /// deformed, keeps inside its width, and stays a modest mesh; a flat one
-    /// is flat and a ruffled one is not; a petiole puts the blade further out.
+    /// is flat and a ruffled or a pleated one is not; a petiole puts the
+    /// blade further out.
     #[test]
     fn a_blade_reaches_its_length_inside_its_width() {
         let flat = LeafConfig::simple(0.18, 0.75).tint([0.1, 0.3, 0.05]);
         let ruffled = flat.ruffle(1.0);
         let folded = ruffled.cup(1.4).droop(1.2);
         let stalked = flat.petiole(0.06);
+        let pleated = flat.relief(10, 0.3);
         for (what, config) in [
             ("flat", flat),
             ("ruffled", ruffled),
             ("folded", folded),
             ("stalked", stalked),
+            ("pleated", pleated),
         ] {
             let mesh = mesh(&config, 1.0).unwrap();
             let (x0, x1) = bounds(&mesh, 0);
@@ -653,6 +778,9 @@ mod tests {
         let rib = 2.0 * (STALK_RADIUS * STALK_TAPER) as f32 * 0.18;
         assert!(depth(&flat) <= rib + 1e-6, "{} vs {rib}", depth(&flat));
         assert!(depth(&ruffled) > rib + 0.005, "{}", depth(&ruffled));
+        // A crest stands its relief of the gap between two veins high.
+        let gap = 0.18 / 10.0 * SECONDARY.sin() as f32;
+        assert!(depth(&pleated) > 0.25 * gap, "{} vs {gap}", depth(&pleated));
         let whole_box = 0.18 * 0.75 * 0.18;
         assert!((area(&flat) - OUTLINE_FILL * whole_box).abs() < 1e-6);
         assert!(area(&stalked) < area(&flat) && area(&stalked) > 0.5 * area(&flat));
@@ -739,12 +867,13 @@ mod tests {
     }
 
     /// A lobed ring has its notch on the origin and its tip at its length,
-    /// five lobes, and about two thirds of its ellipse's area; the leaf on
-    /// its petiole turns down whole at the petiole's end, keeps inside its
-    /// width, and weighs by its ring.
+    /// five lobes, and about two thirds of its ellipse's area, a little less
+    /// toothed; the leaf on its petiole turns down whole at the petiole's
+    /// end, keeps inside its width, weighs by its ring, and stands higher
+    /// pleated.
     #[test]
     fn a_lobed_blade_fans_five_lobes_from_its_notch_and_hinges_at_its_petiole() {
-        let ring = lobed_outline(0.3, 0.33);
+        let ring = lobed_outline(0.3, 0.33, 0);
         let at = |x: f64, y: f64| {
             ring.points
                 .iter()
@@ -781,8 +910,16 @@ mod tests {
             "{y0}..{y1}"
         );
         assert!(z0 < -0.9 * blade * hinge.sin(), "{z0}");
-        assert!((area(&leaf) - lobed_outline(0.3, 0.33).area() as f32).abs() < 1e-6);
+        assert!((area(&leaf) - lobed_outline(0.3, 0.33, 0).area() as f32).abs() < 1e-6);
         assert!(mesh.face_vertex_counts.len() < 900);
+
+        let toothed = lobed_outline(0.3, 0.33, 60);
+        assert_eq!(toothed.points.len(), 120);
+        assert!(toothed.area() < ring.area() && toothed.area() > 0.95 * ring.area());
+        let level = leaf.droop(0.0);
+        let top = |config: &LeafConfig| bounds(&super::mesh(config, 1.0).unwrap(), 2).1;
+        let (plain, pleated) = (top(&level), top(&level.teeth(60).relief(0, 0.2)));
+        assert!(pleated > plain + 0.01, "{pleated} vs {plain}");
     }
 
     /// Every template's box holds every point of its blade and leaves the

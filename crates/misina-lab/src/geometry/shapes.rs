@@ -15,6 +15,10 @@
 //! [`untangle`] cuts out the loops a jittered margin folds into. A generator
 //! strings those into its own ring; the frame is the same.
 //!
+//! A shape's veins are lines through it: [`pinnate`] lays a midrib's
+//! veins and the crests between them out as creases, and [`between_veins`]
+//! says how far a point lies from the nearest, for pleating the sheet.
+//!
 //! Also here: [`fold`], which folds a filled sheet the way a leaf folds, and
 //! [`bent`], which fills a ring and folds it; and the two rotations that take
 //! a shape out of this frame — [`standing`] and [`lying`] — so every element
@@ -199,6 +203,41 @@ fn crossing(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> Option<DVec2> {
     ((1e-9..1.0 - 1e-9).contains(&t) && (1e-9..1.0 - 1e-9).contains(&u)).then(|| a + r * t)
 }
 
+// ─── Veins ──────────────────────────────────────────────────────────
+
+/// Pinnate veins on a shape in this frame: one leaving the midrib, the X
+/// axis, every `spacing` along it, `angle` radians off it toward the tip,
+/// straight out to `reach` either side, and a crest line midway between
+/// every two. As creases for
+/// [`creased_mesh`](super::outline::creased_mesh), which keeps what lies
+/// inside the ring, so a sheet pleated by [`between_veins`] folds on edges.
+/// Veins start behind the base too, so the shape is veined to its foot.
+pub fn pinnate(length: f64, reach: f64, spacing: f64, angle: f64) -> Vec<Vec<Point2<f64>>> {
+    let half = spacing.max(1e-6) / 2.0;
+    let run = reach / angle.tan();
+    let first = -(run / half).ceil() as i64;
+    let last = (length / half).floor() as i64;
+    (first..=last)
+        .flat_map(|k| {
+            let foot = k as f64 * half;
+            [-1.0, 1.0].map(|side| {
+                vec![
+                    Point2::new(foot, 0.0),
+                    Point2::new(foot + run, side * reach),
+                ]
+            })
+        })
+        .collect()
+}
+
+/// Where `(x, y)` lies between [`pinnate`]'s veins: 0 on a vein, 1 on the
+/// crest midway to the next, linear between them.
+pub fn between_veins(x: f64, y: f64, spacing: f64, angle: f64) -> f64 {
+    let foot = x - y.abs() / angle.tan();
+    let phase = (foot / spacing.max(1e-6)).rem_euclid(1.0);
+    1.0 - (2.0 * phase - 1.0).abs()
+}
+
 // ─── Filling and placing ────────────────────────────────────────────
 
 /// Folds a sheet lying on the XY plane the way a leaf folds: keeled about
@@ -312,6 +351,43 @@ mod tests {
         let plain = leaf(0.08, 0.02, 0.3).area();
         let cut = toothed(0.08, 0.02, 0.3, 6).area();
         assert!(cut < plain, "teeth take area away: {cut} vs {plain}");
+    }
+
+    /// Every crease `pinnate` lays out is all vein or all crest by
+    /// `between_veins`, half of each, and a sheet filled with them has
+    /// vertices along its veins.
+    #[test]
+    fn pinnate_creases_run_along_the_veins_and_crests_between_them() {
+        let (spacing, angle) = (0.01, 1.0);
+        let creases = pinnate(0.05, 0.02, spacing, angle);
+        assert!(creases.len() > 2 * 10, "{} creases", creases.len());
+        for crease in &creases {
+            let [a, b] = [crease[0], crease[crease.len() - 1]];
+            let along = |f: f64| {
+                between_veins(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, spacing, angle)
+            };
+            let level = along(0.0);
+            assert!(!(1e-9..=1.0 - 1e-9).contains(&level), "{level}");
+            assert!((along(0.5) - level).abs() < 1e-9 && (along(1.0) - level).abs() < 1e-9);
+        }
+        let veins = creases
+            .iter()
+            .filter(|c| between_veins(c[0].x, c[0].y, spacing, angle) < 0.5);
+        assert_eq!(
+            2 * veins.count(),
+            creases.len(),
+            "every other crease is a vein"
+        );
+
+        // A sheet filled with them has vertices on every vein inside it.
+        let sheet =
+            crate::geometry::outline::creased_mesh(&leaf(0.05, 0.03, 0.5), &creases, 1e-5).unwrap();
+        let on_veins = sheet
+            .points
+            .iter()
+            .filter(|p| between_veins(p[0] as f64, p[1] as f64, spacing, angle) < 1e-4)
+            .count();
+        assert!(on_veins > 20, "{on_veins} points on veins");
     }
 
     /// A droop takes the tip below the plane it was drawn on, and a keel lifts

@@ -90,7 +90,8 @@ pub fn plugin(app: &mut App) {
     species::species::<strawberry::Strawberry>(app);
 }
 
-/// Scene-wide parameters: the seed, and how far into the season the garden is.
+/// Scene-wide parameters: the seed, how far into the season the garden is,
+/// and how finely the crop is meshed.
 #[derive(Resource, Reflect, Clone, Debug, PartialEq)]
 #[cfg_attr(
     feature = "python",

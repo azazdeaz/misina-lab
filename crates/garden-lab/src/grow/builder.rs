@@ -165,6 +165,9 @@ impl LeafConfig {
             petiole: 0.0,
             pairs: 0,
             teeth: 0,
+            veins: 0,
+            relief: 0.0,
+            frill: 0.0,
             ruffle: 0.0,
             cup: 0.0,
             droop: 0.0,
@@ -214,10 +217,28 @@ impl LeafConfig {
         self
     }
 
-    /// Teeth cut into each edge of a trifoliate leaflet; none leaves it
-    /// entire.
+    /// Notches cut into each edge of a simple blade, teeth into each edge
+    /// of a trifoliate leaflet, or round a lobed blade's margin; none leaves
+    /// it entire.
     pub fn teeth(mut self, teeth: u32) -> Self {
         self.teeth = teeth;
+        self
+    }
+
+    /// Pleats the blade on `veins` secondary veins along each side, every
+    /// crest between two standing `depth` of the gap between them above
+    /// them; a lobed blade pleats on its main veins, its crests `depth` of
+    /// their distance out from its middle high, and reads only `depth`.
+    pub fn relief(mut self, veins: u32, depth: f32) -> Self {
+        self.veins = veins;
+        self.relief = depth;
+        self
+    }
+
+    /// How much higher the pleats stand at the margin than off the midrib,
+    /// as a multiple of the relief: a frilled edge.
+    pub fn frill(mut self, amount: f32) -> Self {
+        self.frill = amount;
         self
     }
 

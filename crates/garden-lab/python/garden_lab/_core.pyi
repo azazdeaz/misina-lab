@@ -16,7 +16,9 @@ LettuceTint = Literal["green", "red", "mix"]
 """What `LettuceParams.tint` may be set to."""
 
 class SceneParams:
-    """Scene-wide parameters: the seed, and how far into the season the garden is."""
+    """Scene-wide parameters: the seed, how far into the season the garden is, and how
+    finely the crop is meshed.
+    """
 
     seed: int
     """The one seed the whole scene is generated from. Each element salts it with a
@@ -252,7 +254,9 @@ class KaleParams:
     leaf_length: float
     """Length of a grown leaf, petiole and blade, in meters."""
     curl: float
-    """How tightly the margin curls: 0 is a flat lacinato, 1 a curly kale."""
+    """How tightly the margin curls: 0 is a flat lacinato, 1 a curly kale, its edges
+    notched past halfway.
+    """
     share: float
     """Share of the garden's planting squares this crop gets, against the other crops';
     0 leaves it out.

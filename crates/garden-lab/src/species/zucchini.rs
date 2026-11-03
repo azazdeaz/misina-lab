@@ -35,6 +35,11 @@ const RISE: (f32, f32) = (0.45, 1.25);
 const HINGE: f32 = 0.7;
 const GROWING: f32 = 4.0;
 
+/// A blade's teeth round its margin, and how high it stands between its
+/// main veins, as a fraction of the distance out from its middle.
+const TEETH: u32 = 60;
+const RELIEF: f32 = 0.15;
+
 /// Fruit: a ripe fruit's diameter as a fraction of its length, the lowest
 /// node that bears one and how many nodes up from it do, the week the first
 /// sets and the weeks between one and the next, the weeks one takes from
@@ -110,6 +115,8 @@ impl Recipe for Zucchini {
             let leaf = LeafConfig::lobed(whole, WIDTH)
                 .petiole(PETIOLE * whole)
                 .droop(HINGE)
+                .teeth(TEETH)
+                .relief(0, RELIEF)
                 .tint(tint)
                 .vein(srgb(SILVER));
             let turned = AxisNode { azimuth, ..node };
