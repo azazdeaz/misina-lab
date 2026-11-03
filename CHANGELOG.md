@@ -52,13 +52,19 @@ extents, which an earlier builder would author as a plain cube.
   the segments with their masses as the cable's loads; `leaves_collide` puts
   a box round every blade, fitted in the plane it lies flattest in, under
   `Leaf_NN/Collision` beside the `Blade` that draws it. Every rigid stem
-  swells at its nodes and toward its leaves' petioles and its fruits'
-  stalks, a zucchini's is ridged; blades are pleated on their veins, deep
-  on a strawberry leaflet, frilled at a curly kale's and a loose-leaf
-  lettuce's margin, fanning from a zucchini blade's middle, whose margin is
-  toothed, and a simple blade carries a midrib; strawberries hang under a
-  calyx, pitted by their achenes, and pods swell at their beans and hang by
-  stalks. Leaves and fruit carry a vertex `displayColor`, a strawberry's
+  swells at its nodes, toward its leaves' petioles and its fruits' stalks
+  and at the scar a stripped kale leaf leaves, and rounds off to a point at
+  its tip, a zucchini's ridged; a crown is a low dome, a strawberry's dark;
+  blades are pleated on their veins, deep on a strawberry leaflet, frilled
+  at a curly kale's and a loose-leaf lettuce's margin, fanning from a
+  zucchini blade's middle, whose margin is toothed, and a simple blade
+  carries a midrib; strawberries hang under a calyx, studded with achenes;
+  a zucchini is ribbed and club-shaped on a ridged stalk, with a blossom
+  scar; a pod is flattened, swells at its beans, hangs by a stalk under a
+  calyx cup and ends in a curled beak; a carrot is creased and tailed; a
+  bush bean is thin-stemmed, a young leaf at every tip and every leaf full
+  grown once its pods set. A stalked fruit's `Cut` sits halfway down the
+  stalk. Leaves and fruit carry a vertex `displayColor`, a strawberry's
   colouring from its tip as it ripens. `scene.detail` sets how finely the
   crop is meshed. `cargo run -p
   garden-lab` opens its viewer, and
@@ -75,6 +81,7 @@ extents, which an earlier builder would author as a plain cube.
   `shapes::pinnate` lays a midrib's veins and the crests between them out
   as creases for `outline::creased_mesh`, and `shapes::between_veins` says
   where a point lies between them, so a filled blade pleats on its edges.
+  A strand's `apex` rounds its tip off to a point over that length.
 - **greenhouse-lab**: Stems collide, as a chain of capsules along each
   stem's axis from where it takes off from the lowered bundle,
   `Stem_n/Collision_00 …`, each straight from one of the axis's points to

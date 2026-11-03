@@ -339,11 +339,12 @@ pub fn grow<S: Recipe>(
                         Transform::IDENTITY,
                         Visibility::default(),
                     ));
-                    // Where a harvester takes it: the fruit's top, +X up
-                    // the stalk.
+                    // Where a harvester takes it: halfway down its stalk,
+                    // or the fruit's top without one, +X up the stalk.
                     prim.spawn((
                         Name::new("Cut"),
-                        Transform::from_rotation(Quat::from_rotation_y(-FRAC_PI_2)),
+                        Transform::from_xyz(0.0, 0.0, -fruit.stalk / 2.0)
+                            .with_rotation(Quat::from_rotation_y(-FRAC_PI_2)),
                         Visibility::default(),
                     ));
                     if physics.fruit_collides {

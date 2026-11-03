@@ -177,7 +177,10 @@ impl Bush<'_> {
         let elevation = rng.range(-ELEVATION_JITTER, ELEVATION_JITTER) as f32;
         let azimuth = node.azimuth + rng.range(-AZIMUTH_JITTER, AZIMUTH_JITTER) as f32;
         let pods = PODS.0 + (rng.unit() * (PODS.1 - PODS.0 + 1) as f64) as u32;
-        let grown = smooth((node.from_tip() as f32 + 1.0) / GROWING);
+        // The plant is determinate: once its pods set, its youngest leaves
+        // grow out to full size by harvest.
+        let young = smooth((node.from_tip() as f32 + 1.0) / GROWING);
+        let grown = lerp(young, 1.0, self.ripeness);
         let whole = self.p.leaf_length * self.size * (0.3 + 0.7 * grown) * length;
         let leaf = LeafConfig::trifoliate(whole, WIDTH)
             .petiole(PETIOLE * whole)

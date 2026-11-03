@@ -45,8 +45,11 @@ bed is bare before its crop's sowing week. The weeds take no notice of it.
 
 Every rigid stem is a tube rung where its shape needs it, swelling at every
 node an organ leaves it at and toward that organ's stalk, so a petiole grows
-out of the stem rather than poking through it; a zucchini's is ridged. A rod,
-with `flexible_stems`, is plain segment tubes shared by size. A blade is
+out of the stem rather than poking through it, and at the scar a stripped
+kale leaf leaves; it rounds off to a point past its last organ, and a
+zucchini's is ridged. A rod, with `flexible_stems`, is plain segment tubes
+shared by size. A crown is a low dome the leaves leave from, a
+strawberry's dark. A blade is
 pleated on its veins, each vein a valley and the blade standing up to a crest
 between two: a simple blade or a leaflet on secondary veins leaving its
 midrib, a strawberry leaflet deeply, a loose-leaf lettuce and a curly kale
@@ -55,7 +58,10 @@ its middle. The veins and the crests are lines of edges through the fill, so
 the pleats fold sharply however coarse the fill is. A zucchini blade is
 toothed all round and a curly kale's notched along its edges; a simple blade
 carries a tapered midrib. A strawberry sits under a calyx of seven sepals,
-pitted by its achenes; a pod swells at its beans and hangs by a stalk.
+studded with achenes; a zucchini is ribbed and club-shaped, on a ridged
+stalk flaring into it, with a blossom scar; a pod is flattened, swells at
+its beans, hangs by a stalk under a calyx cup and ends in a curled beak; a
+carrot is creased round and drawn out into a tail.
 
 Leaves and fruit carry a colour per point, which USD carries as a vertex
 `displayColor`: a strawberry colours from its tip as it ripens, and blades
@@ -136,4 +142,5 @@ rather than a shift; every plant carries `garden_lab:species`,
 root carries `garden_lab:ripeness`, 0 to 1, `garden_lab:pick`, how a
 harvester takes it (`pull` for a root, `snap` for a pod, `cut` for a
 zucchini or a strawberry), and `garden_lab:harvest_ready`, true from a
-ripeness of 0.9; its `Cut` frame sits where it is taken, +X up the stalk.
+ripeness of 0.9; its `Cut` frame sits where it is taken, halfway down its
+stalk or at its top without one, +X up the stalk.
