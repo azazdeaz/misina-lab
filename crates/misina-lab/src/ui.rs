@@ -708,6 +708,9 @@ fn copy_cfg_button<G: Generator>() -> impl Scene {
                 @caption: bsn! { @caption("Copy Isaac Lab cfg") },
                 @variant: ButtonVariant::Primary,
             }
+            // The panel's one action: as wide as the panel and taller than a
+            // control row.
+            Node { flex_grow: 1.0, height: px(36) }
             // Off `Staged` rather than the live resources, so the snippet is
             // the panel as it reads right now and not as it read before the
             // last edit settled.
