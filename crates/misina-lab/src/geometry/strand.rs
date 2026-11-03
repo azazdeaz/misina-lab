@@ -9,6 +9,9 @@
 //! on one side at a [`Collar`], where an organ's stalk leaves it. Each is given
 //! by where it sits along the strand, and the skinning puts rings across it.
 //!
+//! A strand ends cut flat unless it has an [`apex`](Strand::apex), over which
+//! its tip rounds off to a point, as a shoot's growing tip does.
+//!
 //! A strand is ringed evenly unless it has a [`tolerance`](Strand::tolerance).
 //! Then it is sampled finely and keeps only the rings that hold its mesh that
 //! close to its surface: they bunch at a swelling and round a bend and spread
@@ -208,16 +211,38 @@ impl Lobe {
 
 /// Where along the strand, in meters, its swellings need rings: across each,
 /// every half of its reach out to twice it, so a swelling narrower than the
-/// rings' spacing isn't stepped over.
-fn seeds(bulges: &[Bulge], lobes: &[Lobe]) -> Vec<f64> {
+/// rings' spacing isn't stepped over; and across an apex `apex` long ending
+/// `total` along, closer toward its tip, where it turns fastest.
+fn seeds(bulges: &[Bulge], lobes: &[Lobe], apex: f64, total: f64) -> Vec<f64> {
     let across = |at: f64, below: f64, above: f64| {
         (-4..=4).map(move |k| at + k as f64 / 2.0 * if k < 0 { below } else { above })
     };
+    let tip = (apex > 0.0)
+        .then(|| APEX_SEEDS.map(|left| total - left * apex))
+        .into_iter()
+        .flatten();
     bulges
         .iter()
         .flat_map(|b| across(b.at, b.width, b.width))
         .chain(lobes.iter().flat_map(|l| across(l.peak, l.below, l.above)))
+        .chain(tip)
         .collect()
+}
+
+// ─── Apex ───────────────────────────────────────────────────────────
+
+/// Where an apex is sampled, as fractions of it left to the tip.
+const APEX_SEEDS: [f64; 7] = [1.0, 0.75, 0.5, 0.3, 0.15, 0.06, 0.02];
+
+/// What is left of a strand's radius `left` meters short of its tip, as a
+/// fraction, when it rounds off over `apex`: a quarter ellipse, meeting the
+/// tube's side without a crease and closing to a point at the tip.
+fn apex_scale(left: f64, apex: f64) -> f64 {
+    if apex <= 0.0 || left >= apex {
+        return 1.0;
+    }
+    let x = 1.0 - left.max(0.0) / apex;
+    (1.0 - x * x).sqrt()
 }
 
 // ─── Bark ───────────────────────────────────────────────────────────
@@ -351,6 +376,9 @@ pub struct Strand {
     /// How far its mesh may stray from its surface, in meters, if its rings go
     /// only where its shape needs them rather than evenly.
     pub tolerance: Option<f64>,
+    /// How far short of its tip it starts rounding off to a point there, in
+    /// meters along its control points; 0 cuts it flat.
+    pub apex: f64,
 }
 
 impl Strand {
@@ -384,6 +412,7 @@ impl Strand {
             bulges: Vec::new(),
             collars: Vec::new(),
             tolerance: None,
+            apex: 0.0,
         }
     }
 }
@@ -465,10 +494,15 @@ pub fn strand_mesh(strand: &Strand) -> anyhow::Result<MeshData> {
                 .collect()
         }
     };
-    stops.extend(seeds(&strand.bulges, &lobes).into_iter().map(|m| {
-        let t = on_rail(m);
-        (t, t)
-    }));
+    let apex = strand.apex.min(total);
+    stops.extend(
+        seeds(&strand.bulges, &lobes, apex, total)
+            .into_iter()
+            .map(|m| {
+                let t = on_rail(m);
+                (t, t)
+            }),
+    );
     stops.sort_by(|a, b| a.0.total_cmp(&b.0));
     stops.dedup_by(|next, kept| (next.0 - kept.0) * total < MERGE_DISTANCE);
 
@@ -484,7 +518,8 @@ pub fn strand_mesh(strand: &Strand) -> anyhow::Result<MeshData> {
         .iter()
         .zip(&stops)
         .map(|(frame, (t, fraction))| {
-            let radius = radius_at(&anchors, &strand.radii, *t);
+            let radius =
+                radius_at(&anchors, &strand.radii, *t) * apex_scale(total * (1.0 - t), apex);
             ring(strand, &lobes, frame, t * total, radius, *fraction, sides)
         })
         .collect();
@@ -774,6 +809,7 @@ mod tests {
             bulges: Vec::new(),
             collars: Vec::new(),
             tolerance: None,
+            apex: 0.0,
         }
     }
 
@@ -1241,6 +1277,46 @@ mod tests {
         assert!(
             bulge * 4.0 < beyond,
             "{bulge} m apart at the bulge, {beyond} m past it"
+        );
+    }
+
+    /// A strand with an apex keeps its radius up to it, rounds off over it
+    /// in a few rings, and closes to a point on its tip, evenly ringed or
+    /// meshed to a tolerance; one without ends as wide as it runs.
+    #[test]
+    fn a_strand_rounds_off_over_its_apex_to_a_point() {
+        for tolerance in [None, Some(1e-4)] {
+            let strand = Strand {
+                radii: vec![0.01; 3],
+                apex: 0.03,
+                tolerance,
+                ..upright(12, 5, Bark::none())
+            };
+            let mesh = strand_mesh(&strand).unwrap();
+            for p in &mesh.points {
+                let want = 0.01 * apex_scale(1.0 - p[2] as f64, 0.03) as f32;
+                assert!(
+                    (p[0].hypot(p[1]) - want).abs() < 1e-5,
+                    "{tolerance:?}: {p:?} is not {want} out"
+                );
+            }
+            let rings = mesh
+                .points
+                .chunks(12)
+                .filter(|ring| ring[0][2] > 0.97)
+                .count();
+            assert!(rings >= 4, "{tolerance:?}: {rings} rings round the apex");
+            let tip = mesh.points.chunks(12).last().unwrap();
+            assert!(
+                tip.iter()
+                    .all(|p| (p[2] - 1.0).abs() < 1e-6 && p[0].hypot(p[1]) < 1e-6)
+            );
+        }
+        let flat = strand_mesh(&upright(12, 5, Bark::none())).unwrap();
+        assert!(
+            flat.points
+                .iter()
+                .all(|p| (p[0].hypot(p[1]) - 0.1).abs() < 1e-6)
         );
     }
 
