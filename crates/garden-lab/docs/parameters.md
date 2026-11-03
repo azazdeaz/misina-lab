@@ -20,6 +20,7 @@ Scene-wide parameters: the seed, and how far into the season the garden is.
 |---|---|---|---|---|
 | `seed` | int | `0` | 0 to 64 | The one seed the whole scene is generated from. Each element salts it with a constant of its own, so a new seed is a different garden and an edit to one element never re-rolls another. |
 | `week` | float | `8.0` | 0 to 20 | The week on the garden's calendar. Each crop grows from its own sowing week toward its harvest, so one garden holds seedlings beside a bed ready to pick. |
+| `detail` | float | `1.0` | 0.1 to 4 | How finely the crop is meshed, as a multiplier. At 1 a stem's tube strays from its shape by about a pixel to a camera half a meter away and a blade is a few hundred triangles; 4 is four times as fine, 0.1 the coarsest at which every organ still shows. The weeds have a detail of their own. |
 
 ## Physics
 

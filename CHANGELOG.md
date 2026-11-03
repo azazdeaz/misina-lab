@@ -51,11 +51,25 @@ extents, which an earlier builder would author as a plain cube.
   stalks are rods in `segment` lengths, the leaves, pods and berries riding
   the segments with their masses as the cable's loads; `leaves_collide` puts
   a box round every blade, fitted in the plane it lies flattest in, under
-  `Leaf_NN/Collision` beside the `Blade` that draws it. `cargo run -p
+  `Leaf_NN/Collision` beside the `Blade` that draws it. Every stem swells
+  at its nodes and toward its leaves' petioles and its fruits' stalks, a
+  zucchini's is ridged, and every leaf and fruit is painted per point, a
+  vertex `displayColor`: blades with a midrib and vein and edge colours,
+  red at a red lettuce's margins, strawberries colouring from the tip under
+  a calyx and pitted by their achenes, carrots' greened shoulders, striped
+  zucchini, pods swelling at their beans and hanging by stalks;
+  `scene.detail` sets how finely the crop is meshed. `cargo run -p
   garden-lab` opens its viewer, and
   `garden_lab.isaaclab.GardenCfg` spawns it in Isaac Lab, its `PLANT` and
   `without_rods()` saying what prim a rod belongs to and whether a cfg
   authors one.
+- **misina-lab**: `geometry::mesh::MeshData` carries an optional colour per
+  point, which `to_mesh` writes as the vertex colour attribute both
+  consumers multiply by the part's own, `merge_meshes` keeps and `painted`
+  sets, so a generator paints a part instead of building its mesh by hand;
+  `geometry::mesh::lathe`, a closed solid through rings, and
+  `geometry::shapes::fold`, the keel and droop a leaf blade takes, are the
+  framework's, with `shapes::ring` and `shapes::profile` public.
 - **greenhouse-lab**: Stems collide, as a chain of capsules along each
   stem's axis from where it takes off from the lowered bundle,
   `Stem_n/Collision_00 …`, each straight from one of the axis's points to

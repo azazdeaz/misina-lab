@@ -25,6 +25,8 @@ repository. `tests/test_docs.py` fails on a link to a picture no shot renders.
 | `docs/shots/greenhouse_demo/rows.json` | `examples/greenhouse_demo/shot.py` | the top of `crates/greenhouse-lab/README.md`, and its section of `README.md` |
 | `docs/shots/greenhouse_demo/harvest.json` | `examples/greenhouse_demo/shot.py` | the top of `examples/greenhouse_demo/README.md` |
 | `docs/shots/butom_capture/compare.json` | `examples/butom_capture/shot.py`, beside BUTom-ST21's frames | "How close it is" in `examples/butom_capture/README.md` |
+| `docs/shots/garden-lab/garden.json` | the garden's viewer | nowhere yet: the default garden at week 10 |
+| `docs/shots/garden-lab/<crop>.json`, one per crop | the garden's viewer | nowhere yet: a bed of that crop alone at harvest, framed close enough to judge its meshes, which is what they are for |
 
 ## Render them
 

@@ -168,7 +168,10 @@ impl LeafConfig {
             ruffle: 0.0,
             cup: 0.0,
             droop: 0.0,
+            twist: 0.0,
             tint: [0.1, 0.3, 0.05],
+            vein: None,
+            edge: None,
             seed: 0,
         }
     }
@@ -239,9 +242,30 @@ impl LeafConfig {
         self
     }
 
+    /// How far the blade turns about its midrib by its tip, in radians;
+    /// which way is the leaf's own draw.
+    pub fn twist(mut self, radians: f32) -> Self {
+        self.twist = radians;
+        self
+    }
+
     /// The blade's colour, linear RGB.
     pub fn tint(mut self, color: [f32; 3]) -> Self {
         self.tint = color;
+        self
+    }
+
+    /// The colour of the petiole, the midrib and the blade beside it,
+    /// linear RGB, where it differs from the blade's.
+    pub fn vein(mut self, color: [f32; 3]) -> Self {
+        self.vein = Some(color);
+        self
+    }
+
+    /// The colour the margin and the tip fade to, linear RGB, where it
+    /// differs from the blade's.
+    pub fn edge(mut self, color: [f32; 3]) -> Self {
+        self.edge = Some(color);
         self
     }
 }
@@ -258,6 +282,8 @@ impl FruitConfig {
             length,
             ripeness: 0.0,
             tint: [0.8, 0.3, 0.05],
+            shoulder: None,
+            stalk: 0.0,
             seed: 0,
         }
     }
@@ -304,6 +330,21 @@ impl FruitConfig {
     /// The skin's colour, linear RGB.
     pub fn tint(mut self, color: [f32; 3]) -> Self {
         self.tint = color;
+        self
+    }
+
+    /// The skin's colour at its stalk end, linear RGB, where it differs
+    /// from the tint: a strawberry's before it colours, pushed toward the tip
+    /// by its ripeness; a root's shoulder; a berry's paler flecks.
+    pub fn shoulder(mut self, color: [f32; 3]) -> Self {
+        self.shoulder = Some(color);
+        self
+    }
+
+    /// A bare stalk `length` long between the anchor and the body, which
+    /// hangs below it.
+    pub fn stalk(mut self, length: f32) -> Self {
+        self.stalk = length;
         self
     }
 }

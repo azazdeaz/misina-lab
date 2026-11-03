@@ -30,6 +30,7 @@ pub struct Axis {
     wobble: f32,
     bends: bool,
     grounded: bool,
+    ridges: f32,
     tint: [f32; 3],
 }
 
@@ -64,6 +65,7 @@ impl Axis {
             wobble: 0.0,
             bends: false,
             grounded: false,
+            ridges: 0.0,
             tint: [0.3, 0.4, 0.2],
         }
     }
@@ -206,6 +208,13 @@ impl Axis {
         self
     }
 
+    /// Ridges running the stem's length, `depth` of its radius deep, laid
+    /// out per stem from a stream of its own; 0 leaves it round.
+    pub fn ridges(mut self, depth: f32) -> Self {
+        self.ridges = depth;
+        self
+    }
+
     /// Keeps the axis out of the soil, the plane z = 0 of the plant's frame:
     /// a point under it is lifted to lie on it by its radius, so an arc
     /// turning down runs along the soil from where it lands, as a runner
@@ -270,6 +279,7 @@ impl Axis {
             radii,
             tint: self.tint,
             bends: self.bends,
+            ridges: self.ridges,
             index: 0,
         }
     }
@@ -328,6 +338,8 @@ pub struct Grown {
     pub tint: [f32; 3],
     /// Whether it is a rod when the scene's stems are flexible.
     pub bends: bool,
+    /// How deep the ridges along it run, as a fraction of its radius.
+    pub ridges: f32,
     /// Its index among the plant's axes, which its anchors name.
     pub index: usize,
 }

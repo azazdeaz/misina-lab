@@ -13,25 +13,33 @@
 //! segment carrying its tube, and under those the leaves and fruit that sit
 //! on it, their masses in the cable's loads; the rod collides as itself. A
 //! plant is grown in its own frame: its foot at the origin, +Z up.
+//!
+//! The wood is meshed to the scene's `detail`: its rings where its shape
+//! needs them, swelling at every node an organ leaves it at and toward that
+//! organ's stalk, so a petiole or a pedicel grows out of the stem rather
+//! than poking through it, and ridged along its length where the recipe
+//! asked. A rod's segments are plain tubes, shared by size.
 
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
 
 use bevy::prelude::*;
 use misina_lab::geometry::mesh::{MeshData, cylinder_mesh, merge_meshes};
-use misina_lab::geometry::strand::{Bark, Strand, sides_within, strand_mesh};
+use misina_lab::geometry::strand::{Bark, Bulge, Collar, Strand, sides_within, strand_mesh};
 use misina_lab::palette::{Response, srgb};
+use misina_lab::rng::{Rng, salt};
 use misina_lab::scene::{
     COLLISION, Geometry, Library, Order, UsdAttributes, cable, capsule, capsule_between, rebase,
     segment_frames, segment_of, segment_tubes, spawn_rod,
 };
-use nalgebra::Point3;
+use nalgebra::{Point3, Vector3};
 
-use super::PhysicsParams;
 use super::fruit::{READY, Skin};
 use super::planting::PlantConfig;
+use super::{PhysicsParams, SceneParams};
 use crate::grow::axis::{Anchor, Grown};
 use crate::grow::builder::Builder;
+use crate::shape::blade;
 use crate::species::{Of, OrganOf, Recipe, Species};
 
 /// Marks what a recipe grew on a plant, which every regrowth replaces.
@@ -50,14 +58,26 @@ const CROWN: (u32, Response) = (
     },
 );
 
-/// How an axis is meshed: how far its tube may stray from round, in meters,
-/// and its rings per meter; and how it answers light.
+/// How an axis is meshed: how far its tube may stray from its shape at a
+/// detail of 1, in meters, which also sets its sides, and the rings per
+/// meter its strand is built with before the tolerance places them; and how
+/// it answers light.
 const WOOD_TOLERANCE: f64 = 0.0015;
 const WOOD_RINGS: f64 = 40.0;
 const WOOD: Response = Response {
     roughness: 0.75,
     reflectance: 0.3,
 };
+
+/// A node: how much the organs leaving an axis there swell it all round, as
+/// a fraction of its radius, and how far up and down, in its radii, capped
+/// at a third of the way to the next node so dense nodes stay distinct.
+const NODE_SWELL: f64 = 0.1;
+const NODE_WIDTH: f64 = 1.0;
+
+/// The stream an axis's ridges are laid out from, salted with the axis's
+/// index.
+const SURFACE_STREAM: u64 = 0x3B9A_C5E1_7D24_F80B;
 
 /// How far a point of an axis may lie off the capsule covering it, in
 /// meters.
@@ -98,11 +118,13 @@ pub fn changed<S: Species>(
 ///
 /// Every recipe runs and every mesh is registered before anything is
 /// spawned or despawned, so a meshing error leaves the standing scene whole.
+#[allow(clippy::too_many_arguments)]
 pub fn grow<S: Recipe>(
     mut commands: Commands,
     mut library: Library,
     params: Res<S::Params>,
     physics: Res<PhysicsParams>,
+    scene: Res<SceneParams>,
     plants: Query<(Entity, &Order, &PlantConfig), With<Of<S>>>,
     children: Query<&Children>,
     organs: Query<(), With<Organ>>,
@@ -112,6 +134,7 @@ pub fn grow<S: Recipe>(
     library.clear(S::PREFIX);
     library.clear(&crown_prefix);
     library.clear(&tube_prefix);
+    let detail = scene.mesh_detail();
     let mut grown: Vec<(Order, Entity, PlantConfig)> = plants
         .iter()
         .map(|(entity, order, config)| (*order, entity, *config))
@@ -127,6 +150,22 @@ pub fn grow<S: Recipe>(
             .axes
             .iter()
             .partition(|axis| physics.flexible_stems && axis.bends && axis.length() > 2.0 * HELD);
+        // Where every organ leaves its axis, which the wood swells toward: a
+        // leaf along its frame's +X, a fruit down its -Z.
+        let stalks: Vec<Stalk> = builder
+            .leaves
+            .iter()
+            .map(|(_, anchor, leaf)| Stalk {
+                anchor: *anchor,
+                toward: anchor.frame.rotation * Vec3::X,
+                radius: blade::stalk_radius(leaf),
+            })
+            .chain(builder.fruits.iter().map(|(_, anchor, fruit)| Stalk {
+                anchor: *anchor,
+                toward: anchor.frame.rotation * -Vec3::Z,
+                radius: fruit.stalk_radius(),
+            }))
+            .collect();
         // The plant's rigid axes, as one mesh of its own in the first axis's
         // colour: no two stems lie alike, and a herb's tube is a few
         // kilobytes. Named by the plant's bed and place, so a plant missing
@@ -135,7 +174,7 @@ pub fn grow<S: Recipe>(
             Some(first) => {
                 let tubes: anyhow::Result<Vec<MeshData>> = rigid
                     .iter()
-                    .map(|axis| strand_mesh(&strand(axis)))
+                    .map(|axis| strand_mesh(&strand(axis, &stalks, config.seed, detail)))
                     .collect();
                 let (bed, place) = (order.0 >> 32, order.0 & 0xFFFF_FFFF);
                 Some(library.part(
@@ -300,10 +339,13 @@ pub fn grow<S: Recipe>(
                         Visibility::default(),
                     ));
                     if physics.fruit_collides {
-                        // A capsule the fruit's whole length, its tips at
-                        // the top and the bottom.
+                        // A capsule the body's whole length, its tips at
+                        // the top and the bottom, below the stalk.
                         let radius = (fruit.diameter / 2.0).min(fruit.length / 2.0);
-                        prim.spawn((Name::new(COLLISION), capsule(radius, -fruit.length, 0.0)));
+                        prim.spawn((
+                            Name::new(COLLISION),
+                            capsule(radius, -fruit.stalk - fruit.length, -fruit.stalk),
+                        ));
                     }
                 });
         }
@@ -412,8 +454,19 @@ fn host(anchor: &Anchor, rods: &[(Rod, Vec<Entity>)], plant: Entity) -> (Entity,
         .unwrap_or((plant, anchor.frame))
 }
 
-/// An axis as a tube to mesh: round within [`WOOD_TOLERANCE`], unbarked.
-fn strand(axis: &Grown) -> Strand {
+/// An organ's stalk as it leaves the plant: where it is anchored, which
+/// way the stalk heads and how thick it is.
+struct Stalk {
+    anchor: Anchor,
+    toward: Vec3,
+    radius: f32,
+}
+
+/// An axis as a tube to mesh: within [`WOOD_TOLERANCE`] of its shape at
+/// `detail`, its rings where the shape needs them, swollen at every node
+/// one of `stalks` leaves it at and toward each of them, and ridged from
+/// the plant's `seed` and its own index if its recipe asked.
+fn strand(axis: &Grown, stalks: &[Stalk], seed: u64, detail: f32) -> Strand {
     let points = axis
         .points
         .iter()
@@ -421,13 +474,63 @@ fn strand(axis: &Grown) -> Strand {
         .collect();
     let radii = axis.radii.iter().map(|r| *r as f64).collect();
     let thickest = axis.radii.iter().copied().fold(0.0, f32::max) as f64;
-    Strand::new(
-        points,
-        radii,
-        sides_within(thickest, WOOD_TOLERANCE),
-        WOOD_RINGS,
-        Bark::none(),
-    )
+    let tolerance = WOOD_TOLERANCE / detail as f64;
+    let sides = sides_within(thickest, tolerance);
+    let bark = if axis.ridges > 0.0 {
+        let mut rng = Rng::new(seed ^ SURFACE_STREAM ^ salt(axis.index as u64));
+        Bark::new(&mut rng, sides, axis.ridges as f64)
+    } else {
+        Bark::none()
+    };
+    let leaving: Vec<(f32, &Stalk)> = stalks
+        .iter()
+        .filter_map(|stalk| {
+            let (on, station) = stalk.anchor.on?;
+            (on == axis.index).then_some((station, stalk))
+        })
+        .collect();
+    // One swelling per node, however many organs leave it.
+    let mut nodes: Vec<f32> = leaving.iter().map(|(station, _)| *station).collect();
+    nodes.sort_by(f32::total_cmp);
+    nodes.dedup_by(|a, b| (*a - *b).abs() < 1e-4);
+    let bulges = nodes
+        .iter()
+        .enumerate()
+        .map(|(k, &station)| {
+            let (_, radius) = axis.at(station);
+            let gap = [k.checked_sub(1), (k + 1 < nodes.len()).then_some(k + 1)]
+                .into_iter()
+                .flatten()
+                .map(|j| (nodes[j] - station).abs() as f64)
+                .fold(f64::INFINITY, f64::min);
+            Bulge {
+                at: station as f64,
+                width: (NODE_WIDTH * radius as f64).min(gap / 3.0),
+                height: NODE_SWELL,
+            }
+        })
+        .collect();
+    let collars = leaving
+        .iter()
+        .map(|(station, stalk)| {
+            let (_, radius) = axis.at(*station);
+            Collar {
+                at: *station as f64,
+                toward: vector(stalk.toward),
+                radius: stalk.radius.min(radius) as f64,
+            }
+        })
+        .collect();
+    Strand {
+        bulges,
+        collars,
+        tolerance: Some(tolerance),
+        ..Strand::new(points, radii, sides, WOOD_RINGS, bark)
+    }
+}
+
+fn vector(v: Vec3) -> Vector3<f64> {
+    Vector3::new(v.x as f64, v.y as f64, v.z as f64)
 }
 
 /// The capsules an axis collides as, from its foot to its tip: each a radius
@@ -458,10 +561,76 @@ fn chain(axis: &Grown) -> Vec<(f32, Vec3, Vec3)> {
 
 #[cfg(test)]
 mod tests {
+    use std::f32::consts::PI;
+
     use misina_lab::rng::Rng;
 
+    use super::super::leaf::LeafConfig;
     use super::*;
     use crate::grow::axis::Axis;
+    use crate::grow::phyllotaxis::AxisNode;
+
+    /// A stem's strand is meshed to the wood tolerance at the scene's
+    /// detail, swells once at every node its leaves leave it at, however
+    /// many, and toward each leaf's petiole, so it is wider at a node than
+    /// between two; an axis grown with ridges is ridged, one without is
+    /// round.
+    #[test]
+    fn a_stem_swells_at_its_nodes_toward_its_leaves_and_may_be_ridged() {
+        let mut rng = Rng::new(2);
+        let stem = Axis::upright(0.5, 0.01)
+            .taper(1.0)
+            .grow(Vec3::ZERO, &mut rng);
+        let leaf = LeafConfig::simple(0.2, 0.6).petiole(0.08);
+        let stalks: Vec<Stalk> = [(0.2, 0.0), (0.2, PI), (0.35, 1.0)]
+            .into_iter()
+            .map(|(station, azimuth)| {
+                let node = AxisNode {
+                    rank: 0,
+                    count: 1,
+                    station,
+                    azimuth,
+                };
+                let anchor = stem.anchor(&node, 0.3);
+                Stalk {
+                    anchor,
+                    toward: anchor.frame.rotation * Vec3::X,
+                    radius: blade::stalk_radius(&leaf),
+                }
+            })
+            .collect();
+        let swollen = strand(&stem, &stalks, 1, 2.0);
+        assert_eq!(swollen.bulges.len(), 2, "one bulge per node");
+        assert_eq!(swollen.collars.len(), 3, "a collar per leaf");
+        assert_eq!(swollen.tolerance, Some(WOOD_TOLERANCE / 2.0));
+        let mesh = strand_mesh(&swollen).unwrap();
+        let widest_near = |z: f32| {
+            mesh.points
+                .iter()
+                .filter(|p| (p[2] - z).abs() < 0.015)
+                .map(|p| p[0].hypot(p[1]))
+                .fold(0.0, f32::max)
+        };
+        assert!(
+            widest_near(0.2) > 0.0115,
+            "{} at the node",
+            widest_near(0.2)
+        );
+        assert!(widest_near(0.45) < 0.0102, "{} between", widest_near(0.45));
+
+        // How far the radius strays round a tube of one radius throughout.
+        let roundness = |axis: &Grown| {
+            let mesh = strand_mesh(&strand(axis, &[], 1, 1.0)).unwrap();
+            let radii: Vec<f32> = mesh.points.iter().map(|p| p[0].hypot(p[1])).collect();
+            radii.iter().copied().fold(0.0, f32::max) - radii.iter().copied().fold(1.0, f32::min)
+        };
+        let ridged = Axis::upright(0.5, 0.01)
+            .taper(1.0)
+            .ridges(0.1)
+            .grow(Vec3::ZERO, &mut rng);
+        assert!(roundness(&ridged) > 0.0005, "{}", roundness(&ridged));
+        assert!(roundness(&stem) < 1e-5, "{}", roundness(&stem));
+    }
 
     /// A straight axis collides as one capsule, a leaning one as a few, each
     /// no thinner than the axis anywhere along it and together covering it

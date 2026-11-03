@@ -3,10 +3,11 @@
 
 use super::prelude::*;
 
-/// Foliage: a grown leaflet's green and a young one's, the stem's, and a
-/// pod's.
+/// Foliage: a grown leaflet's green and a young one's, its veins' paler
+/// green, the stem's, and a pod's.
 const LEAF: u32 = 0x4C8A3A;
 const YOUNG: u32 = 0x8ABF60;
+const VEIN: u32 = 0x8FBF66;
 const STEM: u32 = 0x6E9A48;
 const POD: u32 = 0x5F9A3A;
 
@@ -36,10 +37,11 @@ const ELEVATION: f32 = 0.45;
 const DROOP: f32 = 0.4;
 const GROWING: f32 = 4.0;
 
-/// Pods: a ripe pod's diameter, in meters, the lowest node that bears them,
-/// how many hang at a node at least and at most, how far they tilt outward,
-/// in radians, and the week they set.
+/// Pods: a ripe pod's diameter and the stalk it hangs by, in meters, the
+/// lowest node that bears them, how many hang at a node at least and at
+/// most, how far they tilt outward, in radians, and the week they set.
 const POD_DIAMETER: f32 = 0.011;
+const PEDICEL: f32 = 0.015;
 const FIRST_POD: u32 = 3;
 const PODS: (u32, u32) = (2, 4);
 const POD_TILT: f32 = 0.4;
@@ -151,7 +153,8 @@ impl Bush<'_> {
         let leaf = LeafConfig::trifoliate(whole, WIDTH)
             .petiole(PETIOLE * whole)
             .droop(DROOP)
-            .tint(self.tint);
+            .tint(self.tint)
+            .vein(srgb(VEIN));
         let turned = AxisNode { azimuth, ..*node };
         b.leaf_at(index, axis.anchor(&turned, ELEVATION + elevation), leaf);
 
@@ -165,6 +168,7 @@ impl Bush<'_> {
             // A pod grows out as it ripens.
             let grown = 0.3 + 0.7 * self.ripeness;
             let pod = FruitConfig::pod(POD_DIAMETER * grown, self.p.pod_length * grown)
+                .stalk(PEDICEL * grown)
                 .ripeness(self.ripeness)
                 .tint(srgb(POD));
             b.fruit_at(

@@ -16,7 +16,7 @@ use misina_lab::quantize::{Metric, farthest_first};
 use misina_lab::rng::Rng;
 use misina_lab::scene::{COLLISION, Library, Order, block};
 
-use super::PhysicsParams;
+use super::{PhysicsParams, SceneParams};
 use crate::shape::blade;
 use crate::species::{OrganOf, Species};
 
@@ -71,10 +71,19 @@ pub struct LeafConfig {
     /// turns it over the face. A lobed blade turns down by it whole, at its
     /// petiole's end.
     pub droop: f32,
-    /// The leaf's colour, linear RGB.
+    /// How far the blade turns about its midrib by its tip, in radians,
+    /// either way as its own draw says.
+    pub twist: f32,
+    /// The blade's colour, linear RGB.
     pub tint: [f32; 3],
-    /// The stream its ruffle's phases and its colour's shade come from;
-    /// [`LeafMetric`] reads it not.
+    /// The colour of the petiole, the midrib and the blade beside it, where
+    /// it differs from the blade's; none paints them the tint.
+    pub vein: Option<[f32; 3]>,
+    /// The colour the margin and the tip fade to, where it differs from the
+    /// blade's; none leaves them the tint.
+    pub edge: Option<[f32; 3]>,
+    /// The stream its ruffle's phases, its twist's way and its colour's
+    /// shade come from; [`LeafMetric`] reads it not.
     pub seed: u64,
 }
 
@@ -113,8 +122,12 @@ impl Metric<LeafConfig> for LeafMetric {
             // The edge's rise under the cup: the turn over half the width.
             (a.cup - b.cup) * reach / 4.0 * simple,
             (a.droop - b.droop) * reach / 2.0,
+            // A twist moves the margin by its turn over the half-width.
+            (a.twist - b.twist) * reach / 4.0,
             step(a.template == b.template),
             step(a.tint == b.tint),
+            step(a.vein == b.vein),
+            step(a.edge == b.edge),
         ]
         .iter()
         .map(|d| d * d)
@@ -133,12 +146,15 @@ pub fn changed<S: Species>(
 }
 
 /// Builds one mesh per distinct leaf of `S` and gives it to every leaf that
-/// drew it, with the box round it when the leaves collide.
+/// drew it, with the box round it when the leaves collide. A leaf is painted
+/// per point, so its part's own colour is the representative's shade of
+/// white.
 pub fn build<S: Species>(
     mut commands: Commands,
     mut library: Library,
     params: Res<S::Params>,
     physics: Res<PhysicsParams>,
+    scene: Res<SceneParams>,
     leaves: Query<(Entity, &Order, &LeafConfig), With<OrganOf<S>>>,
 ) -> Result {
     let prefix = format!("{}Leaf", S::PREFIX);
@@ -153,13 +169,16 @@ pub fn build<S: Species>(
     let configs: Vec<LeafConfig> = hung.iter().map(|(_, _, config)| *config).collect();
     let budget = S::variations(&params).max(1) as usize;
     let book = farthest_first(&configs, budget, 0.0, &LeafMetric);
-    let meshes = par_map(&book.representatives, |_, config| blade::mesh(config));
+    let detail = scene.mesh_detail();
+    let meshes = par_map(&book.representatives, |_, config| {
+        blade::mesh(config, detail)
+    });
     let mut geometry = Vec::with_capacity(meshes.len());
     for (index, (config, mesh)) in book.representatives.iter().zip(meshes).enumerate() {
         let mesh = mesh?;
         // Shaded off the representative's own stream, not its index, so a
         // budget change moves no shade that stays.
-        let color = shade(config.tint, &mut Rng::new(COLOR_STREAM ^ config.seed));
+        let color = shade([1.0; 3], &mut Rng::new(COLOR_STREAM ^ config.seed));
         let collider = physics
             .leaves_collide
             .then(|| blade::collider(config, &mesh));

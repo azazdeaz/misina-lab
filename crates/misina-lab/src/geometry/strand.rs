@@ -512,6 +512,7 @@ pub fn strand_mesh(strand: &Strand) -> anyhow::Result<MeshData> {
         points,
         face_vertex_counts,
         face_vertex_indices,
+        colors: None,
     })
 }
 

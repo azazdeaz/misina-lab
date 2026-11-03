@@ -107,11 +107,32 @@ pub struct SceneParams {
     /// a bed ready to pick.
     #[reflect(@Slider { min: 0.0, max: 20.0, step: 1.0 })]
     pub week: f32,
+    /// How finely the crop is meshed, as a multiplier. At 1 a stem's tube
+    /// strays from its shape by about a pixel to a camera half a meter away
+    /// and a blade is a few hundred triangles; 4 is four times as fine, 0.1
+    /// the coarsest at which every organ still shows. The weeds have a
+    /// detail of their own.
+    #[reflect(@Slider { min: 0.1, max: 4.0, step: 0.05 })]
+    pub detail: f32,
+}
+
+/// The least `detail` Python may set, so that every organ still meshes.
+const MIN_DETAIL: f32 = 0.01;
+
+impl SceneParams {
+    /// The detail the crop is meshed at, floored at [`MIN_DETAIL`].
+    pub fn mesh_detail(&self) -> f32 {
+        self.detail.max(MIN_DETAIL)
+    }
 }
 
 impl Default for SceneParams {
     fn default() -> Self {
-        Self { seed: 0, week: 8.0 }
+        Self {
+            seed: 0,
+            week: 8.0,
+            detail: 1.0,
+        }
     }
 }
 
@@ -313,6 +334,7 @@ mod tests {
             ("width", edited(|p| p.bed.width = 1.5)),
             ("week", edited(|p| p.scene.week = 3.0)),
             ("seed", edited(|p| p.scene.seed = 7)),
+            ("detail", edited(|p| p.scene.detail = 0.4)),
             ("jitter", edited(|p| p.planting.jitter = 0.0)),
             ("misses", edited(|p| p.planting.misses = 0.3)),
             ("leaves", edited(|p| p.lettuce.leaves = 20)),

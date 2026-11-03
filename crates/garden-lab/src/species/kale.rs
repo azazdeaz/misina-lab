@@ -4,11 +4,15 @@
 
 use super::prelude::*;
 
-/// Foliage: a grown blade's blue-green and a young one's, and the stem's
-/// pale green.
+/// Foliage: a grown blade's blue-green and a young one's, the pale of the
+/// midribs and petioles, and the stem's pale green.
 const LEAF: u32 = 0x3F6B3A;
 const YOUNG: u32 = 0x7FA85A;
+const VEIN: u32 = 0xB9C8A4;
 const STEM: u32 = 0x9AA68A;
+
+/// How far a blade twists about its midrib by its tip, in radians.
+const TWIST: f32 = 0.3;
 
 /// A grown stem's radius at its foot, in meters, how much it thins to the
 /// head, how far it leans and bows, and its internode.
@@ -100,7 +104,9 @@ impl Recipe for Kale {
                 .ruffle(p.curl)
                 .cup(CUP)
                 .droop(DROOP * settled)
-                .tint(tint);
+                .twist(TWIST)
+                .tint(tint)
+                .vein(srgb(VEIN));
             b.leaf_at(
                 node.rank as u64,
                 stem.anchor(&node, lerp(RISE.1, RISE.0, settled) + elevation),

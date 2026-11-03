@@ -3,11 +3,17 @@
 
 use super::prelude::*;
 
-/// Foliage: a green loose-leaf's, a red one's, and the yellow-green of a
-/// young plant either way.
+/// Foliage: a green loose-leaf's, a red one's at the margins over a blade
+/// this far from the green toward it, the yellow-green of a young plant
+/// either way, and the pale of the midribs and petioles.
 const GREEN: u32 = 0x6FA83C;
 const RED: u32 = 0x7A2A3A;
+const RED_BLEND: f32 = 0.3;
 const YOUNG: u32 = 0xA8CF5A;
+const VEIN: u32 = 0xD8E6AE;
+
+/// How far a blade twists about its midrib by its tip, in radians.
+const TWIST: f32 = 0.25;
 
 /// A grown crown's radius, in meters.
 const CROWN: f32 = 0.012;
@@ -116,11 +122,14 @@ impl Recipe for Lettuce {
             Tint::Red => true,
             Tint::Mix => coin < 0.5,
         };
-        let tint = mix(
-            srgb(if red { RED } else { GREEN }),
-            srgb(YOUNG),
-            1.0 - stage,
-        );
+        // A red lettuce is red at its margins and tips over a blade only
+        // leaning toward red; a green one is green throughout.
+        let blade = if red {
+            mix(srgb(GREEN), srgb(RED), RED_BLEND)
+        } else {
+            srgb(GREEN)
+        };
+        let tint = mix(blade, srgb(YOUNG), 1.0 - stage);
         let crown = b.crown(CROWN * size.max(0.15), 0.0);
         let rosette = Rosette::golden(leaves).phased(b.rng());
         for mut node in rosette.nodes() {
@@ -142,11 +151,16 @@ impl Recipe for Lettuce {
             let closed = 0.35 + 0.6 * ((inner - 0.5) * 2.0).clamp(0.0, 1.0);
             // An open blade droops no further than just below level.
             let drooping = (DROOP * (1.0 - inner) * droop).min(open + 0.1);
-            let config = LeafConfig::simple(p.leaf_length * size * node.size() * length, WIDTH)
+            let mut config = LeafConfig::simple(p.leaf_length * size * node.size() * length, WIDTH)
                 .ruffle(p.ruffle * (1.0 - 0.5 * inner))
                 .cup(lerp(CUP, HEAD_CUP, closing))
                 .droop(lerp(drooping, HEAD_TURN, closing))
-                .tint(tint);
+                .twist(TWIST)
+                .tint(tint)
+                .vein(srgb(VEIN));
+            if red {
+                config = config.edge(srgb(RED));
+            }
             b.leaf(crown.anchor(&node, lerp(open, closed, closing)), config);
         }
     }

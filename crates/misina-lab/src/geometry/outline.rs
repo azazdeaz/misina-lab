@@ -241,6 +241,7 @@ pub fn creased_mesh(
         face_vertex_counts: vec![3; face_vertex_indices.len() / 3],
         face_vertex_indices,
         points,
+        colors: None,
     })
 }
 

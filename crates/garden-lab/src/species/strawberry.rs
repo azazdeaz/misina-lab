@@ -7,10 +7,12 @@ use std::f32::consts::{FRAC_PI_2, TAU};
 
 use super::prelude::*;
 
-/// Foliage: a grown leaf's green and a young one's, a stalk's, and a
-/// berry's skin unripe and ripe.
+/// Foliage: a grown leaf's green and a young one's, its veins' paler green,
+/// a stalk's, and a berry's skin unripe and ripe; a berry colours from its
+/// tip, so it wears both until it is ripe.
 const LEAF: u32 = 0x2F6B2A;
 const YOUNG: u32 = 0x6FAE4E;
+const VEIN: u32 = 0x9DC37C;
 const STEM: u32 = 0x7FA860;
 const UNRIPE: u32 = 0xD8E4B0;
 const RIPE: u32 = 0xC0122A;
@@ -205,7 +207,8 @@ impl Recipe for Strawberry {
                 stalk.hang(&tip, azimuth, tilt),
                 FruitConfig::strawberry(FRUIT_ASPECT * length, length)
                     .ripeness(ripeness)
-                    .tint(mix(srgb(UNRIPE), srgb(RIPE), ripeness)),
+                    .tint(srgb(RIPE))
+                    .shoulder(srgb(UNRIPE)),
             );
         }
     }
@@ -219,4 +222,5 @@ fn leaf(whole: f32, tint: [f32; 3]) -> LeafConfig {
         .teeth(TEETH)
         .droop(DROOP)
         .tint(tint)
+        .vein(srgb(VEIN))
 }

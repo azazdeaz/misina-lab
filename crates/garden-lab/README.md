@@ -41,6 +41,26 @@ zucchini, ten for kale and pole beans, eleven for strawberries and twelve for
 carrots, so one garden holds a bed just sown beside a bed ready to pick. A
 bed is bare before its crop's sowing week. The weeds take no notice of it.
 
+## How it is meshed
+
+Every stem is a tube rung where its shape needs it, swelling at every node
+an organ leaves it at and toward that organ's stalk, so a petiole grows out
+of the stem rather than poking through it; a zucchini's is ridged. Every
+leaf and fruit is painted, a colour per point, which USD carries as a vertex
+`displayColor`: a blade pales toward its vein colour beside its midrib, a
+tapered tube laid along a simple blade, and along the veins a lobed blade
+fans from its notch, and fades to its edge colour at the margin and the tip,
+red on a red lettuce; a strawberry colours from its tip as it ripens under a
+calyx of seven sepals, pitted and flecked by its achenes; a carrot's
+shoulder greens above the soil; a zucchini is striped paler; a pod swells at
+its beans and hangs by a stalk. `scene.detail` sets how finely all of it is
+meshed: at 1 a stem's tube strays about a pixel from its shape to a camera
+half a meter away and a blade is a few hundred triangles, 4 is four times as
+fine and 0.1 the coarsest at which every organ still shows. The weeds have a
+detail of their own. The shots under `docs/shots/garden-lab/` frame one crop
+each at harvest, close enough to judge all this;
+`docs/shots/render.sh docs/shots/garden-lab/*.json` renders them.
+
 ## Running it
 
 From the repository root,

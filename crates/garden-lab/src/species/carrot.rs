@@ -3,12 +3,14 @@
 
 use super::prelude::*;
 
-/// Foliage: a grown leaf's green and a young one's; the root's skin from a
-/// pale shoulder to full orange as it ripens.
+/// Foliage: a grown leaf's green and a young one's; the root's skin from
+/// pale to full orange as it ripens, and the green its shoulder turns above
+/// the soil.
 const LEAF: u32 = 0x4A8A3A;
 const YOUNG: u32 = 0x86B85C;
 const PALE: u32 = 0xE8A060;
 const ORANGE: u32 = 0xE8702A;
+const GREENED: u32 = 0x8FA050;
 
 /// A leaf: its petiole and each leaflet as fractions of its length, its
 /// pairs of leaflets, how far it arches over, in radians, and how far the
@@ -69,7 +71,8 @@ impl Recipe for Carrot {
             Transform::from_xyz(0.0, 0.0, shoulder),
             FruitConfig::root(diameter, length)
                 .ripeness(ripeness)
-                .tint(mix(srgb(PALE), srgb(ORANGE), ripeness)),
+                .tint(mix(srgb(PALE), srgb(ORANGE), ripeness))
+                .shoulder(srgb(GREENED)),
         );
         let radius = diameter / 2.0 * 0.8;
         let crown = b.crown(radius, (shoulder - SUNK * radius).max(0.0));

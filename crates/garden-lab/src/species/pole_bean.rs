@@ -4,10 +4,11 @@
 
 use super::prelude::*;
 
-/// Foliage: a grown leaflet's green and a young one's, the vine's, and a
-/// pod's.
+/// Foliage: a grown leaflet's green and a young one's, its veins' paler
+/// green, the vine's, and a pod's.
 const LEAF: u32 = 0x3E7A33;
 const YOUNG: u32 = 0x7DB45A;
+const VEIN: u32 = 0x86B85E;
 const STEM: u32 = 0x5D8A3C;
 const POD: u32 = 0x5F9A3A;
 
@@ -34,11 +35,13 @@ const ELEVATION: f32 = 0.35;
 const DROOP: f32 = 0.5;
 const GROWING: f32 = 4.0;
 
-/// Pods: a ripe pod's diameter, in meters, the lowest node that bears them,
-/// how many hang at a node at least and at most, how many numbers a node's
-/// pods take after its leaf's (which the most may not exceed), how far they
-/// tilt outward, in radians, and the week they set.
+/// Pods: a ripe pod's diameter and the stalk it hangs by, in meters, the
+/// lowest node that bears them, how many hang at a node at least and at
+/// most, how many numbers a node's pods take after its leaf's (which the
+/// most may not exceed), how far they tilt outward, in radians, and the
+/// week they set.
 const POD_DIAMETER: f32 = 0.012;
+const PEDICEL: f32 = 0.015;
 const FIRST_POD: u32 = 3;
 const PODS: (u32, u32) = (2, 3);
 const POD_SLOTS: u64 = 8;
@@ -108,7 +111,8 @@ impl Recipe for PoleBean {
             let leaf = LeafConfig::trifoliate(whole, WIDTH)
                 .petiole(PETIOLE * whole)
                 .droop(DROOP)
-                .tint(tint);
+                .tint(tint)
+                .vein(srgb(VEIN));
             let turned = AxisNode { azimuth, ..node };
             b.leaf_at(index, vine.anchor(&turned, ELEVATION + elevation), leaf);
 
@@ -121,6 +125,7 @@ impl Recipe for PoleBean {
                 }
                 let grown = 0.3 + 0.7 * ripeness;
                 let pod = FruitConfig::pod(POD_DIAMETER * grown, p.pod_length * grown)
+                    .stalk(PEDICEL * grown)
                     .ripeness(ripeness)
                     .tint(srgb(POD));
                 b.fruit_at(

@@ -1,0 +1,37 @@
+{
+  "size": [
+    1600,
+    1000
+  ],
+  "warmup": 8,
+  "start": {
+    "note": "Kale at harvest: the stems' swellings at the leaf nodes and the pale petioles and midribs.",
+    "set": {
+      "bed.length": 1.2,
+      "bed.columns": 1,
+      "bed.rows": 1,
+      "planting.misses": 0.0,
+      "weeds.pressure": 0.0,
+      "weeds.path_pressure": 0.0,
+      "scene.week": 10.0,
+      "lettuce.share": 0.0,
+      "kale.share": 1.0,
+      "carrot.share": 0.0,
+      "bush_bean.share": 0.0,
+      "pole_bean.share": 0.0,
+      "zucchini.share": 0.0,
+      "strawberry.share": 0.0
+    },
+    "camera": {
+      "focus": [
+        0.0,
+        0.0,
+        0.71
+      ],
+      "yaw": -35,
+      "pitch": 20,
+      "radius": 1.3,
+      "fov": 40
+    }
+  }
+}

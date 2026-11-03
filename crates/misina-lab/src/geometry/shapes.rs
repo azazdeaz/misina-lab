@@ -15,9 +15,10 @@
 //! [`untangle`] cuts out the loops a jittered margin folds into. A generator
 //! strings those into its own ring; the frame is the same.
 //!
-//! Also here: [`bent`], which fills a ring and folds it the way a leaf folds,
-//! and the two rotations that take a shape out of this frame — [`standing`]
-//! and [`lying`] — so every element places its foliage the same way.
+//! Also here: [`fold`], which folds a filled sheet the way a leaf folds, and
+//! [`bent`], which fills a ring and folds it; and the two rotations that take
+//! a shape out of this frame — [`standing`] and [`lying`] — so every element
+//! places its foliage the same way.
 
 use std::f64::consts::{FRAC_PI_2, PI};
 
@@ -34,7 +35,7 @@ const STATIONS: usize = 10;
 
 /// Narrowest a base may be, as a fraction of the half-width: a shape that
 /// tapers to nothing at both ends has no edge to attach by.
-const BASE: f64 = 0.08;
+pub const BASE: f64 = 0.08;
 
 /// How deep a tooth cuts into the edge, as a fraction of the profile there.
 const TOOTH: f64 = 0.55;
@@ -62,19 +63,21 @@ pub fn toothed(length: f64, width: f64, peak: f64, teeth: usize) -> Outline {
     })
 }
 
-/// A hump over `0..1` peaking at `peak`, as a fraction of the half-width.
-fn profile(t: f64, peak: f64) -> f64 {
+/// A hump over `0..1` peaking at `peak`, as a fraction of the half-width: a
+/// [`leaf`]'s half-width `t` of the way along.
+pub fn profile(t: f64, peak: f64) -> f64 {
     let peak = peak.clamp(0.05, 0.95);
     // `sin(pi * t^p)` peaks where `t^p = 1/2`, so `p` is solved from the peak.
     let p = 0.5f64.ln() / peak.ln();
     (std::f64::consts::PI * t.powf(p)).sin().max(0.0)
 }
 
-/// The ring: down the -Y edge from the base to the tip, back up the +Y edge,
-/// closing across the base. `half(i, t)` is the half-width at station `i`
-/// (`t` of the way along) as a fraction of `width / 2`; the tip is pinched to
-/// a point and the base held open to at least [`BASE`].
-fn ring(length: f64, width: f64, stations: usize, half: impl Fn(usize, f64) -> f64) -> Outline {
+/// The ring every shape here is: down the -Y edge from the base to the tip in
+/// `stations` steps, back up the +Y edge, closing across the base. `half(i,
+/// t)` is the half-width at station `i` (`t` of the way along) as a fraction
+/// of `width / 2`; the tip is pinched to a point and the base held open to at
+/// least [`BASE`].
+pub fn ring(length: f64, width: f64, stations: usize, half: impl Fn(usize, f64) -> f64) -> Outline {
     let (length, width) = (length.max(1e-4), width.max(1e-5));
     let stations = stations.max(2);
     let w = |i: usize| -> f64 {
@@ -198,6 +201,24 @@ fn crossing(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> Option<DVec2> {
 
 // ─── Filling and placing ────────────────────────────────────────────
 
+/// Folds a sheet lying on the XY plane the way a leaf folds: keeled about
+/// its midrib, the X axis, by `keel`, a curvature in 1/m that curls the edges
+/// up toward the face, +Z, and then drooped along it by `droop`, a curvature
+/// in 1/m, tip down. Either at zero leaves the sheet as it is. Neither
+/// stretches it: see [`bend`].
+pub fn fold(mesh: &mut MeshData, keel: f64, droop: f64) {
+    for point in &mut mesh.points {
+        let (mut x, mut y, mut z) = (point[0] as f64, point[1] as f64, point[2] as f64);
+        if keel != 0.0 {
+            (y, z) = bend(y, z, -keel);
+        }
+        if droop != 0.0 {
+            (x, z) = bend(x, z, droop);
+        }
+        *point = [x as f32, y as f32, z as f32];
+    }
+}
+
 /// `outline` filled at about `triangles` triangles and folded like a leaf:
 /// keeled about its midrib by `keel`, a curvature in 1/m that curls the
 /// edges up toward the face, and drooped `droop` radians at the tip, away
@@ -209,16 +230,7 @@ pub fn bent(outline: Outline, droop: f64, keel: f64, triangles: f64) -> Result<M
         .fold(0.0f64, |m, p| m.max(p.x))
         .max(1e-6);
     let mut mesh = outline_mesh(&outline, outline.area() / triangles.max(1.0))?;
-    for point in &mut mesh.points {
-        let (mut x, mut y, mut z) = (point[0] as f64, point[1] as f64, point[2] as f64);
-        if keel != 0.0 {
-            (y, z) = bend(y, z, -keel);
-        }
-        if droop != 0.0 {
-            (x, z) = bend(x, z, droop / reach);
-        }
-        *point = [x as f32, y as f32, z as f32];
-    }
+    fold(&mut mesh, keel, droop / reach);
     Ok(mesh)
 }
 

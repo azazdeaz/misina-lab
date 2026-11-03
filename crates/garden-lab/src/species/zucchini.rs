@@ -5,19 +5,23 @@ use std::f32::consts::FRAC_PI_2;
 
 use super::prelude::*;
 
-/// Foliage: a grown blade's green and a young one's, the stem's pale green,
-/// and a fruit's dark green.
+/// Foliage: a grown blade's green and a young one's, the silver along its
+/// veins, the stem's pale green, a fruit's dark green and the paler green
+/// of its flecks and stalk end.
 const LEAF: u32 = 0x3E7A33;
 const YOUNG: u32 = 0x7DB356;
+const SILVER: u32 = 0x93AA8E;
 const STEM: u32 = 0x8FAE6C;
 const FRUIT: u32 = 0x24501E;
+const FLECK: u32 = 0x6F9A52;
 
 /// The stem: a grown stem's radius at its foot, in meters, how much it
-/// thins to the tip, how far it leans, in radians, and its internode: a leaf
-/// every 1.2 cm.
+/// thins to the tip, how far it leans, in radians, how deep its ridges run,
+/// as a fraction of its radius, and its internode: a leaf every 1.2 cm.
 const RADIUS: f32 = 0.025;
 const TAPER: f32 = 0.6;
 const LEAN: f32 = 0.3;
+const RIDGES: f32 = 0.08;
 const INTERNODE: f32 = 0.012;
 
 /// A leaf: the petiole as a fraction of its length, the blade's width as a
@@ -85,6 +89,7 @@ impl Recipe for Zucchini {
             Axis::upright(p.height * size, RADIUS * size.max(0.2))
                 .taper(TAPER)
                 .lean(LEAN)
+                .ridges(RIDGES)
                 .tint(srgb(STEM)),
         );
         let tint = mix(srgb(LEAF), srgb(YOUNG), 1.0 - stage);
@@ -105,7 +110,8 @@ impl Recipe for Zucchini {
             let leaf = LeafConfig::lobed(whole, WIDTH)
                 .petiole(PETIOLE * whole)
                 .droop(HINGE)
-                .tint(tint);
+                .tint(tint)
+                .vein(srgb(SILVER));
             let turned = AxisNode { azimuth, ..node };
             b.leaf_at(
                 index,
@@ -125,7 +131,8 @@ impl Recipe for Zucchini {
                     stem.hang(&node, azimuth + FRUIT_SWING + swing, FRAC_PI_2 + FRUIT_RISE),
                     FruitConfig::berry(FRUIT_ASPECT * length, length)
                         .ripeness(ripeness)
-                        .tint(srgb(FRUIT)),
+                        .tint(srgb(FRUIT))
+                        .shoulder(srgb(FLECK)),
                 );
             }
         }

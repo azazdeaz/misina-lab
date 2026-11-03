@@ -16,6 +16,7 @@ use misina_lab::quantize::{Metric, farthest_first};
 use misina_lab::rng::Rng;
 use misina_lab::scene::{Library, Order};
 
+use super::SceneParams;
 use crate::shape::solid;
 use crate::species::{OrganOf, Species};
 
@@ -32,6 +33,11 @@ pub const READY: f32 = 0.9;
 /// fruit fills.
 const DENSITY: f32 = 1000.0;
 const FILL: f32 = 0.6;
+
+/// A fruit's stalk's radius as a fraction of its diameter, and the least it
+/// is, in meters.
+const STALK_RADIUS: f32 = 0.12;
+const MIN_STALK_RADIUS: f32 = 0.001;
 
 /// What a fruit is, which decides its solid and how it is picked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,6 +77,14 @@ pub struct FruitConfig {
     pub ripeness: f32,
     /// The skin's colour, linear RGB.
     pub tint: [f32; 3],
+    /// The skin's colour at its stalk end, where it differs from the tint:
+    /// what a strawberry is before it colours, which its ripeness pushes
+    /// toward its tip, a root's shoulder above the soil, or a berry's paler
+    /// flecks; none paints the whole skin the tint.
+    pub shoulder: Option<[f32; 3]>,
+    /// A bare stalk between the anchor and the body, in meters; the body,
+    /// its length and its collider hang below it.
+    pub stalk: f32,
     /// The stream its shade comes from; [`FruitMetric`] reads it not.
     pub seed: u64,
 }
@@ -80,6 +94,12 @@ impl FruitConfig {
     pub fn mass(&self) -> f32 {
         let radius = self.diameter / 2.0;
         DENSITY * FILL * std::f32::consts::PI * radius * radius * self.length
+    }
+
+    /// Its stalk's radius, in meters: what it leaves its stem by, and what
+    /// the stem swells toward there, whether or not the stalk is drawn.
+    pub fn stalk_radius(&self) -> f32 {
+        (STALK_RADIUS * self.diameter).max(MIN_STALK_RADIUS)
     }
 }
 
@@ -98,8 +118,13 @@ impl Metric<FruitConfig> for FruitMetric {
         [
             a.length - b.length,
             a.diameter - b.diameter,
+            a.stalk - b.stalk,
+            // A tenth of ripeness moves a strawberry's front a tenth of its
+            // length; the rest colour by their tint alone.
+            (a.ripeness - b.ripeness) * reach * ((a.kind == Kind::Strawberry) as u8 as f32),
             step(a.kind == b.kind),
             step(a.tint == b.tint),
+            step(a.shoulder == b.shoulder),
         ]
         .iter()
         .map(|d| d * d)
@@ -118,11 +143,13 @@ pub fn changed<S: Species>(
 }
 
 /// Builds one solid per distinct fruit of `S` and gives it to the `Skin` of
-/// every fruit that drew it.
+/// every fruit that drew it. A solid is painted per point, so its part's own
+/// colour is the representative's shade of white.
 pub fn build<S: Species>(
     mut commands: Commands,
     mut library: Library,
     params: Res<S::Params>,
+    scene: Res<SceneParams>,
     fruit: Query<(Entity, &Order, &FruitConfig, &Children), With<OrganOf<S>>>,
     skins: Query<(), With<Skin>>,
 ) -> Result {
@@ -141,15 +168,14 @@ pub fn build<S: Species>(
     let configs: Vec<FruitConfig> = hung.iter().map(|(_, _, config)| *config).collect();
     let budget = S::variations(&params).max(1) as usize;
     let book = farthest_first(&configs, budget, 0.0, &FruitMetric);
-    let meshes = par_map(&book.representatives, |_, config| match config.kind {
-        Kind::Root => solid::root(config),
-        Kind::Pod => solid::pod(config),
-        Kind::Berry => solid::berry(config),
-        Kind::Strawberry => solid::strawberry(config),
+    let detail = scene.mesh_detail();
+    let meshes = par_map(&book.representatives, |_, config| {
+        solid::mesh(config, detail)
     });
     let mut geometry = Vec::with_capacity(meshes.len());
     for (index, (config, mesh)) in book.representatives.iter().zip(meshes).enumerate() {
-        let color = shade(config.tint, &mut Rng::new(COLOR_STREAM ^ config.seed));
+        let mesh = mesh?;
+        let color = shade([1.0; 3], &mut Rng::new(COLOR_STREAM ^ config.seed));
         geometry.push(library.part(&prefix, index, mesh.to_mesh(), SKIN.surface(color)));
     }
     for ((_, skin, _), drew) in hung.iter().zip(&book.assignment) {

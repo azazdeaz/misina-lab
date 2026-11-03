@@ -48,7 +48,7 @@
 use std::f32::consts::{PI, TAU};
 
 use bevy::prelude::*;
-use misina_lab::geometry::mesh::{MeshData, merge_meshes};
+use misina_lab::geometry::mesh::{MeshData, lathe, merge_meshes};
 use misina_lab::geometry::outline::outline_mesh;
 use misina_lab::geometry::par_map;
 use misina_lab::geometry::shapes::leaf;
@@ -443,37 +443,6 @@ fn reauthor(params: Res<FruitParams>, mut fruit: Query<&mut FruitConfig>) {
 
 // ─── The mesh ───────────────────────────────────────────────────────
 
-/// A closed surface through `rings`, from `top` down to `bottom`, every ring
-/// the same number of points counter-clockwise seen from above. Faces wind
-/// outward.
-fn lathe(top: Vec3, rings: &[Vec<Vec3>], bottom: Vec3) -> MeshData {
-    let n = rings[0].len() as i32;
-    let last = rings.len() - 1;
-    let at = |j: usize, i: i32| 1 + j as i32 * n + i.rem_euclid(n);
-    let end = 1 + rings.len() as i32 * n;
-    let mut points = vec![top.to_array()];
-    points.extend(rings.iter().flatten().map(|p| p.to_array()));
-    points.push(bottom.to_array());
-
-    let (mut counts, mut indices) = (Vec::new(), Vec::new());
-    for i in 0..n {
-        counts.extend([3, 3]);
-        indices.extend([0, at(0, i), at(0, i + 1)]);
-        indices.extend([at(last, i), end, at(last, i + 1)]);
-    }
-    for j in 0..last {
-        for i in 0..n {
-            counts.push(4);
-            indices.extend([at(j, i), at(j + 1, i), at(j + 1, i + 1), at(j, i + 1)]);
-        }
-    }
-    MeshData {
-        points,
-        face_vertex_counts: counts,
-        face_vertex_indices: indices,
-    }
-}
-
 /// The body's surface, solved from a config: its stem scar on the axis at
 /// `top`, the stub's foot.
 struct Body {
@@ -725,36 +694,27 @@ fn stub(config: &FruitConfig) -> MeshData {
 fn fruit_mesh(config: &FruitConfig, ripe: [f32; 3]) -> Result<Mesh> {
     let mut rng = Rng::new(config.seed ^ CALYX_STREAM);
     let body = Body::new(config, &mut rng);
-    let skin_mesh = body.mesh();
+    let mut skin_mesh = body.mesh();
     let (low, high) = skin_mesh
         .points
         .iter()
         .fold((f32::MAX, f32::MIN), |(lo, hi), p| {
             (lo.min(p[2]), hi.max(p[2]))
         });
-    let mut colors: Vec<[f32; 3]> = skin_mesh
-        .points
-        .iter()
-        .map(|p| skin(config.stage, (p[2] - low) / (high - low).max(1e-6), ripe))
-        .collect();
+    skin_mesh.colors = Some(
+        skin_mesh
+            .points
+            .iter()
+            .map(|p| skin(config.stage, (p[2] - low) / (high - low).max(1e-6), ripe))
+            .collect(),
+    );
 
-    let sepals = calyx(config, &body, &mut rng)?;
-    let stub = stub(config);
-    for (piece, hex) in sepals
-        .iter()
-        .map(|s| (s, SEPAL_COLOR))
-        .chain([(&stub, STUB_COLOR)])
-    {
-        colors.extend(std::iter::repeat_n(srgb(hex), piece.points.len()));
-    }
     let mut pieces = vec![skin_mesh];
-    pieces.extend(sepals);
-    pieces.push(stub);
-
-    let rgba: Vec<[f32; 4]> = colors.iter().map(|[r, g, b]| [*r, *g, *b, 1.0]).collect();
-    Ok(merge_meshes(&pieces)
-        .to_mesh()
-        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, rgba))
+    for sepal in calyx(config, &body, &mut rng)? {
+        pieces.push(sepal.painted(srgb(SEPAL_COLOR)));
+    }
+    pieces.push(stub(config).painted(srgb(STUB_COLOR)));
+    Ok(merge_meshes(&pieces).to_mesh())
 }
 
 /// Builds one mesh per distinct fruit, and hangs every fruit's skin and its
