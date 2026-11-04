@@ -1,10 +1,11 @@
 """The vineyard's physics: `misina_lab.isaaclab.rods` with the vineyard's names
 and numbers.
 
-Nothing in a vineyard is a rigid body except a flexible shoot, imported as a
-rod. `VineyardCfg.without_rods` says whether a vineyard authors one, and the
-core's spawner and `rods.make_physics_cfg_newton` read it there; what stays
-here is which prim a vine is, and how many substeps the demos' robots need.
+Nothing in a vineyard is a rigid body except a flexible shoot or a weed's
+bending stem, each imported as a rod. `VineyardCfg.without_rods` says whether a
+vineyard authors one, and the core's spawner and `rods.make_physics_cfg_newton`
+read it there; what stays here is which prim a vine is, and how many substeps
+the demos' robots need.
 """
 
 from __future__ import annotations
@@ -27,8 +28,8 @@ VINE = VineyardCfg.PLANT
 as one group; see `rods.tune_rods`."""
 
 VINE_GROUPS = PLANT_GROUPS
-"""The first collision group a vine takes; each vine gets the next one up.
-See `rods.PLANT_GROUPS`."""
+"""The first collision group a vine takes; each vine, and each weed's stem,
+gets the next one up as it turns up. See `rods.PLANT_GROUPS`."""
 
 SUBSTEPS = 4
 """Physics substeps per simulation step, with or without shoots.
@@ -51,11 +52,13 @@ the shoots sag about twice as far.
 def tune_shoots(
     damping: float = rods.ROD_DAMPING,
     stretch: float = rods.ROD_STRETCH,
+    weed_damping: float = VineyardCfg.LONE_ROD_DAMPING,
 ) -> CallbackHandle:
     """`rods.tune_rods` for a vineyard: a rod meets its own vine's canes and
     wood, the ground, the posts and the robot, and passes through every other
-    vine."""
-    return rods.tune_rods(VINE, damping=damping, stretch=stretch)
+    vine. A weed's stem is under no vine, so it meets the ground, the posts and
+    the robot alone, and is damped with `weed_damping`."""
+    return rods.tune_rods(VINE, damping=damping, stretch=stretch, lone_damping=weed_damping)
 
 
 def make_physics_cfg_newton(

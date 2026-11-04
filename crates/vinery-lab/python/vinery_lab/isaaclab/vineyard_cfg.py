@@ -293,6 +293,10 @@ class ShootCfg:
     nothing for a solver to pick up. For a backend with no rods, or to keep a
     canopy's look without paying for the bodies.
     """
+    segment: float = 0.09
+    """Length of one segment of a bending shoot's rod, in meters — a stray shoot's or
+    a dormant cane's.
+    """
     dormant: bool = False
     """Winter: every shoot is last season's cane after leaf fall — lignified brown,
     leafless, with a bud at every node — and is exported as a deformable curve a
@@ -424,8 +428,9 @@ class WeedCfg:
 
     `strip` is what is done to the under-vine strip, and it picks the species; the
     scene's `season` tilts the mix between the spring and summer flushes and decides
-    whether a bolter has bolted. Every plant is one mesh: `variations` is the budget
-    of distinct ones and `detail` the triangles a leaf is cut into.
+    whether a bolter has bolted. Every plant is one mesh, bar the long stems
+    `flexible` exports as deformable curves a physics engine bends: `variations` is
+    the budget of distinct meshes and `detail` the triangles a leaf is cut into.
     """
 
     strip: str = "mown"
@@ -445,6 +450,12 @@ class WeedCfg:
     tall: float = 0.3
     """The share of plants that are tall — bolters and broadleaves — as against low
     tufts, mats and rosettes.
+    """
+    flexible: bool = False
+    """Whether a stem at least 30 cm long — a bolter's wand, a broadleaf's runners —
+    is exported as a deformable curve a solver bends, with its leaves riding it. Each
+    is a chain of rigid bodies, ten to the metre: the default parcel at the defaults
+    bends about 2,500 stems, 12,000 bodies.
     """
     variations: int = 24
     """How many distinct plant meshes the scene may hold. A budget, not a count."""
@@ -484,13 +495,21 @@ class VineyardCfg(GeneratedSceneCfg):
     vineyard that has any. Under a backend that cannot step one it is spawned
     as a static mesh at the same lean instead. Each curve is a chain of rigid
     bodies, so keep the share low, or set `ShootCfg.flexible` off to spawn the
-    meshes under every backend.
+    meshes under every backend. `WeedCfg.flexible` does the same for the long
+    stems of the tall weeds, and is off by default.
     """
 
     PARAMS: ClassVar[type] = vinery_lab.VineyardParams
     PLANT: ClassVar[str] = "Vine"
     """`PART` in `crates/vinery-lab/src/elements/vine.rs`: a vine's canes and
     its wood collide as one group."""
+    LONE_ROD_DAMPING: ClassVar[float] = 0.03
+    """A weed's stem, the one rod under no vine. Shorter and more slender than
+    a cane, it swings several times faster, and at `rods.ROD_DAMPING` it comes
+    back from a push and stops dead. At this, pushed 25-40 cm aside by a bar
+    and let go, a stem swings back past upright by a twentieth of the push, a
+    tall wand by up to half, and is within a centimetre of rest in under half
+    a second, the tallest in two."""
 
     # >>> generated: aggregate
     scene: SceneCfg = SceneCfg()
@@ -525,17 +544,21 @@ class VineyardCfg(GeneratedSceneCfg):
     # <<< generated: aggregate
 
     def without_rods(self) -> Self | None:
-        """The vineyard with its shoots held rigid, or `None` when none is
-        flexible as it stands: a stray one, or every cane of a dormant
-        vineyard, with `ShootCfg.flexible` on.
+        """The vineyard with its shoots and weeds held rigid, or `None` when
+        nothing is flexible as it stands: a stray shoot, or every cane of a
+        dormant vineyard, with `ShootCfg.flexible` on, or a tall weed with
+        `WeedCfg.flexible` on.
 
-        `stray` is a share drawn shoot by shoot, so a parcel small enough can
-        draw none; the coupled solver then refuses an entry that owns no body,
-        at reset, with its own error. Set `stray` to zero for such a scene.
+        `stray` is a share drawn shoot by shoot, and a weed's stem bends only
+        once it has grown long, so a parcel small enough can draw none; the
+        coupled solver then refuses an entry that owns no body, at reset,
+        with its own error. Turn off what bends nothing in such a scene.
         """
         # ponytail: read off the cfg, as the scene itself is only generated
         # inside the app, after the physics config was built.
-        shoot = self.shoot
-        if not (shoot.flexible and (shoot.stray > 0.0 or shoot.dormant)):
+        shoot, weed = self.shoot, self.weed
+        shoots = shoot.flexible and (shoot.stray > 0.0 or shoot.dormant)
+        weeds = weed.flexible and weed.tall > 0.0 and max(weed.pressure, weed.alley_pressure) > 0.0
+        if not (shoots or weeds):
             return None
-        return self.replace(shoot=shoot.replace(flexible=False))
+        return self.replace(shoot=shoot.replace(flexible=False), weed=weed.replace(flexible=False))

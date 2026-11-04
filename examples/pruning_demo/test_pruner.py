@@ -162,6 +162,31 @@ def test_cuts_are_taken_nearest_neighbour_first():
     assert [cut.pose[0, 3] for cut in ordered] == [1.0, 0.0, 5.0]
 
 
+@pytest.mark.parametrize(
+    ("x", "z", "loose", "lies"),
+    [
+        (0.03, -0.05, False, True),
+        (0.03, 0.05, False, True),
+        (0.03, -0.05, True, False),
+        (0.1, -0.05, False, False),
+        (0.03, 0.2, False, False),
+        (0.0, 0.12, False, False),
+        (0.03, -0.25, False, False),
+    ],
+)
+def test_a_cane_lies_on_the_shear_near_the_line_from_its_tips_back(x, z, loose, lies):
+    """A cane across the shear's own frame at `x` along the pivot and `z`
+    along the blades lies on it 3 cm over its head or its blades, that far off
+    its line, but not cut free, 10 cm over it, in front of the blades' tips,
+    even 3 cm, or back past the wrist."""
+    frame = kinematics.transform((0.4, 1.2, 1.0), (0.7, 0.3, -1.1))
+    ends = (frame @ np.array([[x, -0.2, z, 1.0], [x, 0.2, z, 1.0]]).T).T[:, :3]
+    shears = type("Rods", (), {"capsules": lambda self: (ends[:1], ends[1:])})()
+    shears.loose = np.array([loose])
+    off = pruner.lying(shears, frame, 0.09)
+    assert off == pytest.approx((x, 0.0, 0.0)) if lies else off is None
+
+
 def test_the_tally_reads_as_the_papers_score():
     tally = Tally(vines=2, planned=10, reachable=8, made=7, correct=6, seconds=300.0)
     assert tally.summary() == (
@@ -309,20 +334,26 @@ def test_each_held_cane_stands_its_slices_while_the_blade_closes_through_it(out,
 
 
 @pytest.mark.parametrize(
-    ("push", "gone", "fouled"),
+    ("push", "gone", "fouled", "shake", "lies"),
     [
-        ((0.0, 0.0, 0.0), False, 0),
-        ((0.0, -0.01, 0.0), False, 0),
-        ((0.0, 0.0, 0.01), False, 0),
-        ((0.0, 0.0, 0.0), True, 0),
-        ((0.0, 0.0, 0.0), False, 20),
+        ((0.0, 0.0, 0.0), False, 0, 0.0, True),
+        ((0.0, -0.01, 0.0), False, 0, 0.0, False),
+        ((0.0, 0.0, 0.01), False, 0, 0.0, False),
+        ((0.0, 0.0, 0.0), True, 0, 0.0, False),
+        ((0.0, 0.0, 0.0), False, 20, 0.0, False),
+        ((0.0, 0.0, 0.0), False, 0, 0.1, True),
+        ((0.0, 0.0, 0.0), False, 0, 0.1, False),
     ],
 )
-def test_the_sequence_stands_off_closes_in_and_cuts_every_cane(monkeypatch, push, gone, fouled):
+def test_the_sequence_stands_off_closes_in_and_cuts_every_cane(
+    monkeypatch, push, gone, fouled, shake, lies
+):
     """With an arm that goes where it is told and a blade that turns as told,
     every reachable cane is cut at its planned point -- where it is once the
-    swing out to it has swept it aside -- the shear closing with the mouth
-    moved on from it by the cut's push, and the tally says so; but a cane
+    swing out to it, made with the shear shut, has swept it aside -- the
+    shut shear moving away from a cane that `lies` on it at the stand-off by
+    the cut's shake and back, then opening there, and closing with the mouth
+    moved on from the cut by its push, and the tally says so; but a cane
     whose bud to take is `gone` before its turn is left alone. A piece
     cut free that lies across the mouth for the first `fouled` looks is
     tipped out, the blades turned down until it is gone; and once the vine is
@@ -343,9 +374,12 @@ def test_the_sequence_stands_off_closes_in_and_cuts_every_cane(monkeypatch, push
     )
     pieces = iter([True] * fouled)
     monkeypatch.setattr(Stroke, "fouled", lambda self, hand: next(pieces, False))
+    # Across the mouth, on the fixed blade's side.
+    off = np.array([0.0, 0.03, 0.0])
+    monkeypatch.setattr(pruner, "lying", lambda shears, frame, reach: off if lies else None)
     cuts = pruner.plan(Vine("/vine", np.zeros(3), canes), shears, np.array([0.0, 1.0, 0.0]))
     for cut in cuts:
-        cut.push = np.array(push)
+        cut.push, cut.shake = np.array(push), shake
     if gone:
         shears.removed.add(cuts[1].removed.prim)
     tally = Tally()
@@ -353,12 +387,21 @@ def test_the_sequence_stands_off_closes_in_and_cuts_every_cane(monkeypatch, push
     pruning = pruner.Pruning(machine, cuts, np.eye(4), q, shears, None, tally)
     assert tally.reachable == 2, "both are within reach"
 
-    angle, ticks, stage, closed, down = machine.shear.opening, 0, None, 0, []
+    angle, ticks, stage, closed, down, swung, shook = 0.0, 0, None, 0, [], [], 0
     while not pruning.done and ticks < 3000:
         hand = kinematics.frames(machine.chain, q)[-1]
         q, angle = pruning.control(q, hand, angle)
         mouth = kinematics.frames(machine.chain, q)[-1] @ machine.tool
         cut = pruning.cut
+        if pruning.stage_name == "move":
+            swung.append(angle)
+        if pruning.stage_name == "return" and stage != "return":
+            away = cut.standoff[:3, 3] - shake * cut.standoff[:3, 1]
+            assert mouth[:3, 3] == pytest.approx(away, abs=0.002), "away from it"
+            assert angle == 0.0, "shut while it shakes"
+            shook += 1
+        if pruning.stage_name == "approach" and stage != "approach":
+            assert angle == pytest.approx(machine.shear.opening), "open before the line in"
         if pruning.stage_name == "move" and stage != "move" and cut:
             # The swing out sweeps the cane 3 cm along the row, after the
             # cut was aimed at it.
@@ -376,6 +419,8 @@ def test_the_sequence_stands_off_closes_in_and_cuts_every_cane(monkeypatch, push
 
     made = 1 if gone else 2
     assert pruning.done and ticks < 3000 and closed == made
+    assert min(swung) == 0.0, "shut on the swing out"
+    assert shook == (made if shake and lies else 0)
     assert (max(down) > np.sin(pruner.TIP) - 0.05) if fouled else not down
     assert q == pytest.approx(pruning.home, abs=pruner.ARRIVED)
     assert (tally.planned, tally.reachable, tally.made, tally.correct) == (2, 2, made, made)

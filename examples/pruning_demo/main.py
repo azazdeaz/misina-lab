@@ -39,6 +39,7 @@ from vinery_lab.isaaclab import (
     TerrainCfg,
     VineCfg,
     VineyardCfg,
+    WeedCfg,
     make_physics_cfg_newton,
 )
 from vinery_lab.isaaclab.newton_patches import fix_heightfield_offsets
@@ -75,17 +76,21 @@ VINEYARD_CFG = VineyardCfg(
     shoot=ShootCfg(dormant=True, internode=0.12, length=1.1, radius=0.005, lean=0.08),
     # A dry, short winter floor.
     cover=CoverCfg(dryness=0.6, height=0.06),
+    # Last season's tall weeds, still standing: their long stems are rods too,
+    # bent aside by the robot as it drives and works through them.
+    weed=WeedCfg(flexible=True),
 )
 
 VINEYARD_PATH = "/World/Vineyard"
 # Where `design_scene` puts the robot: its scene's one environment.
 ROBOT_PATH = "/World/envs/env_0/Robot"
 
-# The parts of the robot a cane may bend: the arm, which pushes through the
-# canes around the one it is cutting, and the shear -- its head and fixed
-# blade ride on the last wrist, its moving blade on a link of its own. Each
-# costs a proxy in the solver that bends them, so the chassis stays out.
-ROBOT_CONTACT = [rf"{ROBOT_PATH}/.*(upper_arm|forearm|wrist_[123]|blade)_link"]
+# The parts of the robot a cane or a weed may bend: the arm, which pushes
+# through the canes around the one it is cutting; the shear -- its head and
+# fixed blade ride on the last wrist, its moving blade on a link of its own;
+# and the chassis, deck and rail in one, and its wheels, which drive through
+# the weeds. Each costs a proxy in the solver that bends them.
+ROBOT_CONTACT = [rf"{ROBOT_PATH}/.*(base|wheel|upper_arm|forearm|wrist_[123]|blade)_link"]
 
 # Bumblebee's own figures, to read the tally against.
 PAPER = "Bumblebee: 87% of cuts made at the right place, 213 s per vine, 68% reachable"

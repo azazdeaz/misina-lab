@@ -25,7 +25,7 @@ import numpy as np
 import isaaclab.sim as sim_utils
 from isaaclab.app import launch_simulation
 
-from misina_lab.isaaclab.film import Film, Rig, sensor
+from misina_lab.isaaclab.film import Film, Rig, develop, sensor
 
 import main as demo
 from bumblebee import Bumblebee
@@ -42,6 +42,8 @@ at the simulation's own speed."""
 
 PACE = {
     "move": 3.0,
+    "shake": 2.0,
+    "return": 2.0,
     "approach": 2.0,
     "push": 2.0,
     "close": 3.0,
@@ -51,10 +53,11 @@ PACE = {
     "home": 3.0,
 }
 """How many times slower than the simulation the video plays each stage of
-a take's cut, by `Pruning.stage_name`: the arm swinging out to the cane,
-closing in and pushing it, the blade closing, the blade opening again as the
-piece falls, and the arm backing out and tipping out a piece that fell into
-the mouth. A cut no take has is filmed wide, and only its swings -- out
+a take's cut, by `Pruning.stage_name`: the arm swinging out to the cane and
+shaking off another it carried, closing in and pushing it, the blade closing, the
+blade opening again as the piece falls, and the arm backing out and tipping
+out a piece that fell into the mouth. The blade opening at the stand-off
+plays at the simulation's own speed. A cut no take has is filmed wide, and only its swings -- out
 through the canes, and tipping -- are slowed, as is the arm folding home;
 the rest of those and the drive between vines play at the simulation's own
 speed."""
@@ -78,8 +81,10 @@ class Shot:
     view across, 50 a 24 degree one."""
     f_stop: float = 0.0
     """The aperture, focused on where the camera aims; 0 keeps everything
-    sharp. The renderer's depth of field is strong for the number: at f/48 a
-    close-up's background is already soft."""
+    sharp. The renderer's depth of field is strong for the number: at f/96 a
+    close-up's background is already soft, and much wider, whatever stands a
+    little off the focus -- the blades, the shear's body -- frays at its edges
+    against the blur."""
     caption: str | None = None
     """What the shot is captioned with when no take's caption is up."""
 
@@ -94,6 +99,9 @@ class Take:
     """Framing the middle of the take's cut points."""
     push: tuple[float, float, float] = (0.0, 0.0, 0.0)
     """Each cut's `Cut.push`."""
+    shake: tuple[float, ...] = ()
+    """The `Cut.shake` of each cut, in the order of `kept`; the cuts past the
+    end have none."""
     kept: tuple[int, ...] = (KEEP_BUDS,)
     """How many buds the cane keeps after each cut, the cuts made in this
     order -- top down, so each has wood left under it to cut. Negative counts
@@ -107,10 +115,10 @@ class Take:
 # behind it, on the side its moving blade opens to: clear of the arm, which
 # mostly comes in from the other side. From there the fixed blade is on the
 # right.
-CLOSE = Shot(eye=(-0.35, -0.3, 0.25), lens=35.0, f_stop=48.0)
+CLOSE = Shot(eye=(-0.49, -0.42, 0.35), lens=35.0, f_stop=96.0)
 """The cuts' close-up."""
 
-BEHIND = Shot(eye=(-0.45, -0.2, 0.25), lens=35.0, f_stop=48.0)
+BEHIND = Shot(eye=(-0.63, -0.28, 0.35), lens=35.0, f_stop=96.0)
 """Further round behind the mouth: a cane pushed toward the row bends across
 the picture, and a mouth pushed against the fixed blade is seen past the
 wrist, which that push brings round over where `CLOSE` stands."""
@@ -120,7 +128,17 @@ ACROSS = Shot(eye=(-0.7, 1.4, 0.6))
 cane at, which run down it against the robot's chassis."""
 
 TAKES = (
-    Take("Two canes in the mouth, both cut in one stroke", CLOSE, kept=(-1,), canes=2),
+    # The swing out to the take of two canes can leave a cane, this vine's
+    # or a neighbour's, lying on the shut shear, which the blade opening
+    # would drop into the mouth and the next swing shutting would pinch:
+    # the shear moves off it first.
+    Take(
+        "Two canes in the mouth, both cut in one stroke",
+        CLOSE,
+        kept=(-1,),
+        canes=2,
+        shake=(0.15,),
+    ),
     Take("One cane, cut three times from the top down", ACROSS, kept=(6, 4, 2)),
     Take("A planned cut: the cane lies in the middle of the mouth", CLOSE),
     Take("Pushed back into the crotch of the blades", BEHIND, push=(0.0, 0.0, 0.035)),
@@ -185,8 +203,8 @@ before it cuts to the next rather than easing there: a longer move would
 pass through the arm or the row."""
 
 ENDING = 6.0
-"""Seconds of video after the vine's last cut: the arm folding home and the
-robot driving on."""
+"""Seconds of video after the vine's last cut: the arm folding home, and the
+robot rolling off."""
 
 
 def schedule(row: list[Cut], mouth: np.ndarray, side: np.ndarray) -> list[tuple[Cut, Take | None]]:
@@ -255,12 +273,13 @@ def main():
         def filmed(take: Take, cane: Cane) -> list[Cut]:
             """`take`'s cuts on `cane`."""
             cuts = []
-            for kept in take.kept:
+            for i, kept in enumerate(take.kept):
                 below, above = cane.buds[kept - 1], cane.buds[kept]
                 pose = aimed(below, above, shears, side)
                 if pose is None:
                     raise RuntimeError(f"{cane.prim} runs along the approach at bud {kept}")
-                cuts.append(Cut(cane, pose, below, above, np.array(take.push)))
+                shake = take.shake[i] if i < len(take.shake) else 0.0
+                cuts.append(Cut(cane, pose, below, above, np.array(take.push), shake))
                 takes[id(cuts[-1])] = take
                 cuts_of[take].append(cuts[-1])
             return cuts
@@ -281,15 +300,17 @@ def main():
             return np.array([*eye, *target, shot.lens, shot.f_stop])
 
         rig, film = Rig(stage, FPS, EASE, CUT), Film(out, SIZE, FPS)
-        # The vine filmed and the next, for the robot to drive on to.
-        stops = vines[VINE : VINE + 2]
+        # The vine filmed, then the row's last: the robot drives on toward it
+        # past the vines between without slowing for each, as it would at a
+        # stop, and the video ends long before it gets there.
+        stops = [vine, vines[-1]]
         run = demo.run_simulator(
             sim, robot, machine, driver, stops, to_row, shears, planner=planner, render=False
         )
         # Frames due, counted a fraction a physics step: an eighth, at the
         # simulation's own speed. `canes` is how many the cut under way has
-        # cut in its stroke so far.
-        due, cut, done, entering, canes = 0.0, None, None, False, 0
+        # cut in its stroke so far, and `shook` whether its shear has shaken.
+        due, cut, done, entering, canes, shook = 0.0, None, None, False, 0, False
         made: collections.Counter[Take | None] = collections.Counter()
         try:
             for step, pruning in enumerate(run):
@@ -310,10 +331,19 @@ def main():
                     if working is None:
                         done = film.frames
                     entering = takes.get(id(working)) is not takes.get(id(cut))
-                    cut, canes = working, 0
+                    cut, canes, shook = working, 0, False
                 if working is not None:
                     # The stroke's count is cleared once the blade opens.
                     canes = max(canes, pruning.stroke.cuts)
+                    if pruning.stage_name == "shake" and not shook:
+                        shook = True
+                        standoff = working.standoff
+                        x, y, z = standoff[:3, :3].T @ (pruning.shaken - standoff)[:3, 3] * 100
+                        print(
+                            f"[INFO]: the shear shook a cane off before the cut on"
+                            f" {working.cane.prim} at {film.frames / FPS:.1f} s, moving"
+                            f" {x:+.0f} cm along the pivot, {y:+.0f} across, {z:+.0f} along the blades"
+                        )
                 take = takes.get(id(cut))
                 doing = pruning.stage_name if isinstance(pruning, Pruning) else None
                 swinging = doing in ("move", "tip", "home")
@@ -331,10 +361,7 @@ def main():
                     middle = np.mean([each.pose[:3, 3] for each in cuts_of[take]], axis=0)
                     shot, point = take.shot, middle
                 rig.aim(framing(shot, point))
-                sim.render()
-                camera.update(SIM_DT, force_recompute=True)
-                rgb = camera.data.output["rgb"].torch[0, ..., :3].cpu().numpy()
-                film.add(rgb, take.caption if take else shot.caption)
+                film.add(develop(sim, camera, SIM_DT), take.caption if take else shot.caption)
                 if done is not None and film.frames >= done + ENDING * FPS:
                     break
         finally:

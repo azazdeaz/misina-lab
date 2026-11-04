@@ -5,8 +5,10 @@ A Bumblebee-like robot pruning a row of a
 skid-steer UGV drives the alley, stops at each vine, and an arm on a linear
 slide cuts every cane back to two buds with a bypass shear. The cuts are
 planned from the scene's own ground truth -- which cane, where each bud is --
-rather than from a sensor. The trellis wires are hidden: they have no
-collider yet, so the canes and the shear would pass through them.
+rather than from a sensor. Last season's tall weeds still stand under the
+vines and in the alley, their long stems bending as the robot drives and
+works through them. The trellis wires are hidden: they have no collider yet,
+so the canes and the shear would pass through them.
 
 **Contents:** [Requirements](#requirements) ·
 [Running the demo](#running-the-demo) · [Teleoperation](#teleoperation) ·
@@ -30,9 +32,9 @@ The first run downloads the Warthog, generates the vineyard and converts the
 robot, and caches all three; later runs start straight up. `--help` lists the launcher's options --
 `--row` picks the row pruned, `--physics` the backend and `--viz` the viewer.
 
-Only the default backend, Newton coupled with VBD, bends a cane and so can cut
-one. Under any other the canes spawn static and the robot drives the row with
-nothing to do.
+Only the default backend, Newton coupled with VBD, bends a cane or a weed, so
+only it can cut a cane. Under any other the canes and weeds spawn static and
+the robot drives the row with nothing to do.
 
 
 
@@ -107,8 +109,10 @@ UR5 -- and a bypass shear in its hand. So is the pipeline, minus the cameras:
    the cane: the pivot along it, the blades along the approach, aimed afresh
    at the buds when the cut's turn comes. The arm plans to a point 15 cm out,
    where the cut is aimed once more -- the swing out brushes through the
-   canes, the one to cut among them -- then closes in on a straight line to
-   it and settles there. The shear's head and blades collide with the canes,
+   canes, the one to cut among them, with the shear shut, as the hook's claw
+   would gather one into the open mouth and carry it on to every cut after --
+   then opens the shear, closes in on a straight line to the cut and settles
+   there. The shear's head and blades collide with the canes,
    so a cane the mouth comes in on is funnelled between the edges or pushed
    aside, bending as it goes.
 3. **The order.** The cuts on a vine are taken nearest neighbour first. A

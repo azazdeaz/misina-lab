@@ -150,6 +150,7 @@ A shoot also carries the canopy, so the two leaf knobs live here rather than on 
 | `lean` | float | `0.06` | 0 to 0.25 | How far the tip wanders off vertical, in meters. |
 | `stray` | float | `0.0` | 0 to 0.2 | The fraction of shoots the trellis failed to hold: missed by shoot positioning, so grown out into the alley, or by hedging, so grown on past the top wire. A stray shoot leans out of the canopy and is exported as a deformable curve rather than a mesh, which makes this the most expensive knob in the scene. |
 | `flexible` | bool | `True` |  | Whether a stray shoot is exported as a deformable curve a solver bends. Off, it is a single static mesh at the same rest shape: the same lean out of the canopy, nothing for a solver to pick up. For a backend with no rods, or to keep a canopy's look without paying for the bodies. |
+| `segment` | float | `0.09` | 0.02 to 0.2 | Length of one segment of a bending shoot's rod, in meters — a stray shoot's or a dormant cane's. |
 | `dormant` | bool | `False` |  | Winter: every shoot is last season's cane after leaf fall — lignified brown, leafless, with a bud at every node — and is exported as a deformable curve a pruner can cut, whether the trellis holds it or not. `internode` is then the bud spacing, 10–15 cm on a dormant cane, and `flexible` off draws the canes as static meshes instead. |
 | `internode` | float | `0.07` | 0 to 0.25 | Distance between leaf nodes up the shoot, in meters — how many leaves it carries, said the way a viticulturist would. Zero leaves the shoot bare. |
 | `leaf_droop` | float | `0.35` | 0 to 1.2 | How far a full-grown blade pitches below horizontal, in radians. The small blades at the tip stand nearly straight out. |
@@ -201,7 +202,7 @@ What grows in the alley between two rows.
 
 The plants that come up where nothing was sown: in the under-vine strip, and as escapes in the alley.
 
-`strip` is what is done to the under-vine strip, and it picks the species; the scene's `season` tilts the mix between the spring and summer flushes and decides whether a bolter has bolted. Every plant is one mesh: `variations` is the budget of distinct ones and `detail` the triangles a leaf is cut into.
+`strip` is what is done to the under-vine strip, and it picks the species; the scene's `season` tilts the mix between the spring and summer flushes and decides whether a bolter has bolted. Every plant is one mesh, bar the long stems `flexible` exports as deformable curves a physics engine bends: `variations` is the budget of distinct meshes and `detail` the triangles a leaf is cut into.
 
 | Parameter | Type | Default | Slider range | Description |
 |---|---|---|---|---|
@@ -210,5 +211,6 @@ The plants that come up where nothing was sown: in the under-vine strip, and as 
 | `pressure` | float | `6.0` | 0 to 25 | Plants per square metre in the strip. Zero is a clean strip; the ceiling is one plant per slot, twenty-five. |
 | `alley_pressure` | float | `0.5` | 0 to 5 | Plants per square metre in the alley, between the strips — the escapes. |
 | `tall` | float | `0.3` | 0 to 1 | The share of plants that are tall — bolters and broadleaves — as against low tufts, mats and rosettes. |
+| `flexible` | bool | `False` |  | Whether a stem at least 30 cm long — a bolter's wand, a broadleaf's runners — is exported as a deformable curve a solver bends, with its leaves riding it. Each is a chain of rigid bodies, ten to the metre: the default parcel at the defaults bends about 2,500 stems, 12,000 bodies. |
 | `variations` | int | `24` | 1 to 64 | How many distinct plant meshes the scene may hold. A budget, not a count. |
 | `detail` | int | `16` | 4 to 64 | Triangles a leaf is cut into. |

@@ -19,7 +19,7 @@ import pytest
 # it was asked to import.
 try:
     from misina_lab.isaaclab import rods, spawn
-    from vinery_lab.isaaclab import ShootCfg, VineyardCfg, physics, vineyard
+    from vinery_lab.isaaclab import ShootCfg, VineyardCfg, WeedCfg, physics, vineyard
 except ImportError:
     pytest.skip("Isaac Lab is not installed", allow_module_level=True)
 
@@ -121,7 +121,7 @@ def running(monkeypatch) -> types.SimpleNamespace:
         "instance",
         lambda: types.SimpleNamespace(cfg=state) if state.physics is not None else None,
     )
-    monkeypatch.setattr(spawn, "tune_rods", lambda plant: setattr(state, "tuned", True))
+    monkeypatch.setattr(spawn, "tune_rods", lambda plant, **_: setattr(state, "tuned", True))
     return state
 
 
@@ -148,6 +148,26 @@ def test_the_spawner_keeps_the_scene_to_what_the_backend_can_step(
     assert spawned.shoot.flexible is flexible
     assert running.tuned is tuned
     assert FLEXIBLE.shoot.flexible, "the caller's cfg is left as it was"
+
+
+@pytest.mark.parametrize(
+    ("weed", "bends"),
+    [
+        (WeedCfg(), False),
+        (WeedCfg(flexible=True), True),
+        (WeedCfg(flexible=True, tall=0.0), False),
+        (WeedCfg(flexible=True, pressure=0.0, alley_pressure=0.0), False),
+    ],
+    ids=["rigid", "bending", "no tall weeds", "no weeds"],
+)
+def test_a_vineyard_bends_its_weeds_only_when_it_grows_tall_ones(weed, bends):
+    """Only a tall weed grows a stem long enough to bend, so a vineyard
+    without one authors no rod, and the coupled solver would refuse an entry
+    owning no body. The static fallback holds the weeds rigid."""
+    static = VineyardCfg(weed=weed).without_rods()
+    assert (static is not None) is bends
+    if static is not None:
+        assert not static.weed.flexible
 
 
 def test_a_vineyard_with_nothing_to_bend_is_spawned_as_it_is(running):
@@ -292,6 +312,43 @@ def test_a_vine_and_its_wood_share_a_group_and_the_rest_meets_every_rod(builder)
     assert groups[4:8] == [scene, scene, vine, other]
     assert all(group < 0 and group != scene for group in groups[2:4])
     assert groups[2] != groups[3]
+
+
+@pytest.fixture
+def weed(builder):
+    """The fixture's rod and its rider, relabelled as a weed's stem: under no
+    vine."""
+    stalk = f"{VINEYARD}/Weeds/Row_00/Weed_0003/Stalk_0/{physics.CABLE}"
+    for index in (0, 1):
+        builder.body_label[index] = f"{stalk}_edge_body_{index}"
+        builder.shape_label[index] = f"{stalk}_edge_capsule_{index}"
+    builder.shape_label[8] = f"{stalk}_edge_body_1/Leaves/Collision"
+    return builder
+
+
+def test_a_rod_under_no_plant_is_a_plant_of_its_own(weed):
+    """A weed's stem stands under no vine. In the scene's group it would pass
+    through the ground, which shares it; in a positive group of its own it
+    meets the ground, the post and the robot, takes its rider with it, and
+    passes through both vines' wood."""
+    physics.tune_shoots()
+    NewtonManager.dispatch_event(PhysicsEvent.MODEL_INIT)
+
+    groups = weed.shape_collision_group
+    stem = groups[0]
+    assert stem >= physics.VINE_GROUPS
+    assert groups[1] == groups[8] == stem
+    assert groups[4] == groups[5] == physics.SCENE_GROUP
+    assert stem not in (groups[6], groups[7])
+
+
+def test_a_rod_under_no_plant_takes_the_lone_damping(weed):
+    """A weed's stem swings faster than a cane, and a cane's damping would
+    stop it dead."""
+    physics.tune_shoots(damping=0.1, stretch=1.0, weed_damping=0.02)
+    NewtonManager.dispatch_event(PhysicsEvent.MODEL_INIT)
+
+    assert weed.joint_target_kd == pytest.approx([0.0] * 8 + [0.08, 0.04] + [0.0])
 
 
 def test_a_collider_under_a_segment_rides_the_segments_body_and_passes_its_rod(builder):

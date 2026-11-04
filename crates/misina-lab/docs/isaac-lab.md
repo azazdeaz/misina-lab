@@ -85,8 +85,9 @@ softens every rod joint's stretch and shear, damps its bend and twist, and
 groups what collides: each plant's rods and wood share a positive group of
 their own, and the ground, the trellis and the robot are negative, so a rod
 meets its own plant, the scene and the robot and passes through every other
-plant. Without the grouping the model holds a candidate pair for every two
-segments in the scene. The tuning numbers were measured on metre-long rods
+plant. A rod under no plant's prim is a plant of its own. Without the
+grouping the model holds a candidate pair for every two segments in the
+scene. The tuning numbers were measured on metre-long rods
 tapering from a centimetre across; `rods.py` says what each one does and
 what went wrong at other values. The same hook first seats every collider
 authored under a segment's prim on the segment's body, `carry_riders`: the
@@ -181,9 +182,11 @@ with launch_simulation(sim_cfg, shots.launcher(args.out)):
 renderer, for a script that samples the camera every so many physics steps,
 so the video plays in simulated time however long the steps take to compute.
 `sensor` makes the camera; `Rig` moves it from shot to shot, easing on a smoothstep, and cuts
-instead when the move is long enough to fly through the scene; `Film` pipes
-the frames to ffmpeg and writes their captions beside the video as SubRip.
-The module's docstring has the loop a script runs.
+instead when the move is long enough to fly through the scene; `develop`
+renders each frame several times over, as the renderer's anti-aliasing and
+denoisers leave a scene that has just moved with ragged, flickering edges;
+`Film` pipes the frames to ffmpeg and writes their captions beside the video
+as SubRip. The module's docstring has the loop a script runs.
 
 ## Where it lives
 
@@ -192,5 +195,5 @@ The module's docstring has the loop a script runs.
 - [`misina_lab/isaaclab/cutting.py`](../../../python/misina-lab/misina_lab/isaaclab/cutting.py): `Shears.colliders` and `Shears.place` for a collider that moves; the cut itself is [cutting.md](cutting.md)
 - [`misina_lab/isaaclab/colliders.py`](../../../python/misina-lab/misina_lab/isaaclab/colliders.py): `ColliderView`
 - [`misina_lab/isaaclab/shots.py`](../../../python/misina-lab/misina_lab/isaaclab/shots.py): the shot file, `sensor` and `finish`
-- [`misina_lab/isaaclab/film.py`](../../../python/misina-lab/misina_lab/isaaclab/film.py): `sensor`, `Rig` and `Film`
+- [`misina_lab/isaaclab/film.py`](../../../python/misina-lab/misina_lab/isaaclab/film.py): `sensor`, `Rig`, `develop` and `Film`
 - [`src/scene/mod.rs`](../src/scene/mod.rs): `cable`, `spawn_rod` and `segment_frames`, what the Rust side authors

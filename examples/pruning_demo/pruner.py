@@ -10,8 +10,9 @@ The rule is the paper's: keep `KEEP_BUDS` on every cane and cut midway
 between the last kept bud and the next. Each cut is a pose for the shear's
 mouth -- the blades along the approach, the pivot along the cane -- aimed
 afresh when its turn comes and again at the stand-off, and reached in two
-stages, a planned move to `STANDOFF` out and a straight line in, and the
-cuts on a vine are taken nearest neighbour first. Once the arm has settled
+stages, a planned move to `STANDOFF` out with the shear shut and a straight
+line in with it open, and the cuts on a vine are taken nearest neighbour
+first. Once the arm has settled
 the shear closes, and the moving blade cuts every cane it closes on: each
 cut is where the blade's edge reaches that cane's axis once it lies against
 the fixed blade, made by `Shears` at that point, and a cane the blade never
@@ -32,7 +33,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from kinematics import frames, solve
-from shear import Stroke
+from shear import BLADE_STEP, SLACK, Stroke
 
 if TYPE_CHECKING:
     from pxr import Usd
@@ -83,6 +84,15 @@ the rest of the run."""
 REACH_TOLERANCE = (0.01, 0.1)
 """How close the solver has to get a cut pose, in meters and radians, for
 the cut to count as reachable."""
+
+HEAD = 0.15
+"""How far back from the shear's pivot its head and the wrist behind it
+reach, in meters."""
+
+LYING = 0.06
+"""How near the line from the shut blades' tips back through the head a cane
+counts as lying on the shear or the wrist, in meters: against one of them,
+bent by it."""
 
 BUD = "Bud_"
 """What a bud prim is named, by the generator."""
@@ -193,6 +203,12 @@ class Cut:
     blades. The edge the mouth moves into the cane pushes it: +z drives it
     into the crotch, -y against the fixed blade, +y against the moving one.
     Zero for a planned cut."""
+    shake: float = 0.0
+    """How far the shut shear moves away from a cane `lying` on it at the
+    stand-off, square to its line, and straight back, before the blade
+    opens, in meters: the swing out left the cane there, and it slides off
+    as the shear leaves it, where opened the blade would drop it into the
+    mouth. Zero for never."""
 
     @property
     def standoff(self) -> np.ndarray:
@@ -276,6 +292,23 @@ def nearest_first(cuts: list[Cut], start: np.ndarray) -> list[Cut]:
     return ordered
 
 
+def lying(shears: Shears, frame: np.ndarray, reach: float) -> np.ndarray | None:
+    """Where a cane still on its vine lies on the shut shear -- beside its
+    blades, `reach` out from the pivot, its head or the wrist behind it,
+    not in front of them -- `frame` being the shear's own frame in world
+    coordinates: one the arm brushed and carries along with it. The cane's
+    nearest point, as its offset square to the shear's line, in that frame;
+    None if none does."""
+    start, end = shears.capsules()
+    on = ~shears.loose
+    along = np.linspace(0.0, 1.0, 5)[:, None]
+    points = start[on, None] + along * (end - start)[on, None] - frame[:3, 3]
+    local = (points @ frame[:3, :3]).reshape(-1, 3)
+    off = local[(-HEAD <= local[:, 2]) & (local[:, 2] <= reach)] * [1.0, 1.0, 0.0]
+    nearest = off[np.argmin(np.linalg.norm(off, axis=1))] if len(off) else None
+    return nearest if nearest is not None and np.linalg.norm(nearest) < LYING else None
+
+
 def reached(result: tuple[np.ndarray, float, float]) -> bool:
     """Whether a `solve` result got its pose, within `REACH_TOLERANCE`."""
     return result[1] <= REACH_TOLERANCE[0] and result[2] <= REACH_TOLERANCE[1]
@@ -320,13 +353,15 @@ class Pruning:
 
     `control` returns the slide and arm positions to hold and the blade angle
     to hold, and moves the sequence on as each stage's target is reached: a
-    planned move out to the stand-off, a straight line in -- and on by the
-    cut's `push`, if it has one -- the shear closing once the arm has settled,
-    the blade cutting the cane it closes on, and opening, and the straight
-    line back out -- then the blades tipped down while a piece cut free lies
-    in the mouth. Once the last cut is made the arm folds home, and the vine
-    is done. Poses are solved in the robot's own frame, so the caller
-    hands in where the robot is.
+    planned move out to the stand-off with the blade shut -- away from a cane
+    lying on the shear by the cut's `shake` and back, if it has one -- the
+    blade opening there, a straight
+    line in -- and on by the cut's `push`, if it has one -- the shear closing
+    once the arm has settled, the blade cutting the cane it closes on, and
+    opening, and the straight line back out -- then the blades tipped down
+    while a piece cut free lies in the mouth. Once the last cut is made the
+    arm folds home, and the vine is done. Poses are solved in the robot's own
+    frame, so the caller hands in where the robot is.
     """
 
     def __init__(
@@ -353,6 +388,8 @@ class Pruning:
         self.moved = 0.0
         """How far the joint that moved most moved over the last tick."""
         self.stroke = Stroke(machine.shear, TOOL, shears)
+        # Shut, as the blade rides between vines.
+        self.stroke.jaw = 0.0
         self.cuts = self._reachable(cuts)
         self.tally.planned += len(cuts)
         self.tally.reachable += len(self.cuts)
@@ -361,6 +398,8 @@ class Pruning:
         self.ticks = 0
         self.target = self.q.copy()
         self.goal = self.q.copy()
+        self.shaken = np.eye(4)
+        """Where the shear shakes to, off a cane lying on it."""
         self._next()
 
     def _reachable(self, cuts: list[Cut]) -> list[Cut]:
@@ -424,6 +463,11 @@ class Pruning:
         self.ticks += 1
         if self.ticks > PATIENCE:
             self.stage_name = "next" if self.cut else "done"
+        if self.stage_name in ("move", "home", "shake", "return"):
+            # The shear swings through the canes, and shakes one off, shut:
+            # open, the hook's claw gathers a cane into the mouth, and the arm
+            # carries it on to every cut after.
+            self.stroke.jaw = max(self.stroke.jaw - BLADE_STEP, 0.0)
         if self.stage_name in ("move", "tip", "home"):
             # A planned move: the target walks to the goal a step at a time,
             # and the stage ends once the arm has arrived on it -- tipped, once
@@ -435,25 +479,54 @@ class Pruning:
                 return self.target, self.stroke.jaw
             if self.stage_name == "tip" and self.stroke.fouled(hand):
                 return self.target, self.stroke.jaw
-            after = {"move": "approach", "tip": "next", "home": "done"}
+            after = {"move": "ready", "tip": "next", "home": "done"}
+            if self.stage_name == "move" and self.cut.shake:
+                s = self.stroke.shear
+                off = lying(self.shears, hand @ self.stroke.frame, s.blade + s.claw)
+                if off is not None:
+                    # Before the blade opens and drops the cane into the
+                    # mouth, where the blade would pinch it on the next
+                    # swing: away from it, square to the shear's line, once
+                    # the blade is shut -- a short move ends before it has.
+                    if shear >= SLACK:
+                        return self.target, self.stroke.jaw
+                    self.shaken = self.cut.standoff
+                    self.shaken[:3, 3] -= (
+                        self.shaken[:3, :3] @ off * (self.cut.shake / np.linalg.norm(off))
+                    )
+                    after["move"] = "shake"
             self.stage_name, self.ticks = after[self.stage_name], 0
-            if self.stage_name == "approach":
-                self._aim()
         cut = self.cut
         if cut is None:
             return self.target, self.stroke.jaw
-        if self.stage_name in ("approach", "push", "retract"):
+        if self.stage_name in ("shake", "return", "approach", "push", "retract"):
             # The straight line, a step of the mouth at a time, solved from
             # where the arm is so each step starts from the last -- and the
             # end of it held until the arm has caught up.
-            end = {"approach": cut.pose, "push": cut.pushed, "retract": cut.standoff}
+            end = {
+                "shake": self.shaken,
+                "return": cut.standoff,
+                "approach": cut.pose,
+                "push": cut.pushed,
+                "retract": cut.standoff,
+            }
             gap = end[self.stage_name][:3, 3] - self.line
             distance = np.linalg.norm(gap)
             arrived = distance < 1e-6 and np.abs(self.target - self.q).max() < ARRIVED
             # Pushing and closing wait for the arm to settle as well: a blade
-            # shut while the mouth is still moving in sweeps past the cane.
-            if arrived and (self.stage_name == "retract" or self.moved < STILL):
-                after = {"approach": "push" if cut.push.any() else "close", "push": "close"}
+            # shut while the mouth is still moving in sweeps past the cane. So
+            # does the way back from a shake: the arm lags its target, and
+            # turned back at once it would carry the cane back before it slid
+            # out.
+            if arrived and (
+                self.stage_name not in ("approach", "push", "shake") or self.moved < STILL
+            ):
+                after = {
+                    "shake": "return",
+                    "return": "ready",
+                    "approach": "push" if cut.push.any() else "close",
+                    "push": "close",
+                }
                 self.stage_name = after.get(self.stage_name, "next")
                 self.ticks = 0
                 if self.stage_name == "next" and self.stroke.fouled(hand):
@@ -477,10 +550,14 @@ class Pruning:
                     and not attached(cut.removed, self.shears, self.stage)
                 )
                 self.stage_name = "open"
-        else:
+        elif self.stage_name not in ("shake", "return"):
             opened = self.stroke.tick(hand, shear, closing=False)
             if self.stage_name == "open" and opened:
                 self.stage_name = "retract"
+            elif self.stage_name == "ready" and opened:
+                # Stood off the cut with the blade open, the line in starts.
+                self.stage_name, self.ticks = "approach", 0
+                self._aim()
             elif self.stage_name == "next":
                 self._next()
         return self.target, self.stroke.jaw

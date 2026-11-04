@@ -25,7 +25,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.app import launch_simulation
 
 import harvest as demo
-from misina_lab.isaaclab.film import Film, Rig, sensor
+from misina_lab.isaaclab.film import Film, Rig, develop, sensor
 
 SIZE = (1920, 1080)
 """The frames, in pixels. `record.sh` scales them down to the video's size."""
@@ -261,9 +261,7 @@ def main():
                 # A shot riding along eases itself: the rig cuts to each frame of it.
                 rig.aim(pose, cut=riding or filmed is not shown)
                 shown, ridden = filmed, pose if riding else None
-                sim.render()
-                camera.update(demo.SIM_DT, force_recompute=True)
-                film.add(camera.data.output["rgb"].torch[0, ..., :3].cpu().numpy(), caption)
+                film.add(develop(sim, camera, demo.SIM_DT), caption)
         finally:
             film.close()
         print(f"[INFO]: {film.frames} frames, {film.frames / FPS:.1f} s, written to {out}")

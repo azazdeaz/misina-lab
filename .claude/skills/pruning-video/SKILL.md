@@ -35,7 +35,9 @@ hides the trellis wires, which have no collider yet.
    `caption '<text>' at T s` line as each caption comes up, `T` seconds into
    the video — the opening's, each take's as the arm swings out to its cane,
    the closing's — and a `made the cut on <cane> by T s; its stroke cut N`
-   line, or `missed`, as each cut ends, `N` the canes its stroke cut.
+   line, or `missed`, as each cut ends, `N` the canes its stroke cut, and a
+   `the shear shook a cane off before the cut on <cane> at T s, moving …`
+   line where one lay on the shear (see `shake` below).
    `ffmpeg -ss T -i target/video/pruning.mp4 -frames:v 1 -update 1 frame.png`
    takes the frame at `T`. A video that fails one is not done: change the
    storyboard, never the video.
@@ -95,7 +97,7 @@ first.
   robot, which the arm reaches between the canes either side of it, draping
   one over itself to ride into the mouths that follow. `schedule` assigns
   the canes, and `test_video.py` checks it. A take has a caption, a `Shot`,
-  a `push`, `kept` and `canes`.
+  a `push`, a `shake`, `kept` and `canes`.
 - **`push`** is `Cut.push`: how far the mouth moves on from the cut point
   before the shear closes, in the cut's own frame — x along the pivot, y
   across the mouth, z along the blades. +z drives the cane into the crotch,
@@ -103,6 +105,18 @@ first.
   cane up to 2.4 cm off its centre; at full opening the moving blade's tip is
   level with that centre, 5 cm out from the pivot, so a push toward it needs
   some +z as well, or the cane slips off the tip.
+- **`shake`** is each cut's `Cut.shake`, in the order of `kept`: how far
+  the shut shear moves from the stand-off, away from a cane lying beside it
+  (`pruner.lying`) and square to its line, and straight back, before the
+  blade opens. Where no cane lies on the shear nothing moves. The arm swings
+  out shut, as the open hook's claw gathers a cane into the mouth that no
+  move frees, but the swing out to the take of two canes can still leave a
+  cane on the shut shear, its own or a neighbouring vine's. Opened there,
+  the blade drops it into the mouth, and shutting for the next swing it
+  pinches it at the hook, where it bends down through the three-cut take:
+  pinched, it follows every move of the shear, up, down, along the alley,
+  rolled, the blade open or shut. So that take shakes it off before its
+  blade opens.
 - **`kept`** is the buds the cane keeps after each of the take's cuts, made
   in that order: top down, so each cut has wood left below it. -1 keeps all
   but the top bud.
@@ -115,9 +129,10 @@ first.
   in meters along the alley the way the
   robot drives, across it toward the row, and up; then a focal length, an
   f-number, and a caption for when no take's is up. Depth of field is strong
-  for the number: f/48 already softens a close-up's background, and 0 turns
-  it off. A take of several cuts wants a shot far enough back to hold all of
-  them, like `ACROSS`.
+  for the number: f/96 already softens a close-up's background, and 0 turns
+  it off. Much wider, the blades and the shear's body, a little off the
+  focus, fray at their edges against the blur. A take of several cuts wants
+  a shot far enough back to hold all of them, like `ACROSS`.
 - **The camera** eases from one shot to the next over `EASE` seconds, and
   cuts instead when the move is longer than `CUT`, so it never flies through
   the robot or the row. Each swing out to a take's cane is filmed from

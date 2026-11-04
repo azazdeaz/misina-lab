@@ -120,7 +120,8 @@ rolling terrain, down to every leaf.
 - 🍃 Leaves as detailed meshes, for depth-based perception
 - 🌿 Stray shoots that bend as a robot pushes through, and cut anywhere
 - ❄️ A dormant mode: bare canes with a bud at every node, every one cuttable
-- 🌾 Cover crops in the alleys and weeds under the vines
+- 🌾 Cover crops in the alleys, and weeds under the vines whose long stems
+  can bend
 
 [README](crates/vinery-lab/README.md) ·
 [Parameters](crates/vinery-lab/docs/parameters.md) ·

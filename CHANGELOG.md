@@ -24,6 +24,22 @@ Scene document format 11.
 
 ### Added
 
+- **vinery-lab**: Weeds bend. With `WeedCfg.flexible` on, every weed stem
+  at least 30 cm long, a bolter's wand or a broadleaf's runners, is a rod a
+  solver bends, held at its base, under `Weed_nnnn/Stalk_n`, its leaves
+  riding the segments; the rest of the plant stays one mesh as
+  `Weed_nnnn/Crown`. `VineyardCfg.without_rods()` spawns them rigid under a
+  backend that cannot step them. Off by default.
+- **misina-lab**: `Strand::centerline` cuts a strand's centerline, the curve
+  its mesh is skinned along, into even segments by arc length, with the
+  radius at each cut: a strand ready to be simulated as a rod.
+- **vinery-lab**: `ShootCfg.segment` is how long a segment of a bending
+  shoot's rod is, a stray shoot's or a dormant cane's: 9 cm, as it was.
+- **misina-lab**: `GeneratedSceneCfg.LONE_ROD_DAMPING` damps a rod under no
+  plant's prim in place of `rods.ROD_DAMPING`, through `tune_rods`' new
+  `lone_damping`. **vinery-lab** sets it for the weeds' stems, which now
+  spring back a little past upright before they settle, where they stopped
+  dead.
 - **greenhouse-lab**: Stems collide, as a chain of capsules along each
   stem's axis from where it takes off from the lowered bundle,
   `Stem_n/Collision_00 …`, each straight from one of the axis's points to
@@ -140,6 +156,20 @@ Scene document format 11.
 
 ### Changed
 
+- The pruning demo's vineyard grows bending weeds, and its robot's chassis
+  and wheels push them aside as it drives the alley. Its video is filmed
+  with them.
+- The pruning demo's arm swings out to each cut with its shear shut, and
+  opens it at the stand-off: open, the hook's claw could gather a cane on
+  the swing and drag it down through every cut after. In its video's take of
+  two canes, the shut shear moves off a cane the swing left lying on it
+  before the blade opens, if one is there, so the blade does not drop it into
+  the mouth and pinch it there on the next swing.
+- **misina-lab**: The demo videos' camera, `film.sensor`, renders with DLAA
+  rather than DLSS, and `film.develop` renders each frame four times, which
+  leaves its edges clean where they were ragged and flickering. The pruning
+  video's close-ups are filmed at f/96, as at f/48 the blades frayed against
+  the blurred background.
 - **greenhouse-lab**: Lowered stems lie in a loose bundle along each side
   of the gutter, where they were packed into one straight cable: each run
   drifts across and up the bundle, crossing the others, rests every half
@@ -252,6 +282,9 @@ Scene document format 11.
 
 ### Fixed
 
+- **misina-lab**: `tune_rods` counts a rod under no plant's prim as a plant
+  of its own, so it meets the ground, the posts and the robot. It had taken
+  the scene's group, which the ground shares, and passed through it.
 - **misina-lab**: Whatever rides a rod's segment stays where it was put
   once the simulation runs. Newton framed each segment's body itself, in
   the world, and turned it about the segment off the prim it drives by as
