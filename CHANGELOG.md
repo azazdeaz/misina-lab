@@ -170,6 +170,8 @@ Scene document format 11.
   leaves its edges clean where they were ragged and flickering. The pruning
   video's close-ups are filmed at f/96, as at f/48 the blades frayed against
   the blurred background.
+- **misina-lab**: The viewer's **Copy Isaac Lab cfg** button spans the
+  panel's width and is taller than a control row.
 - **greenhouse-lab**: Lowered stems lie in a loose bundle along each side
   of the gutter, where they were packed into one straight cable: each run
   drifts across and up the bundle, crossing the others, rests every half
