@@ -13,9 +13,7 @@ frame's caption:
     try:
         for ... in the simulation's steps, every so many:
             rig.aim(np.array([*eye, *target, focal_length, f_stop]))
-            sim.render()
-            camera.update(dt, force_recompute=True)
-            film.add(camera.data.output["rgb"].torch[0, ..., :3].cpu().numpy(), caption)
+            film.add(develop(sim, camera, dt), caption)
     finally:
         film.close()
 """
@@ -37,14 +35,22 @@ if TYPE_CHECKING:
 
 CAMERA = "/World/VideoCamera"
 
+SUBFRAMES = 4
+"""Renders of each frame. The renderer's anti-aliasing and denoisers blend
+each render into the ones before, so a single render of a scene that has
+moved since leaves edges ragged and flickering; four of the same instant
+settle them."""
+
 
 def sensor(size: tuple[int, int], lens: float = 24.0) -> Camera:
     """The camera that films, at `CAMERA`, `size` pixels wide and high, with
     a `lens` of that many millimetres until a `Rig` sets its own. Made before
-    the simulation's first reset, as every sensor is."""
+    the simulation's first reset, as every sensor is. It renders with DLAA,
+    anti-aliasing at the frame's own size rather than DLSS's upscaling, whose
+    edges stay hairy however many `SUBFRAMES`."""
     # Imported here: they bring `pxr`, and Kit's copy has to be the first one.
     from isaaclab.sensors import Camera, CameraCfg
-    from isaaclab_physx.renderers import IsaacRtxRendererCfg
+    from isaaclab_physx.renderers import IsaacRtxRendererCfg, IsaacRtxRendererGlobalSettingsCfg
 
     return Camera(
         CameraCfg(
@@ -56,9 +62,22 @@ def sensor(size: tuple[int, int], lens: float = 24.0) -> Camera:
             spawn=sim_utils.PinholeCameraCfg(focal_length=lens, clipping_range=(0.02, 200.0)),
             # A robot is in its environment's render partition, which a
             # camera outside the environments sees only with partitions off.
-            renderer_cfg=IsaacRtxRendererCfg(enable_scene_partitioning=False),
+            renderer_cfg=IsaacRtxRendererCfg(
+                enable_scene_partitioning=False,
+                global_settings=IsaacRtxRendererGlobalSettingsCfg(antialiasing_mode="DLAA"),
+            ),
         )
     )
+
+
+def develop(sim: sim_utils.SimulationContext, camera: Camera, dt: float) -> np.ndarray:
+    """What `camera` sees of the scene as it stands, rendered `SUBFRAMES`
+    times, as an RGB array. Headless, a camera's update draws the frame, and
+    only once per render: a render, then an update, each time."""
+    for _ in range(SUBFRAMES):
+        sim.render()
+        camera.update(dt, force_recompute=True)
+    return camera.data.output["rgb"].torch[0, ..., :3].cpu().numpy()
 
 
 class Rig:

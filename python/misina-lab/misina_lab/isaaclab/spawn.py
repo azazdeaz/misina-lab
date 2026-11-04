@@ -88,6 +88,13 @@ class GeneratedSceneCfg(FileCfg):
     for a scene that can author one. Everything under one plant's prim collides
     as a group and passes through every other plant; see `rods.tune_rods`."""
 
+    LONE_ROD_DAMPING: ClassVar[float | None] = None
+    """What a rod under no plant's prim is damped with, in place of
+    `rods.ROD_DAMPING`; `None` damps it as any other. A rod's bend damping is
+    a fraction of its own stiffness, which damps a rod the more the faster it
+    swings: a short, slender one standing on its own may want less to swing
+    at all."""
+
     func: Callable | str = "misina_lab.isaaclab.spawn:spawn_generated"
     """Fully qualified rather than the `{DIR}` form: Isaac Lab resolves `{DIR}`
     against the module of the class that first declared the field, and a
@@ -174,7 +181,7 @@ def for_backend(cfg: GeneratedSceneCfg) -> GeneratedSceneCfg:
             raise TypeError(
                 f"{type(cfg).__name__} authors rods but names no PLANT to group them by"
             )
-        tune_rods(cfg.PLANT)
+        tune_rods(cfg.PLANT, lone_damping=cfg.LONE_ROD_DAMPING)
         return cfg
     solver = getattr(physics, "solver_cfg", physics)
     logger.warning(

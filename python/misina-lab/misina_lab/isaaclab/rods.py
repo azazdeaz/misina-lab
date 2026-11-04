@@ -234,6 +234,7 @@ def tune_rods(
     plant: str,
     damping: float = ROD_DAMPING,
     stretch: float = ROD_STRETCH,
+    lone_damping: float | None = None,
 ) -> CallbackHandle:
     """Soften every rod joint's stretch and shear, damp its bend and twist, and
     group what collides.
@@ -241,7 +242,9 @@ def tune_rods(
     `plant` is the prim name every plant takes, its index appended -- `Plant`
     for `Plant_007`, the cfg's `PLANT`. A rod's body label and a wood
     collider's shape label both pass through the plant's prim, which is what
-    puts a plant's rods and its wood in one collision group.
+    puts a plant's rods and its wood in one collision group. `lone_damping`
+    damps a rod under no plant's prim in place of `damping`, as the cfg's
+    `LONE_ROD_DAMPING` asks.
 
     `spawn.spawn_generated` calls this when it spawns rods under a solver that
     steps them, so a script calls it only to change the numbers: from inside the
@@ -270,7 +273,9 @@ def tune_rods(
 
     A rod meets its own plant's rods and wood (all but the wood colliders it
     is authored inside), the ground, the posts and the robot, and passes
-    through every other plant.
+    through every other plant. A rod under no plant's prim is a plant of its
+    own: it meets the ground, the posts and the robot, and passes through
+    every plant and every other rod.
     """
     global _tuning
     # Imported here and not at module scope: `newton` brings `pxr` with it, and
@@ -284,7 +289,7 @@ def tune_rods(
     def tune(_payload) -> None:
         sim = SimulationContext.instance()
         builder = sim.get_or_create_backend(NewtonBuilderCfg(physics_cfg=sim.cfg.physics))
-        tune_builder(builder, plant, damping, stretch)
+        tune_builder(builder, plant, damping, stretch, lone_damping)
 
     _tuning = NewtonManager.register_callback(tune, PhysicsEvent.MODEL_INIT)
     NewtonManager.register_callback(
@@ -299,13 +304,16 @@ def tune_builder(
     plant: str,
     damping: float = ROD_DAMPING,
     stretch: float = ROD_STRETCH,
+    lone_damping: float | None = None,
 ) -> int:
     """What `tune_rods` does to the builder once the importer has filled it:
     softens every rod joint's stretch and shear by `stretch`, damps its bend
-    and twist by `damping` times their stiffness, seats the riders, groups
-    each plant's rods and wood under its own collision group and everything
-    under no plant into the scene's, and lets each rod out of the wood it is
-    authored inside. Returns how many pairs that let through.
+    and twist by `damping` times their stiffness (`lone_damping` for a rod
+    under no plant's prim, when given), seats the riders, groups each plant's
+    rods and wood under its own collision group, a rod under no plant as a
+    plant of its own and every other shape under no plant into the scene's,
+    and lets each rod out of the wood it is authored inside. Returns how many
+    pairs that let through.
 
     For a builder outside Isaac Lab, a test or a rig: `tune_rods` is the same
     call inside the app's `MODEL_INIT` window.
@@ -326,22 +334,25 @@ def tune_builder(
         dof = builder.joint_qd_start[joint]
         for slot in (dof, dof + 1):
             builder.joint_target_ke[slot] *= stretch
+        lone = not plant_path.match(builder.body_label[builder.joint_child[joint]])
+        fraction = lone_damping if lone and lone_damping is not None else damping
         for slot in (dof + 2, dof + 3):
-            builder.joint_target_kd[slot] = damping * builder.joint_target_ke[slot]
+            builder.joint_target_kd[slot] = fraction * builder.joint_target_ke[slot]
 
     carry_riders(builder)
 
-    # Groups: a plant's for its rods and wood, allotted as they turn up;
-    # `SCENE_GROUP` for what stands under no plant; one of its own for
-    # every other body. Group 0 is a site, which collides with nothing,
-    # and stays.
+    # Groups: a plant's for its rods and wood, allotted as they turn up,
+    # a rod under no plant counting as a plant of its own; `SCENE_GROUP`
+    # for any other shape under no plant; one of its own for every other
+    # body. Group 0 is a site, which collides with nothing, and stays.
     plants: dict[str, int] = {}
 
-    def plant_group(label: str) -> int:
+    def plant_group(label: str, alone: str | None = None) -> int:
         owner = plant_path.match(label)
-        if owner is None:
+        key = owner.group(1) if owner is not None else alone
+        if key is None:
             return SCENE_GROUP
-        return plants.setdefault(owner.group(1), PLANT_GROUPS + len(plants))
+        return plants.setdefault(key, PLANT_GROUPS + len(plants))
 
     def regroup(shapes: Sequence[int], group: int) -> None:
         for shape in shapes:
@@ -352,7 +363,11 @@ def tune_builder(
     # so -1 is the whole of the static scene.
     for body in range(builder.body_count):
         label = builder.body_label[body]
-        group = plant_group(label) if body in rods else -(2 + body)
+        if body in rods:
+            # Keyed alone by its curve, the label short of the suffix.
+            group = plant_group(label, alone=re.sub(rf"{_ROD_BODY_SUFFIX}$", "", label))
+        else:
+            group = -(2 + body)
         regroup(builder.body_shapes.get(body, ()), group)
     for shape in builder.body_shapes[-1]:
         regroup((shape,), plant_group(builder.shape_label[shape]))

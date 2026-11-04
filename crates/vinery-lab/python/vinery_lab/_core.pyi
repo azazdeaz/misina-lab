@@ -360,6 +360,10 @@ class ShootParams:
     nothing for a solver to pick up. For a backend with no rods, or to keep a
     canopy's look without paying for the bodies.
     """
+    segment: float
+    """Length of one segment of a bending shoot's rod, in meters — a stray shoot's or
+    a dormant cane's.
+    """
     dormant: bool
     """Winter: every shoot is last season's cane after leaf fall — lignified brown,
     leafless, with a bud at every node — and is exported as a deformable curve a
@@ -397,6 +401,7 @@ class ShootParams:
         lean: float = 0.06,
         stray: float = 0.0,
         flexible: bool = True,
+        segment: float = 0.09,
         dormant: bool = False,
         internode: float = 0.07,
         leaf_droop: float = 0.35,
@@ -530,8 +535,9 @@ class WeedParams:
 
     `strip` is what is done to the under-vine strip, and it picks the species; the
     scene's `season` tilts the mix between the spring and summer flushes and decides
-    whether a bolter has bolted. Every plant is one mesh: `variations` is the budget
-    of distinct ones and `detail` the triangles a leaf is cut into.
+    whether a bolter has bolted. Every plant is one mesh, bar the long stems
+    `flexible` exports as deformable curves a physics engine bends: `variations` is
+    the budget of distinct meshes and `detail` the triangles a leaf is cut into.
     """
 
     strip: WeedStrip
@@ -552,6 +558,12 @@ class WeedParams:
     """The share of plants that are tall — bolters and broadleaves — as against low
     tufts, mats and rosettes.
     """
+    flexible: bool
+    """Whether a stem at least 30 cm long — a bolter's wand, a broadleaf's runners —
+    is exported as a deformable curve a solver bends, with its leaves riding it. Each
+    is a chain of rigid bodies, ten to the metre: the default parcel at the defaults
+    bends about 2,500 stems, 12,000 bodies.
+    """
     variations: int
     """How many distinct plant meshes the scene may hold. A budget, not a count."""
     detail: int
@@ -565,6 +577,7 @@ class WeedParams:
         pressure: float = 6.0,
         alley_pressure: float = 0.5,
         tall: float = 0.3,
+        flexible: bool = False,
         variations: int = 24,
         detail: int = 16,
     ) -> None: ...

@@ -47,7 +47,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 misina-lab = { git = "https://github.com/azazdeaz/misina-lab", rev = "<commit>" }
-bevy = "0.20.0"
+bevy = "0.20.1"
 pyo3 = { version = "0.29", features = ["abi3-py312"], optional = true }
 
 [features]

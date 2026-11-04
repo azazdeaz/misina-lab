@@ -17,7 +17,7 @@ authors = ["Andras Polgar <azazdeaz@gmail.com>"]
 # `reflect_documentation` keeps the params structs' doc comments readable at
 # run time, which is where the viewer's tooltips and the generated Python docs
 # come from.
-bevy = { version = "0.20.0", features = [
+bevy = { version = "0.20.1", features = [
     "bevy_feathers",
     "ghost_nodes",
     "bevy_ui_debug",

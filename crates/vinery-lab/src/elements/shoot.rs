@@ -214,14 +214,6 @@ const LEAF_STREAM: u64 = 0x2545_F491_4F6C_DD1D;
 /// stayed held.
 const STRAY_STREAM: u64 = 0xD1B5_4A32_D192_ED03;
 
-/// Length of one segment of a flexible shoot's centerline, in meters.
-///
-/// A segment becomes a capsule body and a spring joint, so this is the whole
-/// cost of a stray shoot: one of the default length buys fourteen of each.
-/// Coarser than the mesh, which needs ring density the physics does not — a
-/// bending rod is a chain of straight links either way.
-const CABLE_SEGMENT: f64 = 0.09;
-
 /// Below this the station loop would never terminate, so a shoot this closely
 /// noded carries no leaves at all. That is also how the canopy gets turned off.
 const MIN_INTERNODE: f64 = 0.005;
@@ -319,6 +311,9 @@ pub struct ShootConfig {
     /// every node, exported as a rod whether the trellis holds it or not. See
     /// [`ShootParams::dormant`].
     pub dormant: bool,
+    /// Length of one segment of its rod, in meters. See
+    /// [`ShootParams::segment`].
+    pub segment: f32,
     pub sides: u32,
     pub detail: u32,
     /// Distance between leaf nodes up the shoot, in meters. Below
@@ -365,6 +360,7 @@ impl ShootConfig {
             },
             pitch,
             dormant: params.dormant,
+            segment: params.segment.max(0.005),
             sides: params.sides.max(3),
             detail: params.detail.max(1),
             internode: (params.internode * spacing).max(0.0),
@@ -465,8 +461,9 @@ pub struct ShootParams {
     /// exported as a deformable curve rather than a mesh, which makes this the
     /// most expensive knob in the scene.
     ///
-    /// See [`STRAY_PITCH`] for the lean, [`CABLE_SEGMENT`] for what a curve
-    /// costs, and [`flexible`](Self::flexible) for turning that cost off.
+    /// See [`STRAY_PITCH`] for the lean, [`segment`](Self::segment) for what
+    /// a curve costs, and [`flexible`](Self::flexible) for turning that cost
+    /// off.
     #[reflect(@Slider { min: 0.0, max: 0.2, step: 0.01 }, @Label("Stray shoots"))]
     pub stray: f32,
     /// Whether a stray shoot is exported as a deformable curve a solver bends.
@@ -478,6 +475,15 @@ pub struct ShootParams {
     /// from it.
     #[reflect(@Label("Bendable strays"))]
     pub flexible: bool,
+    /// Length of one segment of a bending shoot's rod, in meters — a stray
+    /// shoot's or a dormant cane's.
+    ///
+    /// A segment becomes a capsule body and a spring joint, so this is the
+    /// whole cost of a bending shoot: one of the default length buys fourteen
+    /// of each. Coarser than the mesh, which needs ring density the physics
+    /// does not — a bending rod is a chain of straight links either way.
+    #[reflect(@Slider { min: 0.02, max: 0.2, step: 0.005 }, @Label("Rod segment"))]
+    pub segment: f32,
     /// Winter: every shoot is last season's cane after leaf fall — lignified
     /// brown, leafless, with a bud at every node — and is exported as a
     /// deformable curve a pruner can cut, whether the trellis holds it or not.
@@ -541,6 +547,7 @@ impl Default for ShootParams {
             lean: 0.06,
             stray: 0.0,
             flexible: true,
+            segment: 0.09,
             dormant: false,
             internode: 0.07,
             leaf_droop: 0.35,
@@ -880,8 +887,9 @@ struct Centerline {
 }
 
 impl Centerline {
-    fn new(axis: &ShootAxis) -> Self {
-        let stations = cable_stations(axis);
+    /// `segment` is [`ShootConfig::segment`].
+    fn new(axis: &ShootAxis, segment: f32) -> Self {
+        let stations = cable_stations(axis, segment as f64);
         Self {
             points: stations
                 .iter()
@@ -901,7 +909,7 @@ impl Centerline {
 }
 
 /// Where along a flexible shoot its control points sit: the bud, the top of
-/// the bend, then the rise cut into [`CABLE_SEGMENT`] lengths of arc.
+/// the bend, then the rise cut into `segment` lengths of arc.
 ///
 /// **The whole bend is the first segment**, rather than something the sampling
 /// happens to cut across. That segment is the one bolted down — see
@@ -920,7 +928,7 @@ impl Centerline {
 /// Starts at the bud rather than behind it: the first point is where the cane
 /// is held, and holding it inside the spur would put the anchor somewhere no
 /// reader can see.
-fn cable_stations(axis: &ShootAxis) -> Vec<f64> {
+fn cable_stations(axis: &ShootAxis, segment: f64) -> Vec<f64> {
     const SAMPLES: usize = 256;
     let run = |i: usize| axis.rise * i as f64 / SAMPLES as f64;
     // Arc length from the top of the bend to each sample of the rise.
@@ -933,7 +941,7 @@ fn cable_stations(axis: &ShootAxis) -> Vec<f64> {
 
     // At least one rise segment, so the shortest shoot still makes a chain of
     // two — a rod of one capsule is not a rod.
-    let count = (total / CABLE_SEGMENT).round().max(1.0);
+    let count = (total / segment).round().max(1.0);
     let mut stations = vec![0.0, axis.bend_arc()];
     for k in 1..=count as usize {
         let target = total * k as f64 / count;
@@ -984,7 +992,7 @@ struct ShootBuild {
 /// are placed along.
 fn build_shoot(config: &ShootConfig, seed: u64, flexible: bool) -> anyhow::Result<ShootBuild> {
     let axis = ShootAxis::new(config, &mut Rng::new(seed));
-    let centerline = Centerline::new(&axis);
+    let centerline = Centerline::new(&axis, config.segment);
     let drawn = if config.is_simulated() && flexible {
         Drawn::Tubes(
             segment_tubes(
@@ -1281,7 +1289,7 @@ mod tests {
 
     /// The centerline of `config`, built at `seed`.
     fn centerline(config: &ShootConfig, seed: u64) -> Centerline {
-        Centerline::new(&axis(config, seed))
+        Centerline::new(&axis(config, seed), config.segment)
     }
 
     fn axis(config: &ShootConfig, seed: u64) -> ShootAxis {
@@ -1309,7 +1317,7 @@ mod tests {
     fn a_cables_points_sit_on_the_shoots_own_axis() {
         for config in both() {
             let axis = axis(&config, 3);
-            let cable = Centerline::new(&axis);
+            let cable = Centerline::new(&axis, config.segment);
             let strand = shoot_strand(&axis, &config);
 
             assert_eq!(
@@ -1371,7 +1379,7 @@ mod tests {
             for pitch in [0.0, 1.0] {
                 let config = ShootConfig::new(&ShootParams { length, ..params() }, 1.0, 1.0, pitch);
                 let axis = axis(&config, 1);
-                let cable = Centerline::new(&axis);
+                let cable = Centerline::new(&axis, config.segment);
                 assert_eq!(
                     cable.stations[1],
                     axis.bend_arc() as f32,
@@ -1451,7 +1459,7 @@ mod tests {
         assert_eq!(segment_name(2), "Cable_edge_body_2");
         for config in both() {
             let (axis, leaves) = nodes(&config, 3);
-            let cable = Centerline::new(&axis);
+            let cable = Centerline::new(&axis, config.segment);
             let points = &cable.points;
             let frames = segment_frames(points);
 
