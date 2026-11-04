@@ -350,7 +350,7 @@ def test_the_sequence_stands_off_closes_in_and_cuts_every_cane(
 ):
     """With an arm that goes where it is told and a blade that turns as told,
     every reachable cane is cut at its planned point -- where it is once the
-    swing out to it, made with the shear shut, has swept it aside -- the
+    swing out to it, made once the shear has shut, has swept it aside -- the
     shut shear moving away from a cane that `lies` on it at the stand-off by
     the cut's shake and back, then opening there, and closing with the mouth
     moved on from the cut by its push, and the tally says so; but a cane
@@ -387,14 +387,16 @@ def test_the_sequence_stands_off_closes_in_and_cuts_every_cane(
     pruning = pruner.Pruning(machine, cuts, np.eye(4), q, shears, None, tally)
     assert tally.reachable == 2, "both are within reach"
 
-    angle, ticks, stage, closed, down, swung, shook = 0.0, 0, None, 0, [], [], 0
+    angle, ticks, stage, closed, down, held, shook = 0.0, 0, None, 0, [], 0, 0
     while not pruning.done and ticks < 3000:
         hand = kinematics.frames(machine.chain, q)[-1]
+        before = q
         q, angle = pruning.control(q, hand, angle)
         mouth = kinematics.frames(machine.chain, q)[-1] @ machine.tool
         cut = pruning.cut
-        if pruning.stage_name == "move":
-            swung.append(angle)
+        if pruning.stage_name in ("move", "home") and angle > 0:
+            assert q == pytest.approx(before), "still until the blade is shut"
+            held += 1
         if pruning.stage_name == "return" and stage != "return":
             away = cut.standoff[:3, 3] - shake * cut.standoff[:3, 1]
             assert mouth[:3, 3] == pytest.approx(away, abs=0.002), "away from it"
@@ -419,7 +421,7 @@ def test_the_sequence_stands_off_closes_in_and_cuts_every_cane(
 
     made = 1 if gone else 2
     assert pruning.done and ticks < 3000 and closed == made
-    assert min(swung) == 0.0, "shut on the swing out"
+    assert held, "the blade shut after each cut before the arm swung"
     assert shook == (made if shake and lies else 0)
     assert (max(down) > np.sin(pruner.TIP) - 0.05) if fouled else not down
     assert q == pytest.approx(pruning.home, abs=pruner.ARRIVED)

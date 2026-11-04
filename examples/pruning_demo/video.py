@@ -56,8 +56,8 @@ PACE = {
 a take's cut, by `Pruning.stage_name`: the arm swinging out to the cane and
 shaking off another it carried, closing in and pushing it, the blade closing, the
 blade opening again as the piece falls, and the arm backing out and tipping
-out a piece that fell into the mouth. The blade opening at the stand-off
-plays at the simulation's own speed. A cut no take has is filmed wide, and only its swings -- out
+out a piece that fell into the mouth. The blade opening at the stand-off,
+and shutting before the arm swings, plays at the simulation's own speed. A cut no take has is filmed wide, and only its swings -- out
 through the canes, and tipping -- are slowed, as is the arm folding home;
 the rest of those and the drive between vines play at the simulation's own
 speed."""
@@ -202,7 +202,7 @@ CUT = 1.0
 before it cuts to the next rather than easing there: a longer move would
 pass through the arm or the row."""
 
-ENDING = 6.0
+ENDING = 7.5
 """Seconds of video after the vine's last cut: the arm folding home, and the
 robot rolling off."""
 
@@ -346,6 +346,13 @@ def main():
                         )
                 take = takes.get(id(cut))
                 doing = pruning.stage_name if isinstance(pruning, Pruning) else None
+                if (
+                    isinstance(pruning, Pruning)
+                    and pruning.stroke.jaw > 0
+                    and doing in ("move", "home")
+                ):
+                    # The blade shutting before a swing, the arm still.
+                    doing = None
                 swinging = doing in ("move", "tip", "home")
                 due += (PACE.get(doing, 1.0) if take or swinging else 1.0) / 8
                 if due < 1:

@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from kinematics import frames, solve
-from shear import BLADE_STEP, SLACK, Stroke
+from shear import BLADE_STEP, Stroke
 
 if TYPE_CHECKING:
     from pxr import Usd
@@ -466,8 +466,12 @@ class Pruning:
         if self.stage_name in ("move", "home", "shake", "return"):
             # The shear swings through the canes, and shakes one off, shut:
             # open, the hook's claw gathers a cane into the mouth, and the arm
-            # carries it on to every cut after.
+            # carries it on to every cut after. The arm holds still until the
+            # blade's target is shut -- not the blade itself, which a cane
+            # caught in the mouth can prop open.
             self.stroke.jaw = max(self.stroke.jaw - BLADE_STEP, 0.0)
+            if self.stroke.jaw > 0:
+                return self.target, self.stroke.jaw
         if self.stage_name in ("move", "tip", "home"):
             # A planned move: the target walks to the goal a step at a time,
             # and the stage ends once the arm has arrived on it -- tipped, once
@@ -486,10 +490,7 @@ class Pruning:
                 if off is not None:
                     # Before the blade opens and drops the cane into the
                     # mouth, where the blade would pinch it on the next
-                    # swing: away from it, square to the shear's line, once
-                    # the blade is shut -- a short move ends before it has.
-                    if shear >= SLACK:
-                        return self.target, self.stroke.jaw
+                    # swing: away from it, square to the shear's line.
                     self.shaken = self.cut.standoff
                     self.shaken[:3, 3] -= (
                         self.shaken[:3, :3] @ off * (self.cut.shake / np.linalg.norm(off))
