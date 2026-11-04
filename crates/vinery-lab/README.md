@@ -34,7 +34,8 @@ robots, and one of
   along their length
 - ❄️ A dormant mode: bare brown canes with a bud at every node, every one of
   them cuttable
-- 🌾 Cover crops and weeds
+- 🌾 Cover crops and weeds, whose long stems can bend as a robot pushes
+  through
 
 [docs/parameters.md](docs/parameters.md) lists every parameter, with its
 default and range.

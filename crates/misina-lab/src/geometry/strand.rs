@@ -386,6 +386,31 @@ impl Strand {
             tolerance: None,
         }
     }
+
+    /// `count + 1` points along the centerline [`strand_mesh`] skins, evenly
+    /// spaced by arc length from end to end, each with the radius there: the
+    /// strand cut into `count` even segments, as a rod is. `count` is one or
+    /// more.
+    pub fn centerline(&self, count: usize) -> anyhow::Result<Vec<(Point3<f64>, f64)>> {
+        anyhow::ensure!(count >= 1, "a centerline is cut into one segment or more");
+        anyhow::ensure!(
+            self.points.len() >= 2 && self.points.len() == self.radii.len(),
+            "a strand needs two or more control points, one radius each"
+        );
+        let rail = NurbsCurve3D::interpolate(&self.points, DEGREE.min(self.points.len() - 1))?;
+        let anchors = chord_parameters(&self.points);
+        // `stations` places three or more, so one segment is the rail's ends.
+        let parameters = if count == 1 {
+            let (start, end) = rail.knots_domain();
+            vec![start, end]
+        } else {
+            stations(&rail, count + 1).0
+        };
+        Ok(parameters
+            .into_iter()
+            .map(|t| (rail.point_at(t), radius_at(&anchors, &self.radii, t)))
+            .collect())
+    }
 }
 
 /// The fewest sides round a ring that keep it within `tolerance` of a circle
@@ -964,6 +989,24 @@ mod tests {
             parameters.windows(2).all(|w| w[1] > w[0]),
             "stations advance along the rail"
         );
+    }
+
+    /// A centerline of any count of segments, one included, runs from the
+    /// first control point to the last, with their radii, through the
+    /// stations the mesh's rings stand on.
+    #[test]
+    fn a_centerline_runs_end_to_end_with_the_strands_radii() {
+        let strand = elbow();
+        let last = strand.points.len() - 1;
+        for count in [1, 2, 10] {
+            let samples = strand.centerline(count).unwrap();
+            assert_eq!(samples.len(), count + 1, "{count} segments");
+            for ((point, radius), end) in [samples[0], samples[count]].iter().zip([0, last]) {
+                assert!((point - strand.points[end]).norm() < 1e-9);
+                assert!((radius - strand.radii[end]).abs() < 1e-9);
+            }
+        }
+        assert!(strand.centerline(0).is_err(), "no segments is no rod");
     }
 
     /// The reason `try_divide_by_count` is used at all. On a rail that bends,

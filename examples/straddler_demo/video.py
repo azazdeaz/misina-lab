@@ -18,7 +18,7 @@ import numpy as np
 import isaaclab.sim as sim_utils
 from isaaclab.app import launch_simulation
 
-from misina_lab.isaaclab.film import CAMERA, Film, sensor
+from misina_lab.isaaclab.film import CAMERA, Film, develop, sensor
 from misina_lab.isaaclab.shots import place
 from vinery_lab.isaaclab import ShootCfg
 
@@ -94,9 +94,7 @@ def main():
             for step, _ in enumerate(steps):
                 if step % every:
                     continue
-                sim.render()
-                camera.update(SIM_DT, force_recompute=True)
-                film.add(camera.data.output["rgb"].torch[0, ..., :3].cpu().numpy())
+                film.add(develop(sim, camera, SIM_DT))
                 if film.frames >= LENGTH * FPS:
                     break
         finally:

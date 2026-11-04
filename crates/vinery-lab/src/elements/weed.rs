@@ -13,7 +13,29 @@
 //!
 //! A plant is one geometry prim: its leaves and stems are built and merged
 //! here, and the plant carries the part directly, as a leaf does. Two plants
-//! of one species at about the same stage and size share a mesh.
+//! of one species at about the same stage and size share a mesh. A plant
+//! whose stems bend is the exception, below.
+//!
+//! # Bending stems
+//!
+//! With [`WeedParams::flexible`] on, every stem at least [`LONG_STEM`] long —
+//! a bolter's wand, a broadleaf's runners — is a rod a solver bends, and its
+//! plant holds its parts instead of being one:
+//!
+//! ```text
+//! Weed_0017               the placed plant, carrying its WeedConfig
+//!   Crown                 -> parts/Weed_<rep>: everything that stays rigid
+//!   Stalk_0               one bending stem
+//!     Cable               its centerline, simulated, never drawn
+//!     Cable_edge_body_0   one rod segment, its transform driven by the solver
+//!       Stem              the tube this segment is drawn with
+//!       Leaves            the leaves along this segment, in its frame
+//!     Cable_edge_body_1   ...
+//! ```
+//!
+//! A rod's prims are named after its curve, so each bending stem gets a
+//! `Stalk_n` of its own. A plant with no stem that long stays one geometry
+//! prim.
 //!
 //! # The layer
 //!
@@ -46,11 +68,28 @@ use misina_lab::geometry::strand::{Bark, Strand, strand_mesh};
 use misina_lab::params::{Choices, Label, Slider};
 use misina_lab::quantize::{Metric, farthest_first};
 use misina_lab::scene::{
-    Geometry, Library, Order, PrimRoot, Surface, UsdType, configs_changed, placed,
+    Geometry, Library, Order, PrimRoot, Surface, UsdType, cable, configs_changed, placed, rebase,
+    segment_frames, segment_tubes, spawn_rod,
 };
 
-/// The mesh-library prefix the plants are registered under.
+/// The mesh-library prefix the plants are registered under: a whole plant, or
+/// the crown of one with bending stems.
 pub const PART: &str = "Weed";
+
+/// The mesh-library prefixes of a bending stem's per-segment tubes and of the
+/// leaves riding each segment. Numbered across the layer, since how many a
+/// representative needs depends on how long its stems came out.
+pub const STALK_TUBE: &str = "WeedStalk";
+pub const STALK_LEAVES: &str = "WeedLeaves";
+
+/// The prim a plant with bending stems keeps its rigid parts under.
+pub const CROWN: &str = "Crown";
+
+/// The prim each bending stem's rod is spawned under, numbered.
+pub const STALK: &str = "Stalk";
+
+/// The prim the leaves riding a rod segment take, beside its tube.
+pub const LEAVES: &str = "Leaves";
 
 /// The prim this element owns under the scene root.
 pub const WEEDS: &str = "Weeds";
@@ -77,6 +116,16 @@ const VIGOUR: std::ops::Range<f64> = 0.6..1.4;
 /// across; nothing finer would show.
 const SIDES: usize = 5;
 const RINGS_PER_METER: f64 = 12.0;
+
+/// Length of one segment of a bending stem, in meters. A segment is a capsule
+/// body and a joint, so this is the whole cost of a bending stem: a metre-tall
+/// wand is ten of each.
+const ROD_SEGMENT: f64 = 0.1;
+
+/// The shortest stem that bends, in meters: three segments, the held one and
+/// two to bend with. Only a bolter's wand and a broadleaf's runners grow this
+/// long.
+const LONG_STEM: f64 = 3.0 * ROD_SEGMENT;
 
 /// The stream the strips are planted from, salted per row.
 const STRIP_STREAM: u64 = 0x4C8A_2F17_D93B_E605;
@@ -308,8 +357,9 @@ impl Metric<WeedConfig> for WeedMetric {
 ///
 /// `strip` is what is done to the under-vine strip, and it picks the species;
 /// the scene's `season` tilts the mix between the spring and summer flushes
-/// and decides whether a bolter has bolted. Every plant is one mesh:
-/// `variations` is the budget of distinct ones and `detail` the triangles a
+/// and decides whether a bolter has bolted. Every plant is one mesh, bar the
+/// long stems `flexible` exports as deformable curves a physics engine bends:
+/// `variations` is the budget of distinct meshes and `detail` the triangles a
 /// leaf is cut into.
 #[derive(Resource, Reflect, Clone, Debug, PartialEq)]
 #[cfg_attr(
@@ -342,6 +392,17 @@ pub struct WeedParams {
     /// against low tufts, mats and rosettes.
     #[reflect(@Slider { min: 0.0, max: 1.0, step: 0.05 }, @Label("Tall share"))]
     pub tall: f32,
+    /// Whether a stem at least 30 cm long — a bolter's wand, a broadleaf's
+    /// runners — is exported as a deformable curve a solver bends, with its
+    /// leaves riding it. Each is a chain of rigid bodies, ten to the metre:
+    /// the default parcel at the defaults bends about 2,500 stems, 12,000
+    /// bodies.
+    ///
+    /// See [`LONG_STEM`] and the module docs for the prims. A stem authored
+    /// into a post, or into ground rising faster than it does, is pushed
+    /// clear as the simulation starts.
+    #[reflect(@Label("Bendable stems"))]
+    pub flexible: bool,
     /// How many distinct plant meshes the scene may hold. A budget, not a
     /// count.
     ///
@@ -361,6 +422,7 @@ impl Default for WeedParams {
             pressure: 6.0,
             alley_pressure: 0.5,
             tall: 0.3,
+            flexible: false,
             variations: 24,
             detail: 16,
         }
@@ -545,8 +607,9 @@ impl Planter<'_, '_, '_> {
 // ─── Building ───────────────────────────────────────────────────────
 
 /// Builds one mesh per distinct plant and gives it to every plant that drew
-/// it. A plant has nothing hanging off it, so it carries its geometry
-/// directly and expands into nothing.
+/// it. A plant whose stems all stay rigid has nothing hanging off it, so it
+/// carries its geometry directly; one with bending stems holds its crown and
+/// a rod per bending stem, as the module docs draw it.
 pub(crate) fn build(
     mut commands: Commands,
     mut library: Library,
@@ -554,6 +617,8 @@ pub(crate) fn build(
     plants: Query<(Entity, &Order, &WeedConfig)>,
 ) -> Result<()> {
     library.clear(PART);
+    library.clear(STALK_TUBE);
+    library.clear(STALK_LEAVES);
 
     let mut grown: Vec<(Order, Entity, WeedConfig)> = plants
         .iter()
@@ -569,9 +634,10 @@ pub(crate) fn build(
         &WeedMetric,
     );
 
-    let meshes = par_map(&book.representatives, |index, config| {
-        plant_mesh(config, index as u64)
-            .map(|mesh| mesh.to_mesh())
+    let flexible = params.flexible;
+    let built = par_map(&book.representatives, |index, config| {
+        grow(config, index as u64)
+            .and_then(|plant| plant.build(flexible))
             .with_context(|| {
                 format!(
                     "weed {} could not be built",
@@ -580,21 +646,235 @@ pub(crate) fn build(
             })
     });
 
-    let mut geometry: Vec<Geometry> = Vec::with_capacity(book.len());
-    for (index, mesh) in meshes.into_iter().enumerate() {
-        geometry.push(library.part(PART, index, mesh?, surface(index as u64)));
+    // Tubes and leaves are numbered across the layer.
+    let (mut tubes, mut leaves) = (0, 0);
+    let mut registered: Vec<(Option<Geometry>, Vec<Rod<Geometry>>, Surface)> =
+        Vec::with_capacity(book.len());
+    for (index, built) in built.into_iter().enumerate() {
+        let Built { rigid, rods } = built?;
+        let skin = surface(index as u64);
+        let rigid = rigid.map(|mesh| library.part(PART, index, mesh.to_mesh(), skin));
+        let mut register = |prefix: &str, count: &mut usize, mesh: MeshData| {
+            *count += 1;
+            library.part(prefix, *count - 1, mesh.to_mesh(), skin)
+        };
+        let rods = rods
+            .into_iter()
+            .map(|rod| Rod {
+                tubes: rod
+                    .tubes
+                    .into_iter()
+                    .map(|tube| register(STALK_TUBE, &mut tubes, tube))
+                    .collect(),
+                leaves: rod
+                    .leaves
+                    .into_iter()
+                    .map(|mesh| mesh.map(|mesh| register(STALK_LEAVES, &mut leaves, mesh)))
+                    .collect(),
+                points: rod.points,
+                widths: rod.widths,
+                frames: rod.frames,
+            })
+            .collect();
+        registered.push((rigid, rods, skin));
     }
+
     for ((_, entity, _), drew) in grown.iter().zip(&book.assignment) {
-        commands
-            .entity(*entity)
-            .insert(geometry[*drew as usize].clone());
+        let (rigid, rods, skin) = &registered[*drew as usize];
+        if rods.is_empty() {
+            if let Some(rigid) = rigid {
+                commands.entity(*entity).insert(rigid.clone());
+            }
+            continue;
+        }
+        if let Some(rigid) = rigid {
+            commands
+                .entity(*entity)
+                .with_child((Name::new(CROWN), rigid.clone()));
+        }
+        for (k, rod) in rods.iter().enumerate() {
+            let mut stalk = commands.spawn((
+                Name::new(format!("{STALK}_{k}")),
+                Transform::IDENTITY,
+                Visibility::default(),
+                ChildOf(*entity),
+            ));
+            let curve = cable(rod.points.clone(), rod.widths.clone(), Vec::new(), *skin);
+            let segments = spawn_rod(&mut stalk, curve, &rod.frames, &rod.tubes);
+            for (segment, leaves) in segments.iter().zip(&rod.leaves) {
+                if let Some(leaves) = leaves {
+                    commands
+                        .entity(*segment)
+                        .with_child((Name::new(LEAVES), leaves.clone()));
+                }
+            }
+        }
     }
     Ok(())
 }
 
-/// One plant in its own frame: the root collar on the origin, growing up
-/// `+Z`.
-fn plant_mesh(config: &WeedConfig, index: u64) -> anyhow::Result<MeshData> {
+// ─── Layout ─────────────────────────────────────────────────────────
+
+/// A plant as its habit lays it out, in its own frame: the parts that stand
+/// rigid however it is built, and its stems, each with the leaves along it.
+#[derive(Default)]
+struct Plant {
+    parts: Vec<MeshData>,
+    stems: Vec<Stem>,
+}
+
+/// A plant built from its layout: one mesh for whatever stays rigid, none if
+/// everything hangs on a rod, and its rods.
+struct Built {
+    rigid: Option<MeshData>,
+    rods: Vec<Rod<MeshData>>,
+}
+
+/// A bending stem: the curve a solver bends, and per segment its frame, its
+/// tube and the leaves it carries, both in that frame.
+struct Rod<M> {
+    points: Vec<[f32; 3]>,
+    widths: Vec<f32>,
+    frames: Vec<Transform>,
+    tubes: Vec<M>,
+    /// `None` on a segment that carries no leaf.
+    leaves: Vec<Option<M>>,
+}
+
+impl Plant {
+    /// One mesh for whatever stays rigid, and a rod for every stem at least
+    /// [`LONG_STEM`] long if `flexible`.
+    fn build(self, flexible: bool) -> anyhow::Result<Built> {
+        let mut rigid = self.parts;
+        let mut rods = Vec::new();
+        for stem in self.stems {
+            if flexible && stem.length() >= LONG_STEM {
+                rods.push(stem.rod()?);
+            } else {
+                rigid.push(stem.mesh()?);
+                rigid.extend(
+                    stem.leaves
+                        .iter()
+                        .map(|(placement, leaf)| leaf.transformed(placement)),
+                );
+            }
+        }
+        Ok(Built {
+            rigid: (!rigid.is_empty()).then(|| merge_meshes(&rigid)),
+            rods,
+        })
+    }
+}
+
+/// One stem: a strand through `points`, `radii` across at them, laid into
+/// the plant by `frame`, and the leaves hung along it. The points must not be
+/// collinear — a straight polyline has no curvature for the tube's frames to
+/// follow — so every habit bows its stems by at least a millimetre.
+struct Stem {
+    points: Vec<Point3<f64>>,
+    radii: Vec<f64>,
+    frame: Transform,
+    /// Each leaf's placement in the plant's frame, whose origin is where it
+    /// attaches, and its mesh.
+    leaves: Vec<(Transform, MeshData)>,
+}
+
+impl Stem {
+    fn new(points: Vec<Point3<f64>>, radii: Vec<f64>, frame: Transform) -> Self {
+        Self {
+            points,
+            radii,
+            frame,
+            leaves: Vec::new(),
+        }
+    }
+
+    /// The point `t` of the way along the stem, by control segment, in the
+    /// plant's frame.
+    fn at(&self, t: f64) -> Vec3 {
+        self.frame.transform_point(along(&self.points, t))
+    }
+
+    /// Hangs `leaf` at `placement`, in the plant's frame.
+    fn hang(&mut self, leaf: &MeshData, placement: Transform) {
+        self.leaves.push((placement, leaf.clone()));
+    }
+
+    /// Along the control points, in meters.
+    fn length(&self) -> f64 {
+        self.points
+            .windows(2)
+            .map(|pair| (pair[1] - pair[0]).norm())
+            .sum()
+    }
+
+    /// The stem's strand, skinned at [`SIDES`] and [`RINGS_PER_METER`] with
+    /// no bark, in the stem's own frame.
+    fn strand(&self) -> Strand {
+        Strand::new(
+            self.points.clone(),
+            self.radii.clone(),
+            SIDES,
+            RINGS_PER_METER,
+            Bark::none(),
+        )
+    }
+
+    /// The stem as one rigid tube.
+    fn mesh(&self) -> anyhow::Result<MeshData> {
+        Ok(strand_mesh(&self.strand())?.transformed(&self.frame))
+    }
+
+    /// The stem as a rod: the centerline its tube is skinned along, cut into
+    /// even segments as near [`ROD_SEGMENT`] long as fit, with the taper at
+    /// each cut. The first segment is the held one, so the stem is held at
+    /// its base. Each leaf rides the segment nearest where it attaches.
+    fn rod(self) -> anyhow::Result<Rod<MeshData>> {
+        let count = (self.length() / ROD_SEGMENT).round() as usize;
+        let (points, widths): (Vec<[f32; 3]>, Vec<f32>) = self
+            .strand()
+            .centerline(count)?
+            .into_iter()
+            .map(|(p, radius)| {
+                let p = Vec3::new(p.x as f32, p.y as f32, p.z as f32);
+                (
+                    self.frame.transform_point(p).to_array(),
+                    2.0 * radius as f32,
+                )
+            })
+            .unzip();
+
+        // How far `at` lies from segment `k`.
+        let off = |at: Vec3, k: usize| {
+            let (a, b) = (Vec3::from(points[k]), Vec3::from(points[k + 1]));
+            let t = ((at - a).dot(b - a) / (b - a).length_squared()).clamp(0.0, 1.0);
+            at.distance(a.lerp(b, t))
+        };
+        let frames = segment_frames(&points);
+        let mut carried = vec![Vec::new(); frames.len()];
+        for (placement, leaf) in &self.leaves {
+            let at = placement.translation;
+            let k = (0..frames.len())
+                .min_by(|a, b| off(at, *a).total_cmp(&off(at, *b)))
+                .expect("a rod has segments");
+            carried[k].push(leaf.transformed(&rebase(&frames[k], placement)));
+        }
+        Ok(Rod {
+            tubes: segment_tubes(&points, &widths, SIDES),
+            leaves: carried
+                .iter()
+                .map(|leaves| (!leaves.is_empty()).then(|| merge_meshes(leaves)))
+                .collect(),
+            points,
+            widths,
+            frames,
+        })
+    }
+}
+
+/// One plant laid out in its own frame: the root collar on the origin,
+/// growing up `+Z`.
+fn grow(config: &WeedConfig, index: u64) -> anyhow::Result<Plant> {
     let species = &SPECIES[config.species as usize % SPECIES.len()];
     let mut rng = Rng::new(PLANT_STREAM ^ salt(index));
     let (size, stage, triangles) = (
@@ -609,20 +889,6 @@ fn plant_mesh(config: &WeedConfig, index: u64) -> anyhow::Result<MeshData> {
         Habit::Bolter => bolter(size, stage, triangles, &mut rng),
         Habit::Broadleaf => broadleaf(size, stage, triangles, &mut rng),
     }
-}
-
-/// A stem: a strand skinned at [`SIDES`] and [`RINGS_PER_METER`] with no
-/// bark. The control points must not be collinear — a straight polyline has
-/// no curvature for the tube's frames to follow — so every caller bows its
-/// stems by at least a millimetre.
-fn stem(points: Vec<Point3<f64>>, radii: Vec<f64>) -> anyhow::Result<MeshData> {
-    strand_mesh(&Strand::new(
-        points,
-        radii,
-        SIDES,
-        RINGS_PER_METER,
-        Bark::none(),
-    ))
 }
 
 /// The point `t` of the way along a polyline, by segment.
@@ -652,7 +918,7 @@ fn leaf_at(translation: Vec3, yaw: f64, pitch: f64, scale: f64) -> Transform {
 ///
 /// Draws: per variant its length and droop; per blade which variant, its
 /// yaw and its lean.
-fn tuft(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Result<MeshData> {
+fn tuft(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Result<Plant> {
     let reach = 0.10 * size * (0.4 + 0.6 * stage);
     let variants: Vec<MeshData> = (0..3)
         .map(|_| {
@@ -672,7 +938,7 @@ fn tuft(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Result<
             })
         })
         .collect();
-    Ok(merge_meshes(&parts))
+    Ok(Plant { parts, ..default() })
 }
 
 /// *Stellaria media*: stems running out along the ground from one root,
@@ -680,7 +946,7 @@ fn tuft(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Result<
 ///
 /// Draws: per stem its heading, its sway and the lift of its tip; per leaf
 /// its turn off the stem and its pitch.
-fn mat(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Result<MeshData> {
+fn mat(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Result<Plant> {
     let leaf = bent(
         shapes::leaf(0.015 * size, 0.008 * size, 0.4),
         0.3,
@@ -689,7 +955,7 @@ fn mat(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Result<M
     )?;
     let run = 0.18 * size * (0.3 + 0.7 * stage);
     let stems = 4;
-    let mut parts = Vec::new();
+    let mut plant = Plant::default();
     for s in 0..stems {
         let heading = (s as f64 + rng.range(-0.3, 0.3)) / stems as f64 * TAU;
         let sway = rng.range(-0.15, 0.15);
@@ -700,26 +966,27 @@ fn mat(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Result<M
             Point3::new(run, 0.0, lift),
         ];
         let frame = Transform::from_rotation(Quat::from_rotation_z(heading as f32));
-        parts.push(stem(points.clone(), vec![0.001, 0.0009, 0.0006])?.transformed(&frame));
+        let mut stem = Stem::new(points, vec![0.001, 0.0009, 0.0006], frame);
 
         let nodes = ((run / 0.025) as usize).max(1);
         for n in 1..=nodes {
-            let at = frame.transform_point(along(&points, n as f64 / nodes as f64));
+            let at = stem.at(n as f64 / nodes as f64);
             for side in [-1.0f64, 1.0] {
                 let turn = heading + side * rng.range(0.9, 1.5);
                 let pitch = rng.range(0.1, 0.4);
-                parts.push(leaf.transformed(&leaf_at(at, turn, pitch, 1.0)));
+                stem.hang(&leaf, leaf_at(at, turn, pitch, 1.0));
             }
         }
+        plant.stems.push(stem);
     }
-    Ok(merge_meshes(&parts))
+    Ok(plant)
 }
 
 /// *Taraxacum officinale*: a flat whorl of toothed leaves from a taproot's
 /// crown, nothing standing up.
 ///
 /// Draws: per leaf its length, its heading, its pitch and its droop.
-fn rosette(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Result<MeshData> {
+fn rosette(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Result<Plant> {
     let leaves = 10;
     let reach = 0.15 * size * (0.4 + 0.6 * stage);
     let mut parts = Vec::with_capacity(leaves);
@@ -736,7 +1003,7 @@ fn rosette(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Resu
         )?;
         parts.push(leaf.transformed(&leaf_at(Vec3::Z * 0.005, heading, pitch, 1.0)));
     }
-    Ok(merge_meshes(&parts))
+    Ok(Plant { parts, ..default() })
 }
 
 /// *Erigeron canadensis*: a basal rosette that, once bolted, sends up one
@@ -745,8 +1012,8 @@ fn rosette(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Resu
 ///
 /// Draws: per basal leaf its length, its heading and its pitch; then the
 /// wand's sway; per wand leaf its turn and its pitch.
-fn bolter(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Result<MeshData> {
-    let mut parts = Vec::new();
+fn bolter(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Result<Plant> {
+    let mut plant = Plant::default();
     let basal = 8;
     for i in 0..basal {
         let length = 0.06 * size * rng.range(0.6, 1.0) * (1.0 - 0.5 * stage);
@@ -758,7 +1025,9 @@ fn bolter(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Resul
             0.0,
             triangles,
         )?;
-        parts.push(leaf.transformed(&leaf_at(Vec3::Z * 0.005, heading, pitch, 1.0)));
+        plant
+            .parts
+            .push(leaf.transformed(&leaf_at(Vec3::Z * 0.005, heading, pitch, 1.0)));
     }
 
     let bolted = ((stage - 0.3) / 0.7).max(0.0);
@@ -771,10 +1040,8 @@ fn bolter(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Resul
             Point3::new(bow * sway.cos(), bow * sway.sin(), height / 2.0),
             Point3::new(2.0 * bow * sway.cos(), 2.0 * bow * sway.sin(), height),
         ];
-        parts.push(stem(
-            points.clone(),
-            vec![0.004 * size, 0.003 * size, 0.0015 * size],
-        )?);
+        let radii = vec![0.004 * size, 0.003 * size, 0.0015 * size];
+        let mut wand = Stem::new(points, radii, Transform::IDENTITY);
 
         let leaf = bent(
             shapes::leaf(0.04 * size, 0.008 * size, 0.4),
@@ -790,10 +1057,11 @@ fn bolter(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Resul
             let turn = n as f64 * GOLDEN + rng.range(-0.2, 0.2);
             let pitch = rng.range(0.8, 1.2);
             let shrink = 1.0 - 0.6 * t;
-            parts.push(leaf.transformed(&leaf_at(along(&points, t), turn, pitch, shrink)));
+            wand.hang(&leaf, leaf_at(wand.at(t), turn, pitch, shrink));
         }
+        plant.stems.push(wand);
     }
-    Ok(merge_meshes(&parts))
+    Ok(plant)
 }
 
 /// *Malva sylvestris*: stems that run out from a woody crown and then turn
@@ -801,7 +1069,7 @@ fn bolter(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Resul
 /// weeder cannot reach the middle of.
 ///
 /// Draws: per stem its heading and its sway; per leaf its turn and pitch.
-fn broadleaf(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Result<MeshData> {
+fn broadleaf(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Result<Plant> {
     let grown = 0.3 + 0.7 * stage;
     let height = 0.5 * size * grown;
     let reach = 0.3 * size * grown;
@@ -812,7 +1080,7 @@ fn broadleaf(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Re
         triangles,
     )?;
     let stems = 4;
-    let mut parts = Vec::new();
+    let mut plant = Plant::default();
     for s in 0..stems {
         let heading = (s as f64 + rng.range(-0.3, 0.3)) / stems as f64 * TAU;
         let sway = rng.range(-0.2, 0.2);
@@ -824,17 +1092,18 @@ fn broadleaf(size: f64, stage: f64, triangles: f64, rng: &mut Rng) -> anyhow::Re
         ];
         let frame = Transform::from_rotation(Quat::from_rotation_z(heading as f32));
         let radii = [0.004, 0.0035, 0.003, 0.002].map(|r| r * size).to_vec();
-        parts.push(stem(points.clone(), radii)?.transformed(&frame));
+        let mut stem = Stem::new(points, radii, frame);
 
         let nodes = 4;
         for n in 1..=nodes {
-            let at = frame.transform_point(along(&points, n as f64 / nodes as f64));
+            let at = stem.at(n as f64 / nodes as f64);
             let turn = heading + rng.range(-1.2, 1.2);
             let pitch = rng.range(0.1, 0.5);
-            parts.push(leaf.transformed(&leaf_at(at, turn, pitch, 1.0)));
+            stem.hang(&leaf, leaf_at(at, turn, pitch, 1.0));
         }
+        plant.stems.push(stem);
     }
-    Ok(merge_meshes(&parts))
+    Ok(plant)
 }
 
 /// A plant's foliage, shaded per representative.
@@ -849,8 +1118,9 @@ fn surface(index: u64) -> Surface {
 mod tests {
     use super::*;
     use crate::elements::VineyardParams;
-    use crate::elements::util::testing::{bounds, grown, organs, prim};
-    use misina_lab::scene::Prototypes;
+    use crate::elements::util::testing::{bounds, grown, named_children, organs, prim, prim_path};
+    use misina_lab::geometry::mesh::box_mesh;
+    use misina_lab::scene::{Cable, Prototypes, UsdReference};
 
     /// A parcel small enough to grow in a test and wide enough for three rows.
     fn small() -> VineyardParams {
@@ -858,6 +1128,15 @@ mod tests {
         params.terrain.length = 30.0;
         params.terrain.width = 20.0;
         params
+    }
+
+    /// The plant `config` grows with nothing bending: one mesh.
+    fn whole(config: WeedConfig, index: u64) -> MeshData {
+        let built = grow(&config, index)
+            .and_then(|plant| plant.build(false))
+            .unwrap_or_else(|e| panic!("{e:#}"));
+        assert!(built.rods.is_empty());
+        built.rigid.expect("every plant grows something")
     }
 
     fn part_count(app: &App) -> usize {
@@ -999,8 +1278,8 @@ mod tests {
             .iter()
             .position(|s| s.habit == Habit::Bolter)
             .unwrap();
-        let low = plant_mesh(&WeedConfig::new(species, 0.1, 1.0, 16), 0).unwrap();
-        let high = plant_mesh(&WeedConfig::new(species, 1.0, 1.0, 16), 0).unwrap();
+        let low = whole(WeedConfig::new(species, 0.1, 1.0, 16), 0);
+        let high = whole(WeedConfig::new(species, 1.0, 1.0, 16), 0);
         let (_, low_top) = bounds(&low, 2);
         let (_, high_top) = bounds(&high, 2);
         assert!(low_top < 0.1, "a rosette: {low_top}");
@@ -1012,13 +1291,170 @@ mod tests {
     #[test]
     fn every_species_builds_a_grounded_plant() {
         for (species, expected) in SPECIES.iter().enumerate() {
-            let mesh = plant_mesh(&WeedConfig::new(species, 0.7, 1.0, 16), 3)
-                .unwrap_or_else(|e| panic!("{}: {e:#}", expected.name));
+            let mesh = whole(WeedConfig::new(species, 0.7, 1.0, 16), 3);
             assert!(!mesh.face_vertex_counts.is_empty());
             let (lo, hi) = bounds(&mesh, 2);
             assert!(lo > -0.02, "{} digs to {lo}", expected.name);
             assert!(hi > 0.02 && hi < 1.5, "{} reaches {hi}", expected.name);
         }
+    }
+
+    /// The stems of `species` long enough to bend, at `stage` and its typical
+    /// size.
+    fn long_stems(species: usize, stage: f32) -> Vec<Stem> {
+        let plant = grow(&WeedConfig::new(species, stage, 1.0, 16), 0).unwrap();
+        plant
+            .stems
+            .into_iter()
+            .filter(|stem| stem.length() >= LONG_STEM)
+            .collect()
+    }
+
+    /// A bolter's wand and a broadleaf's four runners bend once grown; a
+    /// mat's runners and a wand just bolted stay in the mesh.
+    #[test]
+    fn only_a_long_stem_bends() {
+        for (species, expected) in SPECIES.iter().enumerate() {
+            let long = match expected.habit {
+                Habit::Bolter => 1,
+                Habit::Broadleaf => 4,
+                _ => 0,
+            };
+            assert_eq!(long_stems(species, 1.0).len(), long, "{}", expected.name);
+        }
+        let bolter = SPECIES
+            .iter()
+            .position(|s| s.habit == Habit::Bolter)
+            .unwrap();
+        // A wand of 17 cm.
+        assert!(long_stems(bolter, 0.4).is_empty());
+    }
+
+    /// A rod starts where its stem does, held there by its first segment, and
+    /// runs along it in even segments about [`ROD_SEGMENT`] long, three at
+    /// least, tapering as the stem does.
+    #[test]
+    fn a_rod_is_its_stem_cut_into_even_segments() {
+        let stems: Vec<Stem> = (0..SPECIES.len())
+            .flat_map(|species| long_stems(species, 1.0))
+            .collect();
+        assert!(!stems.is_empty());
+        for stem in stems {
+            let (base, radii) = (stem.at(0.0), stem.radii.clone());
+            let rod = stem.rod().unwrap();
+            let spans: Vec<f32> = rod
+                .points
+                .windows(2)
+                .map(|pair| Vec3::from(pair[0]).distance(Vec3::from(pair[1])))
+                .collect();
+            assert!(spans.len() >= 3, "{} segments", spans.len());
+            assert!(Vec3::from(rod.points[0]).abs_diff_eq(base, 1e-6));
+            let longest = spans.iter().copied().fold(0.0, f32::max);
+            for span in &spans {
+                assert!(*span > 0.95 * longest, "{span} against {longest}");
+                assert!((span - ROD_SEGMENT as f32).abs() < 0.2 * ROD_SEGMENT as f32);
+            }
+            assert!((rod.widths[0] - 2.0 * radii[0] as f32).abs() < 1e-6);
+            let tip = 2.0 * radii[radii.len() - 1] as f32;
+            assert!((rod.widths[rod.widths.len() - 1] - tip).abs() < 1e-6);
+            assert!(rod.widths.windows(2).all(|pair| pair[1] <= pair[0]));
+        }
+    }
+
+    /// A leaf rides the segment it attaches to, placed in that segment's
+    /// frame so that the frame — which the solver moves — puts it back where
+    /// it was hung.
+    #[test]
+    fn a_leaf_rides_the_segment_it_attaches_to() {
+        let leaf = box_mesh(0.01);
+        for t in [0.0, 0.3, 0.55, 1.0] {
+            let mut stem = Stem::new(
+                vec![
+                    Point3::new(0.0, 0.0, 0.0),
+                    Point3::new(0.01, 0.0, 0.4),
+                    Point3::new(0.02, 0.0, 0.8),
+                ],
+                vec![0.004, 0.003, 0.002],
+                Transform::from_rotation(Quat::from_rotation_z(0.7)),
+            );
+            let at = stem.at(t);
+            let placement = leaf_at(at, 1.0, 0.5, 0.8);
+            stem.hang(&leaf, placement);
+            let rod = stem.rod().unwrap();
+
+            let carriers: Vec<usize> = (0..rod.leaves.len())
+                .filter(|k| rod.leaves[*k].is_some())
+                .collect();
+            let [k] = carriers[..] else {
+                panic!("the leaf hung at {t} rides {carriers:?}");
+            };
+            let (from, to) = (rod.points[k][2], rod.points[k + 1][2]);
+            assert!(
+                from - 1e-3 <= at.z && at.z <= to + 1e-3,
+                "the leaf at {} rides {from}..{to}",
+                at.z
+            );
+            let back = rod.leaves[k].as_ref().unwrap().transformed(&rod.frames[k]);
+            let hung = leaf.transformed(&placement);
+            for (a, b) in back.points.iter().zip(&hung.points) {
+                assert!(Vec3::from(*a).abs_diff_eq(Vec3::from(*b), 1e-5));
+            }
+        }
+    }
+
+    /// With bending stems on, a plant with a long stem holds a rod per such
+    /// stem, its leaves riding the segments, and keeps the rest of itself as
+    /// its crown; one without stays a single mesh. Off, as it is by default,
+    /// no weed carries a curve.
+    #[test]
+    fn a_bending_weed_hangs_its_long_stems_on_rods() {
+        let curves = |app: &mut App| -> usize {
+            let mut query = app.world_mut().query_filtered::<Entity, With<Cable>>();
+            let found: Vec<Entity> = query.iter(app.world()).collect();
+            found
+                .into_iter()
+                .filter(|curve| prim_path(app.world(), *curve).starts_with("Weeds/"))
+                .count()
+        };
+        let mut params = small();
+        params.weed.tall = 1.0;
+        assert_eq!(curves(&mut grown(params.clone())), 0);
+
+        params.weed.flexible = true;
+        let mut app = grown(params);
+        let mut rods = 0;
+        for plant in organs::<WeedConfig>(app.world_mut()) {
+            let path: Vec<&str> = plant.path.split('/').collect();
+            let entity = prim(app.world_mut(), &path).unwrap();
+            let children = named_children(app.world_mut(), entity);
+            let stalks: Vec<Entity> = children
+                .iter()
+                .filter(|(name, _)| name.starts_with(STALK))
+                .map(|(_, stalk)| *stalk)
+                .collect();
+            let whole = app.world().entity(entity).contains::<UsdReference>();
+            assert_eq!(whole, stalks.is_empty(), "{}", plant.path);
+            if !whole && SPECIES[plant.config.species as usize].habit == Habit::Bolter {
+                assert!(
+                    children.iter().any(|(name, _)| name == CROWN),
+                    "{}: a bolter's rosette stays rigid",
+                    plant.path
+                );
+            }
+
+            for stalk in stalks {
+                rods += 1;
+                let segments = named_children(app.world_mut(), stalk);
+                let leafy = segments.iter().any(|(_, segment)| {
+                    named_children(app.world_mut(), *segment)
+                        .iter()
+                        .any(|(name, _)| name == LEAVES)
+                });
+                assert!(leafy, "{}: no leaves ride its rod", plant.path);
+            }
+        }
+        assert_eq!(curves(&mut app), rods);
+        assert!(rods > 20, "only {rods} rods");
     }
 
     #[test]
