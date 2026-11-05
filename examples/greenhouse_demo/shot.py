@@ -20,7 +20,7 @@ from isaaclab.app import launch_simulation
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
 from greenhouse_lab.isaaclab import GreenhouseCfg
-from misina_lab.isaaclab import shots
+from misina_lab.isaaclab import rods, shots
 
 import harvest
 
@@ -66,6 +66,7 @@ def harvesting(shot: dict, out) -> None:
     shots.configure(harvest.GREENHOUSE_CFG, shot.get("set", {}))
     sim_cfg = harvest.simulation_cfg()
     with launch_simulation(sim_cfg, shots.launcher(out)):
+        rods.widen_contact_threads()
         sim = sim_utils.SimulationContext(sim_cfg)
         machine = harvest.make_machine()
         robot = harvest.design_scene(machine)

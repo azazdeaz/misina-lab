@@ -25,6 +25,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.app import launch_simulation
 
 import harvest as demo
+from misina_lab.isaaclab import rods
 from misina_lab.isaaclab.film import Film, Rig, develop, sensor
 
 SIZE = (1920, 1080)
@@ -163,6 +164,7 @@ def main():
     # its renderer needs Kit's, which a camera made after launch cannot ask for.
     launcher = {"headless": True, "enable_cameras": True, "require_kit": True, "visualizer": []}
     with launch_simulation(sim_cfg, launcher):
+        rods.widen_contact_threads()
         sim = sim_utils.SimulationContext(sim_cfg)
         machine = demo.make_machine()
         robot = demo.design_scene(machine)
