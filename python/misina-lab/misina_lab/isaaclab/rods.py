@@ -173,8 +173,9 @@ class ContactSlots:
 
     Only the explicit broad phase reads the list. NxN and SAP read the
     collision groups and the joints' filter pairs every step, so under them
-    the rows are never read, the two faces of a cut pass through each other,
-    and a cut regroups the piece instead; see `make_physics_cfg_newton`.
+    `tune_rods` reserves no rows (`reads_contact_pairs`), the two faces of a
+    cut pass through each other, and a cut regroups the piece instead; see
+    `make_physics_cfg_newton`.
     """
 
     def __init__(self, model):
@@ -226,7 +227,8 @@ def reserve_contact_slots(model) -> ContactSlots:
     Before anything takes the model's contact-pair list -- a collision
     pipeline, a coupled solver's entries -- since the list is replaced by a
     longer one. `tune_rods` does this on `PHYSICS_READY`, which Isaac Lab
-    fires in that window; a model built by hand calls it itself.
+    fires in that window, under a broad phase that reads the rows
+    (`reads_contact_pairs`); a model built by hand calls it itself.
     """
     global _slots
     _slots = ContactSlots(model)
@@ -234,9 +236,9 @@ def reserve_contact_slots(model) -> ContactSlots:
 
 
 def contact_slots(model) -> ContactSlots | None:
-    """The rows reserved on `model`, or None where none were: a model built
-    by hand without `reserve_contact_slots`. `Shears` then opens no row at a
-    cut, which only an explicit broad phase would read."""
+    """The rows reserved on `model`, or None where none were: under a broad
+    phase that would not read them, or a model built by hand without
+    `reserve_contact_slots`. `Shears` then opens no row at a cut."""
     if _slots is None or _slots.model is not model:
         return None
     return _slots
@@ -270,9 +272,10 @@ def tune_rods(
     First seats every collider authored under a segment's prim on the
     segment's body, with `carry_riders`, so it takes the plant's group with
     the rod, and once the groups are set lets each rod through the wood it
-    is authored inside, with `let_rods_out_of_their_wood`. Also registers
-    `reserve_contact_slots` on `PHYSICS_READY`, so under an explicit broad
-    phase a cut can make the two faces of a cut meet; see `ContactSlots`.
+    is authored inside, with `let_rods_out_of_their_wood`. Also reserves the
+    `ContactSlots` rows on `PHYSICS_READY` when the broad phase in force
+    reads them, the explicit one (`reads_contact_pairs`), so a cut can make
+    the two faces of a cut meet.
 
     Registers once. While the registration stands -- the manager drops it when
     the simulation stops -- a further call returns it unchanged, rather than
@@ -356,11 +359,15 @@ def tune_rods(
 
         let_rods_out_of_their_wood(builder)
 
+    def reserve(_payload) -> None:
+        # With no simulation running, as when a test dispatches the event by
+        # hand, Newton's default broad phase, the explicit one, is assumed.
+        sim = SimulationContext.instance()
+        if reads_contact_pairs(sim.cfg.physics if sim is not None else None):
+            reserve_contact_slots(NewtonManager.get_model())
+
     _tuning = NewtonManager.register_callback(tune, PhysicsEvent.MODEL_INIT)
-    NewtonManager.register_callback(
-        lambda _payload: reserve_contact_slots(NewtonManager.get_model()),
-        PhysicsEvent.PHYSICS_READY,
-    )
+    NewtonManager.register_callback(reserve, PhysicsEvent.PHYSICS_READY)
     return _tuning
 
 
@@ -501,6 +508,26 @@ def steps_rods(physics: PhysicsCfg | None) -> bool:
     return any(isinstance(each, VBDSolverCfg) for each in solvers)
 
 
+def reads_contact_pairs(physics: PhysicsCfg | None) -> bool:
+    """Whether the broad phase that finds the rods' contacts under `physics`
+    is the explicit one, which reads the model's contact-pair list and nothing
+    else: the rows `ContactSlots` adds are for it alone. That is the pipeline
+    of each proxy mapping into a VBD entry of a coupled solver
+    (`make_physics_cfg_newton`), or `collision_cfg` under a VBD solver on its
+    own. Either left unset is Newton's default, explicit, and so is a pipeline
+    given as a callable, which names no broad phase."""
+    solver = getattr(physics, "solver_cfg", None)
+    entries = getattr(solver, "entries", None)
+    if entries is None:
+        pipelines = [getattr(physics, "collision_cfg", None)]
+    else:
+        rods = {entry.name for entry in entries if isinstance(entry.solver_cfg, VBDSolverCfg)}
+        pipelines = [m.collision_pipeline for m in solver.proxies if m.destination in rods]
+    return not pipelines or any(
+        getattr(pipeline, "broad_phase", "explicit") == "explicit" for pipeline in pipelines
+    )
+
+
 def make_physics_cfg_newton(
     cfg: GeneratedSceneCfg,
     robot: str,
@@ -531,7 +558,8 @@ def make_physics_cfg_newton(
             with a pair buffer sized for every pair of shapes: a cut gives
             its piece groups of its own, so it meets every plant and every
             other piece, all but the face across the cut, which the joint's
-            filter pair keeps out for good.
+            filter pair keeps out for good. No `ContactSlots` rows are
+            reserved, so the scene needs no static shapes to park them on.
 
     Returns:
         A physics config to hand to `SimulationCfg(physics=...)`.

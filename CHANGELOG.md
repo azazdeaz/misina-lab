@@ -161,8 +161,9 @@ Scene document format 11.
   the collision groups, for the life of the model. `"nxn"` and `"sap"` read
   the groups every step, and a cut then gives its piece groups of its own,
   so it meets every plant's rods and every other piece. The two faces of a
-  cut pass through each other there, and `Shears` no longer needs the
-  `ContactSlots` rows reserved.
+  cut pass through each other there, and `tune_rods` reserves no
+  `ContactSlots` rows, so the scene needs no two static shapes to park them
+  on.
 - The harvest demo finds its contacts with the sweep-and-prune broad phase: cut
   trusses pile up in the crate instead of lying through each other in one layer.
 - The pruning demo's vineyard grows bending weeds, and its robot's chassis

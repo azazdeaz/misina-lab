@@ -123,7 +123,8 @@ segment down, then tips off it.
 The list cannot grow once something reads it, but there is a moment when
 nothing does: the model is finalized, and no collision pipeline and no
 solver entry has taken the list yet. Isaac Lab fires `PHYSICS_READY` in
-that window, and `rods.ContactSlots`, registered there by `tune_rods`,
+that window, and `rods.ContactSlots`, which `tune_rods` reserves there when
+the broad phase in force reads the list (`rods.reads_contact_pairs`),
 replaces the list with a longer one: every row it had, then one spare row
 per rod joint. The spare rows are *parked* on a pair of two static shapes,
 which the broad phase drops before testing their boxes, wherever they are:
@@ -135,11 +136,12 @@ shapes into the joint's row, and from the next step the broad phase tests
 them like any other pair. The filter pairs still name them, but nothing
 reads the filter pairs after finalize.
 
-Under NxN or SAP the rows are never read, and the filter pair is read every
-step, so the two faces keep passing through each other: the piece falls
-through the stub's top segment onto the next one down. What a cut does
-there instead is regroup the piece, below. `Shears` built on a model with
-no rows reserved opens none.
+Under NxN or SAP nothing reads the rows, so `tune_rods` reserves none and
+the scene needs no static shapes to park them on, and the filter pair is
+read every step, so the two faces keep passing through each other: the
+piece falls through the stub's top segment onto the next one down. What a
+cut does there instead is regroup the piece, below. `Shears` built on a
+model with no rows opens none.
 
 One more write goes with it. A capsule's round end reaches a radius past
 the end of its span, so two capsules that meet at a cut overlap there by a
