@@ -10,6 +10,7 @@ that the scene it spawns is one the backend in force can step.
 from __future__ import annotations
 
 import re
+import sys
 import types
 
 import pytest
@@ -485,3 +486,57 @@ def test_the_groups_pair_what_they_are_meant_to():
     assert collides(vine, vine) and not collides(vine, other)
     assert collides(vine, scene) and collides(vine, base) and collides(base, scene)
     assert collides(base, arm) and not collides(base, base)
+
+
+@pytest.fixture
+def vbd(monkeypatch) -> tuple[list[types.ModuleType], set[str]]:
+    """Newton's modules that hold VBD's per-body contact thread count, each
+    restored after the test, and the names of those Warp reports built, none
+    at first. The build is faked: a real one compiles the kernels and cannot
+    be undone in this process."""
+    import warp as wp
+    from newton._src.solvers.vbd import (  # noqa: F401
+        rigid_vbd_kernels,
+        solver_vbd,
+        vbd_coupling_kernels,
+    )
+
+    count = "_NUM_CONTACT_THREADS_PER_BODY"
+    modules = [
+        module
+        for name, module in sorted(sys.modules.items())
+        if name.startswith("newton.") and count in getattr(module, "__dict__", {})
+    ]
+    for module in modules:
+        monkeypatch.setattr(module, count, getattr(module, count))
+    built: set[str] = set()
+    monkeypatch.setattr(
+        wp,
+        "get_module",
+        lambda name: types.SimpleNamespace(execs={0: None} if name in built else {}),
+    )
+    return modules, built
+
+
+def test_widening_the_contact_threads_rebinds_every_module_holding_the_count(vbd):
+    """Some modules read the count into their kernels and some into their
+    launch sizes: one missed, or the count renamed, leaves the two out of
+    step without an error."""
+    modules, _ = vbd
+    assert modules, "Newton no longer has _NUM_CONTACT_THREADS_PER_BODY"
+    rods.widen_contact_threads()
+    counts = [module._NUM_CONTACT_THREADS_PER_BODY for module in modules]
+    assert counts == [rods.CONTACT_THREADS] * len(modules)
+
+
+def test_widening_the_contact_threads_refuses_once_a_module_is_built(vbd):
+    """A built module keeps the count it was built with, so the call changes
+    nothing, in that module or any other."""
+    modules, built = vbd
+    before = [module._NUM_CONTACT_THREADS_PER_BODY for module in modules]
+    for module in modules:
+        built.clear()
+        built.add(module.__name__)
+        with pytest.raises(AssertionError, match=module.__name__):
+            rods.widen_contact_threads()
+        assert [each._NUM_CONTACT_THREADS_PER_BODY for each in modules] == before

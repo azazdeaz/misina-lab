@@ -884,6 +884,8 @@ def main():
     args = parse_args()
     sim_cfg = simulation_cfg()
     with launch_simulation(sim_cfg, args):
+        # The crate holds hundreds of contacts once it fills.
+        rods.widen_contact_threads()
         sim = sim_utils.SimulationContext(sim_cfg)
         machine = make_machine()
         robot = design_scene(machine)
