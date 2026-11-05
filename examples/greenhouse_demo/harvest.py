@@ -746,10 +746,13 @@ def frame_of(position: np.ndarray, quat: np.ndarray) -> np.ndarray:
 
 def simulation_cfg() -> sim_utils.SimulationCfg:
     """Newton coupled with VBD, the robot's forearm and wrists among what a
-    truss collides with."""
+    truss collides with, under a sweep-and-prune broad phase: a cut truss meets every
+    other, so the crate fills with a pile rather than a layer."""
     return sim_utils.SimulationCfg(
         dt=SIM_DT,
-        physics=rods.make_physics_cfg_newton(GREENHOUSE_CFG, ROBOT_PATH, ROBOT_CONTACT, SUBSTEPS),
+        physics=rods.make_physics_cfg_newton(
+            GREENHOUSE_CFG, ROBOT_PATH, ROBOT_CONTACT, SUBSTEPS, broad_phase="sap"
+        ),
     )
 
 

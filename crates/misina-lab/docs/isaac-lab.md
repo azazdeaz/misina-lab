@@ -73,8 +73,10 @@ there, joined by rod joints and clamped to the wood it grew from. Only
 Newton's VBD solver steps one, and a robot needs MuJoCo, so a scene with any
 runs the two side by side as entries of a coupled solver, `rigid` and
 `rods`, with the robot's bodies handed across as proxies.
-`make_physics_cfg_newton(cfg, robot, contact_bodies, substeps)` picks
-between that and plain MJWarp by asking `cfg.without_rods()`.
+`make_physics_cfg_newton(cfg, robot, contact_bodies, substeps, broad_phase)`
+picks between that and plain MJWarp by asking `cfg.without_rods()`;
+`broad_phase` is how the rods' contacts are found, which
+[cutting.md](cutting.md#what-a-piece-does-afterwards) weighs.
 
 The choice is provisional, an override can replace the backend before the
 scene is built, so the spawner checks the cfg against the backend in force

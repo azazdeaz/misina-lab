@@ -15,12 +15,16 @@ written into one of those arrays in place is seen by the next replay; a new
 body, or anything that reallocates, is not. So a cut only writes values.
 
 Two bodies a joint ties never collide: the pair is left out of the list of
-shape pairs the broad phase tests, which is fixed with the model, and turning
-the joint off does not put it back. So `rods.ContactSlots` reserves a spare
-row of that list per rod joint, parked on a pair that never meets, and a cut
-writes the joint's own pair into it. Each capsule's round end reaches a
+shape pairs the explicit broad phase tests, which is fixed with the model, and
+turning the joint off does not put it back. So `rods.ContactSlots` reserves a
+spare row of that list per rod joint, parked on a pair that never meets, and
+a cut writes the joint's own pair into it. Each capsule's round end reaches a
 radius past the cut, into the other, so both are pulled back that far at the
-cut face, to touch there rather than be shoved apart.
+cut face, to touch there rather than be shoved apart. An NxN or SAP broad
+phase reads the collision groups and the joint's filter pair every step
+instead, so there the two faces keep passing through each other, and a cut
+gives the piece's bodies groups of their own, to meet every plant and every
+other piece; see `rods.make_physics_cfg_newton`.
 
 Under the coupled solver each entry steps its own copy of the model's arrays.
 The body and joint copies are refreshed from the model by a model-change
@@ -38,9 +42,10 @@ frame, a hand's, the rest of the piece hanging from it on its joints, until
 it is let go.
 
 A piece that falls meets its own plant's stub, rods and wood, the trellis and
-the ground, and passes through every other plant (see `rods.PLANT_GROUPS`).
-VBD has no rolling friction, so a straight one on a slope can roll on
-downhill, off the edge of the terrain if nothing stops it.
+the ground, and passes through every other plant under the explicit broad
+phase (see `rods.PLANT_GROUPS`); under NxN or SAP it meets every plant and
+every other piece. VBD has no rolling friction, so a straight one on a slope
+can roll on downhill, off the edge of the terrain if nothing stops it.
 """
 
 from __future__ import annotations
@@ -111,6 +116,7 @@ class Shears:
         of its segment -- see `physics` -- which is how a prim under one is
         traced back to the body that carries it."""
         self._shape_labels = list(model.shape_label)
+        self._shape_body = model.shape_body.numpy()
 
         # The capsule the rod importer builds on each body's own z axis,
         # labelled after the body. Its span along that axis is what a cut
@@ -153,11 +159,13 @@ class Shears:
         # The copies of the contact-pair list that pair a rod with anything:
         # the model's, and the entry's that steps the rods. Each ends with
         # the reserved rows, still parked, or it is not the list reserved on.
+        # With no rows reserved a cut opens none, which only an explicit
+        # broad phase would read.
         from . import rods
 
         self._slots = rods.contact_slots(model)
         self._pair_copies = []
-        for copy in self._shape_copies:
+        for copy in self._shape_copies if self._slots is not None else ():
             pairs = copy.shape_contact_pairs.numpy().reshape(-1, 2)
             if self._slots.count and not (pairs[-self._slots.count :] == self._slots.parked).all():
                 raise ValueError("a contact-pair list does not end with the rows reserved on it")
@@ -378,7 +386,7 @@ class Shears:
 
     def _release(self, joint: int) -> None:
         """Turn `joint` off, let the two bodies it tied meet at the cut, and
-        mark everything past it as loose."""
+        mark everything past it as loose, grouped on its own."""
         stub, piece = self._index[int(self._parent[joint])], self._index[int(self._child[joint])]
         self._pull[stub, 1], self._pull[piece, 0] = self.radius[stub], self.radius[piece]
         self._reshape(stub)
@@ -392,9 +400,25 @@ class Shears:
         while True:
             i = self._index[body]
             self.loose[i] = True
+            self._free(body)
             if (joint := self._tip_joint.get(body)) is None:
                 return
             body = int(self._child[joint])
+
+    def _free(self, body: int) -> None:
+        """Give rod body `body`'s shapes a group of their own, the negative
+        per-body one `rods.tune_rods` gives every body that is not a rod, in
+        every copy. A broad phase that reads the groups every step, NxN or
+        SAP, pairs them with every group but their own from then on: every
+        plant's and every other piece's. The explicit one reads the list
+        fixed with the model, and the write changes nothing. A site, group
+        0, stays one."""
+        for shape in np.flatnonzero(self._shape_body == body):
+            _write(
+                [copy.shape_collision_group for copy in self._shape_copies],
+                shape,
+                lambda group: group if group == 0 else -(2 + body),
+            )
 
     def _flag(self, body: int, flag: int) -> None:
         """Write body `body`'s flag into the model and every solver's copy:

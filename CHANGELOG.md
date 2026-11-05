@@ -156,6 +156,15 @@ Scene document format 11.
 
 ### Changed
 
+- **misina-lab**: `rods.make_physics_cfg_newton` takes `broad_phase`.
+  `"explicit"`, as it was, tests the shape pairs `Model.finalize` listed from
+  the collision groups, for the life of the model. `"nxn"` and `"sap"` read
+  the groups every step, and a cut then gives its piece groups of its own,
+  so it meets every plant's rods and every other piece. The two faces of a
+  cut pass through each other there, and `Shears` no longer needs the
+  `ContactSlots` rows reserved.
+- The harvest demo finds its contacts with the sweep-and-prune broad phase: cut
+  trusses pile up in the crate instead of lying through each other in one layer.
 - The pruning demo's vineyard grows bending weeds, and its robot's chassis
   and wheels push them aside as it drives the alley. Its video is filmed
   with them.
