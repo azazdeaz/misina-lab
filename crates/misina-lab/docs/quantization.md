@@ -1,5 +1,9 @@
 # Quantization
 
+> [!WARNING]
+> **Under development.** This page may not reflect the current state of
+> the source. We're working on it.
+
 Every organ of a layer carries a **config**, and each distinct config would
 need a mesh of its own. **Quantization** reduces the population to a budget
 of representatives, builds one mesh per representative, and has every organ
@@ -17,8 +21,8 @@ pub fn farthest_first<T: Clone, M: Metric<T>>(
 `quantize.rs` is the whole of it and knows nothing about Bevy or botany.
 Gonzalez's farthest-first traversal is a 2-approximation for metric
 **k-center**: it minimizes the *worst* distance from an organ to its
-representative rather than a sum, which makes it density-blind, which is
-what lets a rare variant survive. One diseased leaf among ten thousand
+representative rather than a sum, so it is density-blind, and a rare
+variant survives. One diseased leaf among ten thousand
 healthy ones still earns a mesh, provided the metric puts it far away.
 
 ## Writing a metric
@@ -31,8 +35,8 @@ healthy ones still earns a mesh, provided the metric puts it far away.
 - **A field the builder ignores must not reach the metric.** A field that is
   pure placement, the angle a leaf hangs at, is read by no part of the mesh,
   so two configs differing only in it share a mesh and still hang at their
-  own angle. Get this wrong and the budget is spent telling apart things
-  that build identically.
+  own angle. Otherwise the budget is spent telling apart configs that
+  build identically.
 - **Categorical fields get a step.** A young plant and a mature one are
   different plants, not different sizes, so the metric puts them further
   apart than any two of one kind can be. A leaf cut from one of five

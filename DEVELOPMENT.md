@@ -1,5 +1,9 @@
 # Development
 
+> [!WARNING]
+> **Under development.** This page may not reflect the current state of
+> the source. We're working on it.
+
 ## Building the Python extension
 
 No need to install `maturin` yourself — uv fetches it automatically as a
@@ -131,17 +135,18 @@ Press `S` to write the scene out as `scene.json`, and build it with:
 
     python -m misina_lab.usd scene.json scene.usd
 
-Press `P` to log the camera as a storyboard's `camera`, and copy it: how a
-view found by hand goes into a storyboard or a [docs picture](#docs-pictures).
+Press `P` to log the camera as a storyboard's `camera`, ready to paste into
+a storyboard or a [docs picture](#docs-pictures): that is how a view framed
+by hand goes into either.
 
 `VINERY_LAB_PERF=1 cargo run` logs a per-layer breakdown on any frame that
 rebuilt something — the marks are `crates/vinery-lab/src/perf.rs`, the report
 `crates/misina-lab/src/perf.rs`.
 
 `VINERY_LAB_RECORD=demo.mp4 cargo run --release` records the window for the
-whole run. One captured frame becomes one video frame, so the stall a rebuild
-causes costs a frame rather than the freeze a screen recorder would keep —
-which is the point of it, for demo videos. Frames are piped to `ffmpeg`, which
+whole run, for demo videos. One captured frame becomes one video frame, so
+the stall a rebuild causes costs a frame rather than the freeze a screen
+recorder would keep. Frames are piped to `ffmpeg`, which
 has to be on `PATH`; the extension picks the container. `VINERY_LAB_RECORD_FPS`
 sets the rate, 30 by default, and is also how fast the window is sampled. See
 `crates/misina-lab/src/record.rs`.
@@ -162,8 +167,8 @@ All four scripts encode what they record with `docs/video/encode.sh`. See
 [the pruning video's skill](.claude/skills/pruning-video/SKILL.md) for
 changing that one. `docs/video/publish.sh` uploads any of the videos to the
 branch's pull request and puts the link GitHub gives it in its README. github.com plays only video
-GitHub hosts, so the videos stay uploads; the pictures are published apart,
-see [Docs pictures](#docs-pictures).
+that GitHub hosts, so the videos stay uploads; the pictures are published
+separately, see [Docs pictures](#docs-pictures).
 
 ### Web build
 

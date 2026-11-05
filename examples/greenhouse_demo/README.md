@@ -1,9 +1,9 @@
 # Greenhouse demo
 
 A [generated greenhouse](../../crates/greenhouse-lab/README.md) in Isaac Sim:
-the smallest script that spawns `GreenhouseCfg`, which renders the
-greenhouse's picture in Isaac Lab for the docs, one that bends and cuts its
-lowest trusses, and a pipe-rail robot harvesting them.
+the smallest script that spawns `GreenhouseCfg`, which also renders the
+greenhouse's picture for the docs; one that bends and cuts its lowest
+trusses; and a pipe-rail robot harvesting them.
 
 ![The harvester cutting a truss in Isaac Lab](https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/greenhouse_demo/harvest.webp)
 
@@ -70,7 +70,7 @@ https://github.com/user-attachments/assets/aa0d8982-de57-4a3b-b3a6-3fd98a7ed23d
 
 The robot has the layout of eternal.ag's Harvester and most robots of its
 kind: a trolley as wide as the heating pipes are spaced, a lift on it, a
-UR5e and a crate on the lift and a cut-and-hold shear in its hand. The trolley does not roll here: it
+UR5e and a crate on the lift, and a cut-and-hold shear in its hand. The trolley does not roll here: it
 rides prismatic joints off a base fixed in the main path, across the row
 heads to a path, down it and up. The arm is
 [MuJoCo Menagerie's UR5e](https://github.com/google-deepmind/mujoco_menagerie/tree/main/universal_robots_ur5e),
@@ -102,9 +102,9 @@ The plan comes from the scene's own ground truth, not from a camera:
    as square to it as the stem lets it be, and the shear slides past the
    stem rather than through it: a plane square to a peduncle that rises
    or droops off square to the stem would cross the stem a few
-   centimetres from the cut. Tilted up to 30° off level, the stem runs behind
-   the blades and clear of the shear's head. It comes in along the row, or
-   turned 25° about the stem toward the path, with the hook
+   centimetres from the cut. With the shear tilted up to 30° off level, the
+   stem runs behind the blades and clear of the shear's head. It comes in
+   along the row, or turned 25° about the stem toward the path, with the hook
    above the peduncle, so the truss's weight hangs the peduncle off the
    hook into the mouth, rather than dragging it over the hook's edge; the
    trolley stands behind the cut that way, so the arm reaches away from its
@@ -174,8 +174,8 @@ spring winds up, so the peduncle is pressed between the finger and the
 jaw, with about 10 N once the shear is shut. The finger is one of the
 robot's bodies the solver bending the trusses sees, as the blades are, so
 the peduncle pushes it back as it would a real one. Friction there alone
-lets a truss slide out of the jaws on its way to the crate: that solver
-meets the jaws as copies of the robot's bodies, posed anew from the arm
+would let a truss slide out of the jaws on its way to the crate, since that
+solver meets the jaws as copies of the robot's bodies, posed anew from the arm
 every step. So once the shear is shut, the segment of the cut peduncle
 between the jaws is held where it lies in them and carried with the hand,
 `Shears.hold`, the rest of the truss hanging from it. The shear opening
@@ -226,17 +226,18 @@ every stem but the 20 cm either side of the cut of the one it is made
 beside, which the shear slides along closer than the spheres cuRobo covers
 it in allow; the fold that follows leaves that stretch out too. Failing
 that, the arm may brush the truss it cuts, and failing that any truss,
-since the rods bend aside as they do round a picker's arm. The trolley, the
-rails, the floor and every other stretch of stem it never touches. The
+since the rods bend aside as they do round a picker's arm. It never touches
+the trolley, the rails, the floor or any other stretch of stem. The
 straight lines in, out and across the path are solved point by point, not
 planned, so they stay on the branch of the arm cuRobo reached the stand-off
 on, and within the joint range cuRobo plans in, so the fold that follows
 plans from where they end. The swing to the crate may brush any truss,
 which leaves cuRobo fewer to keep the arm off and the mouth less to turn
-on the way. Where the arm already touches what cuRobo keeps it off, a stem
-say, cuRobo finds no fold, and the arm folds on straight lines in joint
+on the way. Where the arm already touches what cuRobo keeps it off, such as a
+stem, cuRobo finds no fold, and the arm folds on straight lines in joint
 space instead: out of the crop with the shoulder pan held, then round.
-Turned while still out, it would sweep along the crop wall into the stems.
+Turned while still reaching into the crop, it would sweep along the crop
+wall into the stems.
 
 ## Recording the video
 
@@ -250,9 +251,9 @@ renderer and headless, and writes
 `target/video/harvest.mp4` at the repo root, captioned and small enough to
 upload, and a contact sheet beside it. Its storyboard -- the shots, the takes,
 the pacing -- is the top of `video.py`, and the run fails if a take's truss
-was not cut. Run from the repo root on the branch whose pull request changes
-the video,
-`docs/video/publish.sh target/video/harvest.mp4 examples/greenhouse_demo/README.md`
+was not cut.
+`docs/video/publish.sh target/video/harvest.mp4 examples/greenhouse_demo/README.md`,
+run from the repo root on the branch whose pull request changes the video,
 uploads it and points the video line above at it.
 
 ## Layout
