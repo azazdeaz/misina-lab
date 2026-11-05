@@ -351,6 +351,15 @@ extents, which an earlier builder would author as a plain cube.
 
 ### Fixed
 
+- **misina-lab**: The rods' solver keeps up to 1024 contacts for each body,
+  `rods.BODY_CONTACTS`, where it kept Newton's 64. A robot body that meets
+  rods as a proxy touches every rod shape against it at once, and VBD
+  dropped its contacts past 64 and printed a warning every substep: in the
+  greenhouse harvest demo the crate filled to about 500 and the shear
+  reached about 180, some 175,000 warnings a run. Solving all of them on
+  Newton's four threads per body made a run half again as long, so new
+  `rods.widen_contact_threads()`, which the harvest demo calls once the app
+  is up, gives each body 32, and a run takes 3% longer than it did.
 - **misina-lab**: `tune_rods` counts a rod under no plant's prim as a plant
   of its own, so it meets the ground, the posts and the robot. It had taken
   the scene's group, which the ground shares, and passed through it.

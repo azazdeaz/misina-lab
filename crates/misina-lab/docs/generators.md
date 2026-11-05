@@ -1,5 +1,9 @@
 # Generators
 
+> [!WARNING]
+> **Under development.** This page may not reflect the current state of
+> the source. We're working on it.
+
 A **generator** is the one type the whole framework is keyed on. It names the
 params aggregate, the scene and the Python package, and adds the element
 plugins. Everything else, the panel, the headless build, the snippet, the
@@ -62,8 +66,8 @@ is scene-wide beyond the seed every element draws from
 Everything that authors the scene runs in `PreUpdate`, inside the `Build`
 set. A generator chains its own sets inside it, one per layer, in build
 order: the terrain first, then whatever places things on it, then what hangs
-off those. The chain is what makes the pipeline a pipeline; each set has
-finished spawning before the next one queries ([elements.md](elements.md)).
+off those. The chain orders the layers: each set has finished spawning
+before the next one queries ([elements.md](elements.md)).
 The panel commits an edit before `Build`, and the perf marks bracket it.
 
 ## What the framework builds from it
@@ -79,8 +83,8 @@ The panel commits an edit before `Build`, and the perf marks bracket it.
 
 The generator's `main` is `viewer::app::<G>()` plus whatever viewer-only
 plugins it wants, run. The camera starts where `viewer::Framing` says, framed
-for a scene about 80 by 50 m unless `main` inserts one of its own. Its
-`lib.rs` holds the `Generator` impl and, under its
+for a scene about 80 by 50 m unless `main` inserts one of its own. The
+generator's `lib.rs` holds the `Generator` impl and, under its
 `python` feature, the `#[pymodule] fn _core` that calls the `module` function
 the macro wrote.
 
@@ -97,8 +101,9 @@ value would hand back a copy.
 Every fragment gets a keyword-only constructor that sets fields by name
 through reflection, so the Rust side has no signature to keep in step with
 the struct; the typed signature tooling sees is the generated `_core.pyi`. A
-`@Choices` field is validated where it enters from Python, with a
-`ValueError` for a name off the list.
+`@Choices` field is checked when the aggregate is handed to `write_usd` or
+`generate_scene_json`, with a `ValueError` for a name off the list; setting
+it checks nothing.
 
 The aggregate has two entry points. `write_usd(path)` runs one headless
 build, serializes the document and hands it to `misina_lab.usd.build_usd`,

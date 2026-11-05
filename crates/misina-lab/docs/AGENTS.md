@@ -73,7 +73,10 @@ about 200 lines.
 A page is read on GitHub, in an editor and on a rendered site; the
 README is read through rustdoc as well. Write what all of them agree on: one
 H1, fenced code with a language tag, tables, Mermaid for diagrams. No raw
-HTML, and no renderer-specific callouts such as `!!! note` or `> [!NOTE]`.
+HTML, and no renderer-specific callouts such as `!!! note`. The one
+exception is the `> [!WARNING]` under a page's title, which GitHub and the
+site draw as an alert and an editor as a blockquote: it says the page has
+not been checked against the current source, and is removed once it has.
 
 ## Keeping a page current
 

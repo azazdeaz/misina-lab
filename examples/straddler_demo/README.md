@@ -2,8 +2,8 @@
 
 A portal field robot driving every row of a
 [generated vineyard](../../crates/vinery-lab/README.md): a leg in the
-alley either side of the row, the trellis passing under its frame. The navigation 
-path is derived from the USD. No sensor input is used in this demo. 
+alley either side of the row, the trellis passing under its frame. The navigation
+path is derived from the USD. No sensor input is used in this demo.
 
 **Contents:** [Requirements](#requirements) ·
 [Running the demo](#running-the-demo) ·
@@ -46,9 +46,9 @@ backend -- spawns the stray shoots static, at the same lean.
 films the robot driving down a row of the default scene with a third of its
 shoots strayed into the alleys, from behind and above it, in Isaac Sim's RTX renderer and headless, and writes `target/video/straddler.mp4` at the repo root, small enough to upload,
 and a contact sheet beside it. The shot and its length are the top of
-`video.py`. Run from the repo root on the branch whose pull request changes
-the video,
-`docs/video/publish.sh target/video/straddler.mp4 examples/straddler_demo/README.md`
+`video.py`.
+`docs/video/publish.sh target/video/straddler.mp4 examples/straddler_demo/README.md`,
+run from the repo root on the branch whose pull request changes the video,
 uploads it to that pull request and puts it on this page.
 
 ## What it shows
@@ -132,7 +132,7 @@ the wheels — so there is no manufacturer's description in here to be bound by.
 ## Layout
 
 | file | what it owns |
-| —- | —- |
+| --- | --- |
 | `main.py` | the vineyard, the sky, the robot, the simulation loop, the trimming |
 | `straddler.py` | the robot: its dimensions, the URDF built from them, the actuators, the trimmer |
 | `route.py` | waypoints down every row, read off the trellis posts |

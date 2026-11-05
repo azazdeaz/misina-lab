@@ -1,5 +1,9 @@
 # Elements
 
+> [!WARNING]
+> **Under development.** This page may not reflect the current state of
+> the source. We're working on it.
+
 An **element** is one module per kind of thing in the scene: a post, a
 plant, a leaf, a patch of ground cover. It owns a params fragment, a config
 component, a metric over configs, a build system, and the plugin that wires
@@ -137,9 +141,8 @@ spawned by the layer above and writes configs for the layer below; nothing
 reaches across by prim path.
 
 **Ordering is a `SystemSet` enum**, one variant per layer, chained once in
-the generator's plugin inside `Build`. The chain is what makes the pipeline
-a pipeline: each set must have finished spawning before the one after it
-queries.
+the generator's plugin inside `Build`. The chain orders the layers: each
+set must have finished spawning before the one after it queries.
 
 **Rebuild only on change.** `run_if(configs_changed::<XConfig>)` is the
 dirty-tracking mechanism; curve tessellation is expensive enough that this
@@ -152,7 +155,7 @@ layer owns the configs the layer above placed, so it runs a `reauthor` pass
 that writes its own params onto them with `set_if_neq` and leaves everything
 else, the position and the draws they were authored from, exactly where it
 was. Editing a leaf param therefore re-cuts the blades instead of replanting
-the scene to reach them. Only a param that reaches no config field, any
+the scene to reach them. Only a param that reaches no config field, such as
 `variations`, still needs a `resource_changed` on the layer's own build.
 
 **Combine run conditions with `or_eager`, never `or_else`.** `or_else`
@@ -168,10 +171,10 @@ them and on its own params, and has no `reauthor`: re-authoring the layer
 
 **A categorical param is a string naming one of the element's fixed list**,
 parsed once into a Rust enum with `ALL`, `NAMES` and `parse`, and declared on
-the field as `@Choices(&Kind::NAMES)`. The name is validated where it enters
-from Python; the element itself falls back to the default with a warning,
-because a build system is no place to fail. The viewer offers the list as a
-dropdown and only ever writes a valid name.
+the field as `@Choices(&Kind::NAMES)`. The name is checked when the
+aggregate is handed to a build from Python; the element itself falls back to
+the default with a warning, because a build system is no place to fail. The
+viewer offers the list as a dropdown and only ever writes a valid name.
 
 **Determinism.** Bevy's query iteration order is not stable across runs and
 a codebook has to be a function of its population alone, so every organ

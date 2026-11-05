@@ -1,5 +1,9 @@
 # Isaac Lab
 
+> [!WARNING]
+> **Under development.** This page may not reflect the current state of
+> the source. We're working on it.
+
 `misina_lab.isaaclab` spawns a generated scene as an ordinary Isaac Lab scene
 asset. A generator's cfg is a `@configclass` extending `GeneratedSceneCfg`,
 with one field per fragment mirroring its `*Params` classes. On first use
@@ -42,7 +46,7 @@ them is hand-written.
 | `FRAGMENTS` | the fragment fields by name, in the order the aggregate takes them; what `to_params` converts and the cache key is built from |
 | `PLANT` | the prim name a rod belongs to, `Plant` for `Plant_007`, for a scene that can author one; everything under one plant's prim collides as a group |
 | `without_rods()` | this cfg with nothing flexible in it, or `None` when it authors no rod as it stands; the default authors none |
-| `cache_dir`, `force_regenerate` | where the files go, `$<PACKAGE>_CACHE_DIR` or `~/.cache/<package>/scenes` by default, and whether to skip a hit |
+| `cache_dir`, `force_regenerate` | where the files go, `$<PACKAGE>_CACHE_DIR`, else `$XDG_CACHE_HOME/<package>/scenes`, else `~/.cache/<package>/scenes`, and whether to skip a hit |
 
 The fragments are dataclasses rather than the pyclasses themselves: a
 pyclass has no `__dict__` for `class_to_dict` to walk and cannot be
@@ -71,12 +75,12 @@ authored as a `Cable` ([export.md](export.md#colliders)), imported by Newton
 as a **rod**: one capsule body per segment, as thick as the organ is drawn
 there, joined by rod joints and clamped to the wood it grew from. Only
 Newton's VBD solver steps one, and a robot needs MuJoCo, so a scene with any
-runs the two side by side as entries of a coupled solver, `rigid` and
+rods runs the two side by side as entries of a coupled solver, `rigid` and
 `rods`, with the robot's bodies handed across as proxies.
 `make_physics_cfg_newton(cfg, robot, contact_bodies, substeps)` picks
 between that and plain MJWarp by asking `cfg.without_rods()`.
 
-The choice is provisional, an override can replace the backend before the
+The choice is provisional: an override can replace the backend before the
 scene is built, so the spawner checks the cfg against the backend in force
 when it runs. Where nothing steps a rod the scene is spawned from
 `without_rods()` instead, the same shapes as static meshes. Where something
@@ -89,12 +93,12 @@ plant. A rod under no plant's prim is a plant of its own. Without the
 grouping the model holds a candidate pair for every two segments in the
 scene. The tuning numbers were measured on metre-long rods
 tapering from a centimetre across; `rods.py` says what each one does and
-what went wrong at other values. The same hook first seats every collider
+what goes wrong at other values. The same hook first seats every collider
 authored under a segment's prim on the segment's body, `carry_riders`: the
 importer reads one as static, since the prim is no rigid body, and left so
 it would stand where it was authored while the segment moved on. Seated, it
 moves and falls with the segment, takes the plant's group, and passes
-through its own rod, which it was authored to clear by little. Once the
+through its own rod, which it was authored just clear of. Once the
 groups are set, `let_rods_out_of_their_wood` lets every shape on a rod's
 body, a segment's own or a rider's, through any static shape of its own
 plant it is authored overlapping, its wood or its support: a proxy is
@@ -111,8 +115,9 @@ segment's frame as its normals ([export.md](export.md#colliders)), and the
 importer turns every body about its segment to match.
 
 `Shears` cuts a rod anywhere along it while the simulation runs, and the
-piece lands on the stub it was cut from. How, given that Newton allows no
-new body once the model is built, is [cutting.md](cutting.md).
+piece lands on the stub it was cut from. Newton allows no new body once the
+model is built; [cutting.md](cutting.md) is how a cut is made from the
+bodies the model already has.
 
 ## Moving a collider
 
@@ -133,7 +138,7 @@ at what pose, is the tool's own geometry, so that rule lives with the tool.
 ## Seeing the colliders
 
 Kit draws a PhysX scene's colliders on request, from the physics schema on
-the stage. A Newton model's it knows nothing of, so `ColliderView` draws
+the stage, and knows nothing of a Newton model's, so `ColliderView` draws
 them: every collision shape of the running model as a translucent primitive
 of its shape and size, blue for the static scene, green for a rod and magenta
 for any other body.
@@ -185,8 +190,8 @@ renderer, for a script that samples the camera every so many physics steps,
 so the video plays in simulated time however long the steps take to compute.
 `sensor` makes the camera; `Rig` moves it from shot to shot, easing on a smoothstep, and cuts
 instead when the move is long enough to fly through the scene; `develop`
-renders each frame several times over, as the renderer's anti-aliasing and
-denoisers leave a scene that has just moved with ragged, flickering edges;
+renders each frame several times over, because the renderer's anti-aliasing
+and denoisers leave a scene that has just moved with ragged, flickering edges;
 `Film` pipes the frames to ffmpeg and writes their captions beside the video
 as SubRip. The module's docstring has the loop a script runs.
 

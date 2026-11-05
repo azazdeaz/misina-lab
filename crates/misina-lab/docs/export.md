@@ -1,5 +1,9 @@
 # Export
 
+> [!WARNING]
+> **Under development.** This page may not reflect the current state of
+> the source. We're working on it.
+
 The scene is built in Bevy as ordinary entities and leaves the crate as a
 **scene document**: plain JSON saying what geometry exists, where it goes
 and what references what. Python turns the document into a USD stage. Rust
@@ -19,15 +23,15 @@ a .usd stage
 
 There is no intermediate representation on the Rust side and no second
 scene graph: the entities the viewer draws are the entities the export
-walks, so there is no preview shape and export shape to keep in step.
+walks, so there is no separate preview shape and export shape to keep in step.
 
 ## Coordinates
 
 The scene is authored **Z-up, in meters**, REP-103, which is what both Isaac
 Lab and ROS use. `upAxis` is root-layer-only metadata that does not compose
 through references, so a consumer cannot correct for a stage that gets it
-wrong, and USD's unauthored default is Y-up: silence is not neutral here, it
-is wrong.
+wrong, and USD's unauthored default is Y-up, so a stage that does not
+author it is Y-up.
 
 Bevy's renderer is Y-up, so the viewer's correction is a single parent
 entity above the scene root carrying `scene::z_up_to_y_up()`. The export
@@ -55,15 +59,14 @@ static; a node's `attributes` are custom attributes of that prim.
 
 `misina_lab.usd.build_usd(doc, path)` turns the document into a stage, and
 `python -m misina_lab.usd scene.json scene.usd` does it from the command
-line, which is what the viewer's save key hands you. The builder's docstring
+line, which builds what the viewer's `S` key writes. The builder's docstring
 holds every USD rule the project depends on, each of which fails *silently*
 if dropped: stage metadata, the parts library as a `class` inside the
 default prim, `subdivisionScheme = "none"`, `extent`, `displayColor` at
 `constant` interpolation, one MDL material per drawn prim as a child of it,
 a `UsdPreviewSurface` reading a per-vertex `displayColor` instead for a part
-coloured per point, since OmniPBR reads no primvar, and the one that is
-easiest to get wrong: a part is an `Xform` *wrapping*
-its `Mesh` rather than a bare `Mesh`. A USD instance shares its
+coloured per point, since OmniPBR reads no primvar, and a part as an `Xform`
+*wrapping* its `Mesh` rather than a bare `Mesh`. A USD instance shares its
 *descendants* through a prototype while the instance prim's own attributes
 stay on the instance, so referencing a bare mesh and marking it instanceable
 yields an empty prototype and a full copy of the points on every instance:
@@ -94,7 +97,7 @@ segment's +Y, because the importer builds each body in the frame they give:
 left to frame the curve itself, it works in the world rather than the
 organ, and turns a body about its segment off its prim by as much as half a
 turn, carrying everything on the prim round with it. What hangs off it
-without being simulated, fruit say, weighs on it as the cable's `loads`. A
+without being simulated, such as fruit, weighs on it as the cable's `loads`. A
 collider authored under a segment's prim is imported static all the same,
 since the prim is no rigid body; `rods.carry_riders`, which the rod tuning
 runs, seats it on the segment's body
