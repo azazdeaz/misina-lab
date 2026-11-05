@@ -1,5 +1,9 @@
 # A generator in its own repository
 
+> [!WARNING]
+> **Under development.** This page may not reflect the current state of
+> the source. We're working on it.
+
 A generator outside this repository depends on both halves of misina-lab:
 the Rust crate by git, and the Python package by version. Its repository
 holds one crate that is the generator, its viewer and its Python extension

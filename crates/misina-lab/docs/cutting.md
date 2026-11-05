@@ -1,13 +1,19 @@
 # Cutting
 
+> [!WARNING]
+> **Under development.** This page may not reflect the current state of
+> the source. We're working on it.
+
 A cut parts a rod anywhere along it while the simulation runs, and lets the
-part past the cut fall. A rod is how Newton steps a flexible organ, a chain
-of capsule bodies tied by rod joints, and Newton allows no new body and no
-new joint once the model is built, so a cut is made from what the model
-already holds: the joint nearest the cut is moved onto it, the two capsules
-either side are resized to meet there, and the joint is turned off. One more
-thing is needed for the two faces of the cut to touch rather than pass
-through each other, and that is the part of this page that is not obvious.
+part past the cut fall. Newton steps a flexible organ as a rod, a chain of
+capsule bodies tied by rod joints, and allows no new body and no new joint
+once the model is built, so a cut is made from what the model already
+holds: the joint nearest the cut is moved onto it, the two capsules either
+side are resized to meet there, and the joint is turned off. The two faces
+of the cut would then pass through each other, since the joint's filter kept
+its two bodies out of the fixed contact-pair list;
+[Letting the two faces meet](#letting-the-two-faces-meet) is how a row is
+opened for them.
 
 ```python
 from misina_lab.isaaclab import Shears
@@ -55,7 +61,7 @@ Two facts about the collision side decide how a cut has to be made:
 ## Where a cut lands
 
 `cut(body, at)` takes a fraction of the body's capsule, 0 at the end nearer
-the wood. Three cases, all ending with one joint turned off:
+the wood. Three cases; each that cuts anything ends with one joint turned off:
 
 | the cut | what happens |
 | --- | --- |
@@ -63,8 +69,9 @@ the wood. Three cases, all ending with one joint turned off:
 | on a rod's last body, or on the stub an earlier cut left | the whole body goes, since nothing past it could carry the offcut; within `SPLINTER` of the free end, nothing goes |
 | anywhere else | the joint past the body is moved to the cut first, then turned off |
 
-`cut_through` cuts a rod through the rectangle twice at the crossing nearer
-the wood: the other is on the piece that falls.
+A rod that passes through the rectangle twice is cut once by `cut_through`,
+at the crossing nearer the wood: the other crossing is on the piece that
+falls.
 
 ## A cut only writes values
 
@@ -120,10 +127,11 @@ segment down, then tips off it.
 The list cannot grow once something reads it, but there is a moment when
 nothing does: the model is finalized, and no collision pipeline and no
 solver entry has taken the list yet. Isaac Lab fires `PHYSICS_READY` in
-that window, and `rods.ContactSlots`, registered there by `tune_rods`,
-replaces the list with a longer one: every row it had, then one spare row
-per rod joint. The spare rows are *parked* on a pair of two static shapes,
-which the broad phase drops before testing their boxes, wherever they are:
+that window, and `rods.reserve_contact_slots`, registered there by
+`tune_rods`, builds a `rods.ContactSlots` that replaces the list with a
+longer one: every row it had, then one spare row per rod joint. The spare
+rows are *parked* on a pair of two static shapes, which the broad phase
+drops before testing their boxes, wherever they are:
 two static shapes never make a contact, so a parked row costs next to
 nothing.
 
@@ -132,12 +140,12 @@ shapes into the joint's row, and from the next step the broad phase tests
 them like any other pair. The filter pairs still name them, but nothing
 reads the filter pairs after finalize.
 
-One more write goes with it. A capsule's round end reaches a radius past
-the end of its span, so two capsules that meet at a cut overlap there by a
-whole rod thickness, and the first contact between them would shove the
-halves apart. So each is pulled back one radius at its cut face: the
-collider ends a radius short of the span, the round end reaches exactly to
-the cut, and the two touch there. The drawn tube keeps the full span. A
+A second write pulls the two faces back. A capsule's round end reaches a
+radius past the end of its span, so two capsules that meet at a cut overlap
+there by a whole rod thickness, and the first contact between them would
+shove the halves apart. So each is pulled back one radius at its cut face:
+the collider ends a radius short of the span, the round end reaches exactly
+to the cut, and the two touch there. The drawn tube keeps the full span. A
 cut at a joint pulls back the same two faces; a splinter's collider can
 shrink to a sphere and no further.
 

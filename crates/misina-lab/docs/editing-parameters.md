@@ -1,5 +1,9 @@
 # Editing parameters
 
+> [!WARNING]
+> **Under development.** This page may not reflect the current state of
+> the source. We're working on it.
+
 A parameter is declared once, on a field of a `*Params` struct in Rust.
 Everything else reads that declaration:
 
@@ -23,7 +27,7 @@ is the generator.
 
    ```rust
    /// Edge length of a box, in meters. The default is the crate a market
-   /// stall stacks, which is the commonest box there is.
+   /// stall stacks.
    ///
    /// Anything after the first paragraph is for a reader of the Rust.
    #[reflect(@Slider { min: 0.1, max: 2.0, step: 0.1 })]
@@ -50,7 +54,7 @@ by hand; the next regeneration overwrites them.
 the Python docstring and the row in the parameters page, so write it to
 stand on its own, with no rustdoc link syntax (`[`like this`]`). Backticks
 are fine; the tooltip drops them. Later paragraphs are for the Rust reader
-and may say what they like. A struct's doc comment is user-facing in full:
+and reach no other surface. A struct's doc comment is user-facing in full:
 it becomes the class docstring, so it should say what the element is and how
 its fields relate.
 

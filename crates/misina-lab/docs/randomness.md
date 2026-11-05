@@ -1,9 +1,14 @@
 # Randomness
 
+> [!WARNING]
+> **Under development.** This page may not reflect the current state of
+> the source. We're working on it.
+
 One seed for the whole scene, held on the generator's scene-wide params.
-Every layer salts it with a constant of its own before drawing, so nudging
-one layer never re-rolls another: tuning how many stems a plant carries must
-not reshape the trunk under them.
+Every layer but the terrain salts it with a constant of its own before
+drawing, so nudging one layer never re-rolls another: tuning how many stems
+a plant carries must not reshape the trunk under them. The terrain has no
+seed parameter yet, and draws its noise from a fixed seed of its own.
 
 ```text
 a representative's mesh   seed ^ LAYER_STREAM ^ salt(representative index)
