@@ -104,6 +104,33 @@ worst stiffer still; damped there, rods fold over and pump themselves into a
 swing that never stops.
 """
 
+BODY_CONTACTS = 1024
+"""How many contacts the rods' solver keeps for each body, where Newton's
+default is 64.
+
+VBD files every contact under each body it touches, drops a body's contacts
+past this many and prints a warning every substep it does. A rod segment
+touches a handful. A robot body handed to the rods as a proxy touches every
+rod shape against it at once, up to six points each against a box: a crate
+holding nineteen cut pieces of rod reaches about 500, a shear closed on a rod
+about 180. Each slot costs four bytes per body, and a body's solve visits
+only the contacts it has -- on Newton's four threads, unless
+`widen_contact_threads` gives it `CONTACT_THREADS`."""
+
+CONTACT_THREADS = 32
+"""How many GPU threads VBD solves one body's contacts with, where Newton
+uses 4; `widen_contact_threads` sets it.
+
+A body's contacts are shared out among its threads, and every other body of
+its colour waits for the busiest, so a crate holding ~480 contacts on four
+threads made a whole run 47% slower than the 64-contact cap had. 32 brings
+the busiest body's share back to what 64 contacts on four threads was
+(480 / 32 = 15, against 16), and the run to 2.6% over it. Any count is
+correct: the kernels use it only as `tid // n`, `tid % n`, a strided loop
+`i += n` and a launch size `rows * n` behind a body guard. The 2.6% left is
+the five atomic adds each thread makes at the end of the per-body contact
+kernel, whether it had a contact or not."""
+
 PLANT_GROUPS = 2
 """The first collision group a plant takes; each plant gets the next one up.
 
@@ -489,6 +516,31 @@ def steps_rods(physics: PhysicsCfg | None) -> bool:
     return any(isinstance(each, VBDSolverCfg) for each in solvers)
 
 
+def widen_contact_threads() -> None:
+    """Solve each body's contacts with `CONTACT_THREADS` threads in VBD.
+
+    Call it once Newton can be imported -- under Isaac Lab, after the app is
+    launched -- and before the simulation is stepped. Warp reads the thread
+    count into a kernel when it first builds the kernel's module, while the
+    launch sizes read it at every launch, so a call after the build would
+    leave the kernels on four threads and the launches sized for 32. It
+    asserts that no such module is built yet.
+    """
+    # TODO: drop once Newton takes the body-body contact thread count as a
+    # SolverVBD parameter; through 1.8.0rc1 it is the module constant
+    # `_NUM_CONTACT_THREADS_PER_BODY` read at codegen, while the body-particle
+    # path took a runtime count there.
+    import warp as wp
+    from newton._src.solvers.vbd import rigid_vbd_kernels, solver_vbd, vbd_coupling_kernels
+
+    # Each holds its own binding of the constant.
+    modules = (rigid_vbd_kernels, solver_vbd, vbd_coupling_kernels)
+    built = [module.__name__ for module in modules if wp.get_module(module.__name__).execs]
+    assert not built, f"{built} already built: call widen_contact_threads before the first step"
+    for module in modules:
+        module._NUM_CONTACT_THREADS_PER_BODY = wp.constant(CONTACT_THREADS)
+
+
 def make_physics_cfg_newton(
     cfg: GeneratedSceneCfg,
     robot: str,
@@ -533,7 +585,9 @@ def make_physics_cfg_newton(
                     # default stays quiet. Compliant ALM settles a rod alike on
                     # the numbers above, costs a little more, and under contact
                     # two runs of one scene drift apart where these repeat.
-                    solver_cfg=VBDSolverCfg(rigid_compliant_alm=False),
+                    solver_cfg=VBDSolverCfg(
+                        rigid_compliant_alm=False, rigid_body_contact_buffer_size=BODY_CONTACTS
+                    ),
                     # Under any path: only the rod importer labels a body so.
                     bodies=[rf".*/{CABLE}{_ROD_BODY_SUFFIX}"],
                     # An entry that lists no shape still sees its own bodies'
