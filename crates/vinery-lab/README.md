@@ -98,8 +98,8 @@ vineyard = AssetBaseCfg(prim_path="/World/Vineyard", spawn=VINEYARD_CFG)
 ```
 
 Declare it in a scene: under Newton, the physics holds only the assets a scene
-declares, so a vineyard spawned straight onto the stage is one nothing collides
-with. A plain script builds an `InteractiveScene` around it, as `design_scene`
+declares, so nothing collides with a vineyard spawned straight onto the
+stage. A plain script builds an `InteractiveScene` around it, as `design_scene`
 in the [quadruped example](../../examples/isaaclab_demo/main.py) does.
 
 ## Examples

@@ -2,8 +2,8 @@
 
 A stock ANYmal-C walking every alley of a
 [generated vineyard](../../crates/vinery-lab/README.md), down one and
-back up the next. The navigation path is derived from the USD, no sensor input
-is used in this demo. 
+back up the next. The navigation path is derived from the USD; no sensor input
+is used in this demo.
 
 **Contents:** [Requirements](#requirements) ·
 [Running the demo](#running-the-demo) · [Layout](#layout)

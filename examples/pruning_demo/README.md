@@ -109,8 +109,9 @@ UR5 -- and a bypass shear in its hand. So is the pipeline, minus the cameras:
    the cane: the pivot along it, the blades along the approach, aimed afresh
    at the buds when the cut's turn comes. The arm plans to a point 15 cm out,
    where the cut is aimed once more -- the swing out brushes through the
-   canes, the one to cut among them, with the shear shut, as the hook's claw
-   would gather one into the open mouth and carry it on to every cut after --
+   canes, the one to cut among them, with the shear shut, since the claw of an
+   open hook would gather one into the mouth and carry it on to every cut
+   after --
    then opens the shear, closes in on a straight line to the cut and settles
    there. The shear's head and blades collide with the canes,
    so a cane the mouth comes in on is funnelled between the edges or pushed
@@ -130,7 +131,7 @@ UR5 -- and a bypass shear in its hand. So is the pipeline, minus the cameras:
    the cordon -- the ground and the robot, and passes through every other
    vine: it catches on the stub for a moment, tips, and slides down beside
    it. One that falls into the open mouth or onto the blades would ride
-   along to the next cut, where the blade does not cut it, being loose; so
+   along to the next cut, where the blade does not cut it, since it is loose; so
    the arm, backed out, tips the blades down until it slides off.
 
 The score is printed after every vine, and against the paper's at the end:
@@ -196,8 +197,9 @@ A cane the blade is still carrying across is not cut before the blades
 meet, even when it has sunk into the blade past its axis: the solver lets a
 pushed cane sink in a little, and a cut there would be made in mid-air.
 Nothing is crushed between the blades and nothing the cane leans on is
-pulled from under it. Opening, a standing slice rides the blade again once
-that has opened back past it, so every stroke starts with the blade whole:
+pulled from under it. As the shear opens, a standing slice rides the blade
+again once the blade has opened back past it, so every stroke starts with
+the blade whole:
 
 ```mermaid
 stateDiagram-v2
