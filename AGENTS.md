@@ -121,6 +121,14 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinery_lab`,
   [CHANGELOG.md](CHANGELOG.md)**, in the same change, marked the way the
   changelog's header says when it bumps the scene document format or changes
   a cfg class.
+- **Nothing a seed builds is pinned before the first major release.** A
+  change that makes a mesh or a layout better lands even though it moves
+  every vertex a seed builds, in any crate; no test compares a scene with a
+  stored one, and nothing downstream is promised the same bytes. What it
+  changes the look of is re-rendered where the docs picture it
+  ([docs-shots](.claude/skills/docs-shots/SKILL.md)). The scene document's
+  `FORMAT` is the one contract that is versioned, as the changelog's header
+  says.
 - **The `python` feature is off by default**, so a plain `cargo clippy` never
   sees the PyO3 side. Pass `--features vinery-lab/python,greenhouse-lab/python`,
   as CI does.
