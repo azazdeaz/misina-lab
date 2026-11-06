@@ -131,6 +131,8 @@ The peduncle numbers default to the means measured on medium trusses in a high-w
 | `peduncle_length` | float | `0.079` | 0.03 to 0.14 | Length of the peduncle from the stem to the first fruit, in meters. |
 | `peduncle_diameter` | float | `0.007` | 0.004 to 0.012 | Diameter of the peduncle, in meters. |
 | `peduncle_angle` | float | `70.0` | 5 to 139 | Angle between the stem and the peduncle where it leaves, in degrees: 90 leaves level, less leaves rising. |
+| `pedicel_angle` | float | `45.0` | 0 to 50 | How far under the rachis its pedicels leave it, in degrees below its sides: 0 leaves them level out to the sides, and more hangs the fruit further under it. At 45 the two ranks, down alternate flanks, meet at a right angle, as they do on a tomato truss; past 50, neighbouring fruit hang into each other. |
+| `jointed` | bool | `True` |  | Whether a pedicel has a knuckle, the joint a fruit breaks off at, as most truss varieties do. |
 | `missing_fruit` | float | `0.05` | 0 to 0.3 | Chance that a fruit is missing from its pedicel. |
 | `variations` | int | `16` | 1 to 64 | How many distinct truss meshes the scene may hold. A budget, not a count: the trusses are clustered and this is how many representatives the clustering may keep. |
 
@@ -151,5 +153,4 @@ Every fruit draws its own lobe count, its five or six sepals and how each curls,
 | `color` | str | `"red"` | `red`, `orange`, `yellow`, `brown` | The colour a ripe fruit turns: `red`, `orange`, `yellow` or `brown`. |
 | `aspect` | float | `0.9` | 0.5 to 1.8 | Height of a fruit over its width: under 1 is oblate, as round truss tomatoes and beefsteaks are, and over 1 elongated, as plum tomatoes are. Each fruit draws a little either side. |
 | `ribbing` | float | `0.03` | 0 to 0.3 | Depth of the grooves between a fruit's lobes, as a fraction of its radius: 0 is smooth, and a beefsteak's are about 0.15. |
-| `jointed` | bool | `True` |  | Whether a pedicel has a knuckle, the joint a fruit breaks off at, as most truss varieties do. |
 | `variations` | int | `24` | 1 to 64 | How many distinct fruit meshes the scene may hold, by size, shape and stage. A budget, not a count: the fruit are clustered and this is how many representatives the clustering may keep. |
