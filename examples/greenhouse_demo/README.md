@@ -180,9 +180,12 @@ every step. So once the shear is shut, the segment of the cut peduncle
 between the jaws is held where it lies in them and carried with the hand,
 `Shears.hold`, the rest of the truss hanging from it. The shear opening
 lets it go and swings the finger down and away from under the peduncle,
-and the truss drops; one the rubber still holds up on the finger's slope
-is tipped off by turning the blades down about the peduncle, as the
-pruning demo tips out a piece of cane.
+and the truss slides off the finger's slope and drops: nothing grips by
+friction, so the hand's colliders, the shear's among them, slip, with a
+friction coefficient of 0.25, 0.5 against a peduncle. One still lying on
+the finger, where the shear was tilted up for the cut, is tipped off by
+turning the blades down about the peduncle, as the pruning demo tips out a
+piece of cane.
 
 The blade crosses the peduncle half a centimetre past its rod's first
 joint, and `Shears.cut` makes the cut at the joint. Now and then the

@@ -97,6 +97,13 @@ FINGER_SPRING = (2.0, 0.05, 0.0005)
 kg m^2, holding it against the cutting blade. A 7 mm peduncle against the
 hook halfway along it stops the finger 7 to 11 degrees short of shut, so
 with the blade shut the finger presses it with about 10 N."""
+HAND_FRICTION = 0.25
+"""The friction coefficient of every collider on the last wrist, the shear's
+among them: its head, both blades, the jaw and the finger. Newton takes a
+contact's as the geometric mean of the two shapes', so against a peduncle at
+the default 1.0 it is 0.5, a friction angle of 27 degrees, and a truss let
+go slides off the open finger, sloped about 30 degrees under it, as the
+shear opens. Nothing grips by friction: `harvest` holds a cut truss by rule."""
 
 AIM = (0.5, 0.0045)
 """Where the mouth brings a peduncle: half the blade's length out from the
@@ -502,6 +509,7 @@ def harvester_cfg(machine: Harvester, prim_path: str, position) -> ArticulationC
     return ArticulationCfg(
         prim_path=prim_path,
         spawn=sim_utils.UrdfFileCfg(
+            func=spawn_harvester,
             asset_path=write_urdf(machine),
             usd_dir=str(_CACHE),
             fix_base=True,
@@ -561,6 +569,34 @@ def harvester_cfg(machine: Harvester, prim_path: str, position) -> ArticulationC
             ),
         },
     )
+
+
+def spawn_harvester(prim_path: str, cfg: sim_utils.UrdfFileCfg, *args, **kwargs):
+    """Spawn the robot's URDF as `UrdfFileCfg` does, then give every collider
+    on `HAND` `HAND_FRICTION`, which URDF cannot say: a physics material
+    bound to each. USD's physics parser reads a collider's own binding only,
+    not one on the link above it, and the importer makes most of the link's
+    pieces instances, which cannot be edited inside, so they are made plain
+    prims first. It has to be done here, as the scene builds the Newton
+    model's robot from the stage as soon as the robot is spawned."""
+    from pxr import Usd, UsdPhysics, UsdShade
+
+    robot = sim_utils.spawn_from_urdf(prim_path, cfg, *args, **kwargs)
+    material = UsdShade.Material.Define(robot.GetStage(), robot.GetPath().AppendChild("Friction"))
+    api = UsdPhysics.MaterialAPI.Apply(material.GetPrim())
+    api.CreateStaticFrictionAttr(HAND_FRICTION)
+    api.CreateDynamicFrictionAttr(HAND_FRICTION)
+    hands = [p for p in Usd.PrimRange(robot) if p.GetName() == HAND]
+    if not hands:
+        raise ValueError(f"no {HAND} under {robot.GetPath()}")
+    for hand in hands:
+        for instance in [p for p in Usd.PrimRange(hand) if p.IsInstance()]:
+            instance.SetInstanceable(False)
+        for collider in Usd.PrimRange(hand):
+            if collider.HasAPI(UsdPhysics.CollisionAPI):
+                binding = UsdShade.MaterialBindingAPI.Apply(collider)
+                binding.Bind(material, materialPurpose="physics")
+    return robot
 
 
 ##
