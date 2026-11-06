@@ -35,14 +35,23 @@ class Rig:
     """A straight rod of four 10 cm segments along x, a meter up -- or up z
     from a meter, `upright` -- its first body held still the way the importer
     bolts a shoot to the wood. A ground, if `ground` is given, that many
-    meters up. Its segments share the default group, so they collide, but for
-    each pair a joint ties. Two static boxes, for a parked contact row to
-    name."""
+    meters up, in `ground_group`. Its segments share the default group, so
+    they collide, but for each pair a joint ties. Two static boxes, for a
+    parked contact row to name: the rows are reserved under the explicit
+    `broad_phase`, and not under `"nxn"` or `"sap"`."""
 
-    def __init__(self, monkeypatch, ground: float | None = None, upright: bool = False):
+    def __init__(
+        self,
+        monkeypatch,
+        ground: float | None = None,
+        upright: bool = False,
+        broad_phase: str = "explicit",
+        ground_group: int = 1,
+    ):
         builder = ModelBuilder(gravity=(0.0, 0.0, -GRAVITY))
         if ground is not None:
-            builder.add_ground_plane(height=ground)
+            cfg = ModelBuilder.ShapeConfig(collision_group=ground_group)
+            builder.add_ground_plane(height=ground, cfg=cfg)
         along = wp.vec3(0.0, 0.0, 1.0) if upright else wp.vec3(1.0, 0.0, 0.0)
         positions = [wp.vec3(0.0, 0.0, 1.0) + along * (SEGMENT * i) for i in range(5)]
         self.bodies, self.joints = builder.add_rod(
@@ -58,12 +67,13 @@ class Rig:
             builder.add_shape_box(-1, xform=wp.transform((x, 0.0, 0.0), wp.quat_identity()))
         builder.color()
         self.model = builder.finalize()
-        rods.reserve_contact_slots(self.model)
+        if broad_phase == "explicit":
+            rods.reserve_contact_slots(self.model)
         # The path `rods.make_physics_cfg_newton` puts the rods on.
         self.solver = SolverVBD(self.model, iterations=10, rigid_compliant_alm=False)
         self.state, self.next = self.model.state(), self.model.state()
         self.control = self.model.control()
-        self.collision = CollisionPipeline(self.model)
+        self.collision = CollisionPipeline(self.model, broad_phase=broad_phase)
         self.contacts = self.collision.contacts()
         # What `get_model()` and `get_state_0()` read.
         self.backend = types.SimpleNamespace(model=self.model, state_0=self.state)
@@ -187,9 +197,17 @@ def test_a_cut_next_to_a_joint_is_made_at_it(rig, body, at, loose):
     assert (rig.spans() == spans).all()
 
 
-def test_a_cut_piece_lands_on_the_ground_and_lies_there(monkeypatch):
-    """Nothing lays it down: it collides with the ground like any body."""
-    rig = Rig(monkeypatch, ground=0.8)
+@pytest.mark.parametrize(
+    ("broad_phase", "ground_group"),
+    [("explicit", 1), ("nxn", 2), ("sap", 2)],
+    ids=["explicit, the rod's own group", "nxn, a group the rod never met", "sap, the same"],
+)
+def test_a_cut_piece_lands_on_the_ground_and_lies_there(monkeypatch, broad_phase, ground_group):
+    """Nothing lays it down: it collides with the ground like any body. Under
+    NxN or SAP, which read the groups every step, the cut regroups the piece to meet
+    every group but its own, so a ground in a group the rod's never paired
+    with catches the piece."""
+    rig = Rig(monkeypatch, ground=0.8, broad_phase=broad_phase, ground_group=ground_group)
     rig.shears.cut(rig.bodies[1], 0.5)
     rig.step(1.0)
 

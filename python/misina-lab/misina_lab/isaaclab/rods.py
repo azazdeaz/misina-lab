@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 from isaaclab.physics import PhysicsCfg, PhysicsEvent
@@ -36,7 +36,12 @@ from isaaclab_contrib.coupling import (
     CouplerProxyCfg,
     CouplerProxyMappingCfg,
 )
-from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg, VBDSolverCfg
+from isaaclab_newton.physics import (
+    MJWarpSolverCfg,
+    NewtonCfg,
+    NewtonCollisionPipelineCfg,
+    VBDSolverCfg,
+)
 
 if TYPE_CHECKING:
     from isaaclab.physics.physics_manager import CallbackHandle
@@ -139,7 +144,10 @@ while `Model.finalize` builds `shape_contact_pairs`, and sizes every broad- and
 narrow-phase buffer from that list, so N rod segments that may all meet cost
 N(N-1)/2 pairs before a step is taken: ten thousand segments is 55 million
 pairs and 4 GiB. Filtering happens as the list is built, not inside a kernel,
-so a group that declines a pair never allocates it.
+so a group that declines a pair never allocates it. That is the explicit
+broad phase, the default; the NxN and SAP ones `make_physics_cfg_newton` can
+pick instead read the groups in a kernel every step, with a pair buffer sized
+for every pair of shapes.
 
 A group is one signed integer per shape. A positive group meets itself and
 every negative one; a negative group meets everything but its own; zero meets
@@ -189,6 +197,12 @@ class ContactSlots:
 
     A coupled solver's entry clones the list and compacts it to the shapes it
     sees, keeping the order, so the rows are the last `count` of every copy.
+
+    Only the explicit broad phase reads the list. NxN and SAP read the
+    collision groups and the joints' filter pairs every step, so under them
+    `tune_rods` reserves no rows (`reads_contact_pairs`), the two faces of a
+    cut pass through each other, and a cut regroups the piece instead; see
+    `make_physics_cfg_newton`.
     """
 
     def __init__(self, model):
@@ -240,20 +254,20 @@ def reserve_contact_slots(model) -> ContactSlots:
     Before anything takes the model's contact-pair list -- a collision
     pipeline, a coupled solver's entries -- since the list is replaced by a
     longer one. `tune_rods` does this on `PHYSICS_READY`, which Isaac Lab
-    fires in that window; a model built by hand calls it itself.
+    fires in that window, under a broad phase that reads the rows
+    (`reads_contact_pairs`); a model built by hand calls it itself.
     """
     global _slots
     _slots = ContactSlots(model)
     return _slots
 
 
-def contact_slots(model) -> ContactSlots:
-    """The rows reserved on `model`."""
+def contact_slots(model) -> ContactSlots | None:
+    """The rows reserved on `model`, or None where none were: under a broad
+    phase that would not read them, or a model built by hand without
+    `reserve_contact_slots`. `Shears` then opens no row at a cut."""
     if _slots is None or _slots.model is not model:
-        raise RuntimeError(
-            "no contact rows reserved on this model: `tune_rods` reserves them as the model"
-            " is built, or `reserve_contact_slots` does once it is finalized"
-        )
+        return None
     return _slots
 
 
@@ -285,9 +299,10 @@ def tune_rods(
     First seats every collider authored under a segment's prim on the
     segment's body, with `carry_riders`, so it takes the plant's group with
     the rod, and once the groups are set lets each rod through the wood it
-    is authored inside, with `let_rods_out_of_their_wood`. Also registers
-    `reserve_contact_slots` on `PHYSICS_READY`, so a cut can make the two
-    faces of a cut meet; see `ContactSlots`.
+    is authored inside, with `let_rods_out_of_their_wood`. Also reserves the
+    `ContactSlots` rows on `PHYSICS_READY` when the broad phase in force
+    reads them, the explicit one (`reads_contact_pairs`), so a cut can make
+    the two faces of a cut meet.
 
     Registers once. While the registration stands -- the manager drops it when
     the simulation stops -- a further call returns it unchanged, rather than
@@ -371,11 +386,15 @@ def tune_rods(
 
         let_rods_out_of_their_wood(builder)
 
+    def reserve(_payload) -> None:
+        # With no simulation running, as when a test dispatches the event by
+        # hand, Newton's default broad phase, the explicit one, is assumed.
+        sim = SimulationContext.instance()
+        if reads_contact_pairs(sim.cfg.physics if sim is not None else None):
+            reserve_contact_slots(NewtonManager.get_model())
+
     _tuning = NewtonManager.register_callback(tune, PhysicsEvent.MODEL_INIT)
-    NewtonManager.register_callback(
-        lambda _payload: reserve_contact_slots(NewtonManager.get_model()),
-        PhysicsEvent.PHYSICS_READY,
-    )
+    NewtonManager.register_callback(reserve, PhysicsEvent.PHYSICS_READY)
     return _tuning
 
 
@@ -516,6 +535,26 @@ def steps_rods(physics: PhysicsCfg | None) -> bool:
     return any(isinstance(each, VBDSolverCfg) for each in solvers)
 
 
+def reads_contact_pairs(physics: PhysicsCfg | None) -> bool:
+    """Whether the broad phase that finds the rods' contacts under `physics`
+    is the explicit one, which reads the model's contact-pair list and nothing
+    else: the rows `ContactSlots` adds are for it alone. That is the pipeline
+    of each proxy mapping into a VBD entry of a coupled solver
+    (`make_physics_cfg_newton`), or `collision_cfg` under a VBD solver on its
+    own. Either left unset is Newton's default, explicit, and so is a pipeline
+    given as a callable, which names no broad phase."""
+    solver = getattr(physics, "solver_cfg", None)
+    entries = getattr(solver, "entries", None)
+    if entries is None:
+        pipelines = [getattr(physics, "collision_cfg", None)]
+    else:
+        rods = {entry.name for entry in entries if isinstance(entry.solver_cfg, VBDSolverCfg)}
+        pipelines = [m.collision_pipeline for m in solver.proxies if m.destination in rods]
+    return not pipelines or any(
+        getattr(pipeline, "broad_phase", "explicit") == "explicit" for pipeline in pipelines
+    )
+
+
 def widen_contact_threads() -> None:
     """Solve each body's contacts with `CONTACT_THREADS` threads in VBD.
 
@@ -546,6 +585,7 @@ def make_physics_cfg_newton(
     robot: str,
     contact_bodies: Sequence[str],
     substeps: int,
+    broad_phase: Literal["explicit", "nxn", "sap"] = "explicit",
 ) -> NewtonCfg:
     """Newton for a generated scene: plain MJWarp, or -- for a scene with rods
     -- MuJoCo for the robot coupled with VBD for the rods.
@@ -561,6 +601,17 @@ def make_physics_cfg_newton(
         substeps: Physics substeps per simulation step, under either config.
             The rod tuning above assumes the 1.25 ms step four gives with
             `ROD_SUBSTEPS`; at one substep a rod sags about twice as far.
+        broad_phase: How the rods' contacts are found. `"explicit"` tests
+            the shape pairs `Model.finalize` listed from the collision
+            groups, and nothing else, for the life of the model: a cut piece
+            meets its own plant and passes through every other
+            (`PLANT_GROUPS`), and `ContactSlots` lets the two faces of a cut
+            meet. `"nxn"` and `"sap"` read the groups every step instead,
+            with a pair buffer sized for every pair of shapes: a cut gives
+            its piece groups of its own, so it meets every plant and every
+            other piece, all but the face across the cut, which the joint's
+            filter pair keeps out for good. No `ContactSlots` rows are
+            reserved, so the scene needs no static shapes to park them on.
 
     Returns:
         A physics config to hand to `SimulationCfg(physics=...)`.
@@ -605,6 +656,10 @@ def make_physics_cfg_newton(
                     # Refresh the proxies' contacts every pass: a walking robot
                     # moves a rod's width within one step.
                     collide_interval=1,
+                    # The pipeline on the rods' view, which finds every
+                    # contact a rod makes: with a rod, a proxy or a static
+                    # shape.
+                    collision_pipeline=NewtonCollisionPipelineCfg(broad_phase=broad_phase),
                 )
             ],
         ),

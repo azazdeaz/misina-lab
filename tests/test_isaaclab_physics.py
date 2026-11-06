@@ -29,6 +29,7 @@ from isaaclab.sim import SimulationContext  # noqa: E402
 from isaaclab_newton.physics import (  # noqa: E402
     MJWarpSolverCfg,
     NewtonCfg,
+    NewtonCollisionPipelineCfg,
     NewtonManager,
     VBDSolverCfg,
 )
@@ -110,6 +111,63 @@ def test_a_vineyard_without_flexible_shoots_runs_on_mjwarp_alone(shoot):
 )
 def test_only_a_vbd_solver_steps_a_rod(backend, steps):
     assert physics.steps_rods(backend) is steps
+
+
+COUPLED = {
+    phase: rods.make_physics_cfg_newton(
+        FLEXIBLE, ROBOT, [ROBOT], physics.SUBSTEPS, broad_phase=phase
+    )
+    for phase in ("explicit", "nxn", "sap")
+}
+"""The coupled config under each broad phase."""
+
+
+@pytest.mark.parametrize(
+    ("backend", "reads"),
+    [
+        (None, True),
+        (NewtonCfg(), True),
+        (NewtonCfg(solver_cfg=VBDSolverCfg()), True),
+        (
+            NewtonCfg(
+                solver_cfg=VBDSolverCfg(),
+                collision_cfg=NewtonCollisionPipelineCfg(broad_phase="sap"),
+            ),
+            False,
+        ),
+        (COUPLED["explicit"], True),
+        (COUPLED["nxn"], False),
+        (COUPLED["sap"], False),
+    ],
+    ids=["no sim", "mjwarp", "vbd", "vbd on sap", "coupled", "coupled on nxn", "coupled on sap"],
+)
+def test_only_the_explicit_broad_phase_reads_the_contact_rows(backend, reads):
+    assert rods.reads_contact_pairs(backend) is reads
+
+
+@pytest.mark.parametrize(
+    ("backend", "reserved"),
+    [(COUPLED["explicit"], True), (COUPLED["sap"], False), (None, True)],
+    ids=["explicit", "sap", "no sim"],
+)
+def test_the_rows_are_reserved_only_where_the_broad_phase_reads_them(
+    builder, monkeypatch, backend, reserved
+):
+    """Reserving needs two static shapes to park the rows on, which a scene
+    whose broad phase never reads them should not have to provide. The hook
+    decides at `PHYSICS_READY` from the simulation then running; none, as
+    when the event is dispatched by hand, means Newton's default, explicit."""
+    physics.tune_shoots()
+    sim = types.SimpleNamespace(cfg=types.SimpleNamespace(physics=backend))
+    monkeypatch.setattr(SimulationContext, "instance", lambda: sim if backend else None)
+    model = object()
+    monkeypatch.setattr(NewtonManager, "get_model", lambda: model)
+    models: list[object] = []
+    monkeypatch.setattr(rods, "reserve_contact_slots", models.append)
+
+    NewtonManager.dispatch_event(PhysicsEvent.PHYSICS_READY)
+
+    assert models == ([model] if reserved else [])
 
 
 @pytest.fixture

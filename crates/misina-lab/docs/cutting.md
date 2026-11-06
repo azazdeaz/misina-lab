@@ -56,7 +56,10 @@ Two facts about the collision side decide how a cut has to be made:
 - The default [broad phase](https://newton-physics.github.io/newton/latest/concepts/collisions.html#broad-phase-and-shape-compatibility),
   the explicit one, tests exactly that list every step, and nothing else:
   not the groups, not the filter pairs. A pair that is not in the list never
-  meets, whatever happens to the joint that kept it out.
+  meets, whatever happens to the joint that kept it out. The other two, NxN
+  and SAP, which `make_physics_cfg_newton`'s `broad_phase` picks, never read
+  the list: they test every pair of boxes that overlap, and read the groups
+  and the filter pairs in the kernel, every step.
 
 ## Where a cut lands
 
@@ -127,11 +130,12 @@ segment down, then tips off it.
 The list cannot grow once something reads it, but there is a moment when
 nothing does: the model is finalized, and no collision pipeline and no
 solver entry has taken the list yet. Isaac Lab fires `PHYSICS_READY` in
-that window, and `rods.reserve_contact_slots`, registered there by
-`tune_rods`, builds a `rods.ContactSlots` that replaces the list with a
-longer one: every row it had, then one spare row per rod joint. The spare
-rows are *parked* on a pair of two static shapes, which the broad phase
-drops before testing their boxes, wherever they are:
+that window, and the hook `tune_rods` registers there calls
+`rods.reserve_contact_slots` when the broad phase in force reads the list
+(`rods.reads_contact_pairs`), which builds a `rods.ContactSlots` that
+replaces the list with a longer one: every row it had, then one spare row
+per rod joint. The spare rows are *parked* on a pair of two static shapes,
+which the broad phase drops before testing their boxes, wherever they are:
 two static shapes never make a contact, so a parked row costs next to
 nothing.
 
@@ -139,6 +143,13 @@ When a cut turns a rod joint off, `Shears` writes the joint's own two
 shapes into the joint's row, and from the next step the broad phase tests
 them like any other pair. The filter pairs still name them, but nothing
 reads the filter pairs after finalize.
+
+Under NxN or SAP nothing reads the rows, so `tune_rods` reserves none and
+the scene needs no static shapes to park them on, and the filter pair is
+read every step, so the two faces keep passing through each other: the
+piece falls through the stub's top segment onto the next one down. What a
+cut does there instead is regroup the piece, below. `Shears` built on a
+model with no rows opens none.
 
 A second write pulls the two faces back. A capsule's round end reaches a
 radius past the end of its span, so two capsules that meet at a cut overlap
@@ -171,12 +182,20 @@ list and the rod entry's; the robot's entry keeps its rows parked.
 A piece that falls meets what its group lets it meet
 ([`rods.py`](../../../python/misina-lab/misina_lab/isaaclab/rods.py),
 `PLANT_GROUPS`): its own plant's stub, rods and wood, the ground, the
-trellis and the robot, and passes through every other plant. VBD has no
-rolling friction, so a straight piece on a slope can roll on downhill, off
-the edge of the terrain if nothing stops it.
+trellis and the robot, and passes through every other plant. That is under
+the explicit broad phase, where the groups were read once, at finalize.
+Under NxN or SAP they are read every step, so a cut can change them:
+`Shears._free` gives each body of the piece a group of its own, the negative
+per-body one the spawner gives every body that is not a rod, in every copy
+of the shape arrays, and from the next step the piece meets every plant's
+rods, every other piece, the ground, the trellis and the robot, everything
+but the stub's face across the cut. The same write under the explicit broad
+phase changes nothing.
+VBD has no rolling friction, so a straight piece on a slope can roll on
+downhill, off the edge of the terrain if nothing stops it.
 
 ## Where it lives
 
-- [`misina_lab/isaaclab/cutting.py`](../../../python/misina-lab/misina_lab/isaaclab/cutting.py): `Shears`, `SPLINTER`; `Shears.cut`, `cut_through` and `crossing`; `_split` for moving the joint, `_release` for the pair and the pull-back
+- [`misina_lab/isaaclab/cutting.py`](../../../python/misina-lab/misina_lab/isaaclab/cutting.py): `Shears`, `SPLINTER`; `Shears.cut`, `cut_through` and `crossing`; `_split` for moving the joint, `_release` for the pair and the pull-back, `_free` for the regrouping
 - [`misina_lab/isaaclab/rods.py`](../../../python/misina-lab/misina_lab/isaaclab/rods.py): `ContactSlots`, `reserve_contact_slots`, and `tune_rods`, which registers the reservation
 - [`tests/test_isaaclab_cutting.py`](../../../tests/test_isaaclab_cutting.py): a bare Newton rod, no Kit and no coupler, cut and stepped
