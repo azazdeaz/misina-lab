@@ -120,7 +120,8 @@ const DROOP: (f64, f64) = (0.2, 0.6);
 
 /// How far a grown leaflet bends out of flat at a [`LeafParams::curl`] of 1:
 /// how high it puckers between two veins, as a fraction of the gap between
-/// them, and the steepest its margin's ruffle gets.
+/// them, and the steepest its margin's ruffle gets. Neither lifts the blade
+/// off the midrib's plane by more than half its distance from the midrib.
 const PLEAT: f64 = 0.25;
 const RUFFLE: f64 = 0.6;
 
@@ -507,7 +508,8 @@ impl Relief {
 /// * a **fold** on the midrib, either half turned up about it, the bud's
 ///   fold opening as the leaf grows to [`LeafParams::fold`], and twisting
 ///   toward the tip on a lopsided blade. The pucker and the ruffle flatten
-///   as the fold shuts, so neither half pokes through the other.
+///   as the fold shuts, and reach at most halfway to the midrib's plane, so
+///   neither half pokes through the other.
 /// * the **droop**, the whole sheet bent down along its length.
 ///
 /// The midrib and the veins are edges of the mesh, so the fold creases on
@@ -540,11 +542,14 @@ fn sheet(
             let margin = (out / veins.half(x, y)).min(1.0).powi(3) * off;
             z = margin * waves.at(x, y) + relief.pleat * off * veins.ridge(DVec2::new(x, y));
         }
-        // Either half turned up about the midrib, carrying its pucker and
-        // ruffle with it, flattened as the halves come to face each other.
+        // Either half turned up about the midrib, no further than SHUT,
+        // carrying its pucker and ruffle with it: flattened as the halves
+        // come to face each other, and never more than halfway to the
+        // midrib's plane, so the two halves' bumps cannot meet.
         let half = if y >= 0.0 { 1.0 } else { -1.0 };
-        let (sin, cos) = (relief.fold + half * twist * x / length).sin_cos();
-        let z = z * cos.max(0.0);
+        let turn = (relief.fold + half * twist * x / length).clamp(-SHUT, SHUT);
+        let (sin, cos) = turn.sin_cos();
+        let z = z.clamp(-out / 2.0, out / 2.0) * cos;
         let (y, z) = (half * (out * cos - z * sin), out * sin + z * cos);
         let (x, z) = if droop == 0.0 {
             (x, z)
@@ -818,14 +823,15 @@ mod tests {
 
     /// The relief, on one lateral leaflet held level: flat with nothing
     /// asked of it; puckered up between its veins, never down, and level on
-    /// the midrib with the pucker alone; its halves turned up by the fold,
-    /// and shut, its pucker kept on its own half; and folded harder, and
-    /// puckered, at the head than once grown.
+    /// the midrib with the pucker alone; its halves turned up by the fold;
+    /// folded harder, and puckered, at the head than once grown; and at the
+    /// params' extremes, whatever the preset or the age, nothing crossing
+    /// from one half into the other.
     #[test]
     fn a_leaflet_puckers_folds_and_opens_as_it_grows() {
         let params = LeafParams::default();
-        let sheet = |relief: &Relief| {
-            sheet(&Leaflet::LATERAL, 0.15, 0.0, relief, 1.0, &mut Rng::new(3)).unwrap()
+        let sheet = |shape: &Leaflet, relief: &Relief| {
+            sheet(shape, 0.15, 0.0, relief, 1.0, &mut Rng::new(3)).unwrap()
         };
         let none = Relief {
             fold: 0.0,
@@ -835,10 +841,10 @@ mod tests {
         };
         let height = |mesh: &MeshData| mesh.points.iter().fold(0.0f32, |m, p| m.max(p[2]));
 
-        let flat = sheet(&none);
+        let flat = sheet(&Leaflet::LATERAL, &none);
         assert!(flat.points.iter().all(|p| p[2].abs() < 1e-6), "flat");
 
-        let puckered = sheet(&Relief { pleat: 0.3, ..none });
+        let puckered = sheet(&Leaflet::LATERAL, &Relief { pleat: 0.3, ..none });
         assert!(puckered.points.iter().all(|p| p[2] > -1e-6), "puckers up");
         assert!(
             height(&puckered) > 0.002,
@@ -854,7 +860,7 @@ mod tests {
             "level on the midrib"
         );
 
-        let folded = sheet(&Relief { fold: 0.5, ..none });
+        let folded = sheet(&Leaflet::LATERAL, &Relief { fold: 0.5, ..none });
         assert!(
             folded
                 .points
@@ -862,15 +868,46 @@ mod tests {
                 .all(|p| (p[2] - p[1].abs() * 0.5f32.tan()).abs() < 1e-5),
             "either half turned up by the fold"
         );
-        let shut = Relief { fold: SHUT, ..none };
-        let (bare, puckered) = (sheet(&shut), sheet(&Relief { pleat: 0.3, ..shut }));
-        assert!(
-            bare.points
-                .iter()
-                .zip(&puckered.points)
-                .all(|(p, q)| p[1] * q[1] >= 0.0),
-            "shut, the pucker stays on its own half"
-        );
+
+        // Every preset, from the bud to grown, at the params' extremes with
+        // all four layers on: a vertex comes at most halfway to the midrib's
+        // plane, so nothing crosses into the other half.
+        for fold in [-0.5, 1.0] {
+            let extreme = LeafParams {
+                curl: 2.0,
+                fold,
+                asymmetry: 1.0,
+                ..params.clone()
+            };
+            for preset in [Leaflet::TERMINAL, Leaflet::LATERAL, Leaflet::INTERCALARY] {
+                for grown in [0.0, 0.15, 0.25, 0.5, 1.0] {
+                    let shape = Leaflet { grown, ..preset };
+                    let relief = Relief::new(&extreme, grown);
+                    let bare = sheet(
+                        &shape,
+                        &Relief {
+                            pleat: 0.0,
+                            ruffle: 0.0,
+                            ..relief
+                        },
+                    );
+                    let bent = sheet(&shape, &relief);
+                    // Of its distance from the midrib's plane, what a vertex keeps.
+                    let kept = bare
+                        .points
+                        .iter()
+                        .zip(&bent.points)
+                        .filter(|(p, _)| p[1].abs() > 1e-6)
+                        .map(|(p, q)| q[1] / p[1])
+                        .fold(f32::MAX, f32::min);
+                    assert!(
+                        kept > 0.49,
+                        "{} lobes, fold {fold}, grown {grown}: a vertex keeps only {kept}",
+                        preset.lobes
+                    );
+                }
+            }
+        }
 
         let (head, grown) = (Relief::new(&params, 0.0), Relief::new(&params, 1.0));
         assert!(head.fold > grown.fold && head.pleat > grown.pleat && head.ruffle == 0.0);

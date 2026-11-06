@@ -427,10 +427,11 @@ impl Veins {
     /// vein to the next as high as the gap between them is wide, in meters,
     /// zero on the veins themselves. The gap is taken at the point's own
     /// distance off the midrib, so a slanting vein stays a valley all along
-    /// it. Zero behind the first vein.
+    /// it, and ends at the apex at the latest. Zero behind the first vein.
     pub fn ridge(&self, at: DVec2) -> f64 {
         let out = at.y.abs();
-        let crossing = |v: &Vein| v.foot.x + out * v.dir.x / v.dir.y.abs().max(0.2);
+        let crossing =
+            |v: &Vein| (v.foot.x + out * v.dir.x / v.dir.y.abs().max(0.2)).min(self.length);
         self.sides[(at.y >= 0.0) as usize]
             .windows(2)
             .map(|pair| (crossing(&pair[0]), crossing(&pair[1])))
