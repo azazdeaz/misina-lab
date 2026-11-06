@@ -16,10 +16,12 @@
 //! strings those into its own ring; the frame is the same.
 //!
 //! Also here: [`bent`], which fills a ring and folds it the way a leaf folds,
-//! and the two rotations that take a shape out of this frame — [`standing`]
-//! and [`lying`] — so every element places its foliage the same way.
+//! [`Ruffle`], the waves a margin buckles into, and the two rotations that
+//! take a shape out of this frame — [`standing`] and [`lying`] — so every
+//! element places its foliage the same way.
 
-use std::f64::consts::{FRAC_PI_2, PI};
+use std::f64::consts::{FRAC_PI_2, PI, TAU};
+use std::ops::Range;
 
 use anyhow::Result;
 use bevy::math::{DVec2, Quat};
@@ -27,6 +29,7 @@ use spade::Point2;
 
 use super::mesh::{MeshData, bend};
 use super::outline::{Outline, outline_mesh};
+use crate::rng::Rng;
 
 /// Stations along each edge of a ring. Enough that a bend has vertices to
 /// bend, few enough that a blade stays a dozen triangles.
@@ -233,6 +236,45 @@ pub fn blade_mesh(
     bent(blade(length, width), droop, keel, triangles)
 }
 
+/// A ruffle: a few plane sinusoids summed over the XY plane, each heading
+/// its own way, so a sheet waves irregularly without a noise lattice. A
+/// blade's margin buckles because it grows more material than its middle can
+/// hold flat, and over a leaf's worth of domain a handful of sines reads as
+/// that.
+pub struct Ruffle(Vec<[f64; 4]>);
+
+impl Ruffle {
+    /// Draws `count` waves off `rng`: per wave a heading, a wavelength from
+    /// `wavelengths`, in meters, and a phase, in that order. Each wave is as
+    /// deep as it is long, so every one is as steep: `slope / count`, the
+    /// sum at most `slope` steep.
+    pub fn draw(rng: &mut Rng, count: usize, wavelengths: Range<f64>, slope: f64) -> Self {
+        Self(
+            (0..count)
+                .map(|_| {
+                    let heading = rng.range(0.0, PI);
+                    let k = TAU / rng.range(wavelengths.start, wavelengths.end);
+                    let depth = slope / (count as f64 * k);
+                    [
+                        k * heading.cos(),
+                        k * heading.sin(),
+                        rng.range(0.0, TAU),
+                        depth,
+                    ]
+                })
+                .collect(),
+        )
+    }
+
+    /// The ruffle's height over `(x, y)`.
+    pub fn at(&self, x: f64, y: f64) -> f64 {
+        self.0
+            .iter()
+            .map(|[kx, ky, phase, depth]| depth * (kx * x + ky * y + phase).sin())
+            .sum()
+    }
+}
+
 /// Stands a shape drawn along `+X` up on `+Z`, leaning `lean` radians off
 /// vertical, turned to `yaw` about the vertical.
 pub fn standing(yaw: f64, lean: f64) -> Quat {
@@ -328,6 +370,25 @@ mod tests {
             .max_by(|a, b| a[1].abs().total_cmp(&b[1].abs()))
             .unwrap();
         assert!(edge[2] > 0.0, "the edges curl up toward the face: {edge:?}");
+    }
+
+    /// A ruffle waves, but no steeper than it was asked to, and a slope of
+    /// zero is flat.
+    #[test]
+    fn a_ruffle_is_no_steeper_than_asked() {
+        let flat = Ruffle::draw(&mut Rng::new(1), 3, 0.02..0.1, 0.0);
+        assert_eq!(flat.at(0.3, -0.2), 0.0);
+
+        let ruffle = Ruffle::draw(&mut Rng::new(1), 3, 0.02..0.1, 0.5);
+        let (mut highest, mut steepest) = (0.0f64, 0.0f64);
+        for i in 0..2000 {
+            let (x, y) = (i as f64 * 1e-3, i as f64 * 0.37e-3);
+            let z = ruffle.at(x, y);
+            highest = highest.max(z.abs());
+            steepest = steepest.max(((ruffle.at(x + 1e-5, y) - z) / 1e-5).abs());
+        }
+        assert!(highest > 1e-3, "it waves: {highest}");
+        assert!(steepest <= 0.5 + 1e-3, "no steeper than asked: {steepest}");
     }
 
     /// The two placements: standing puts the tip up, lying leaves the face up.

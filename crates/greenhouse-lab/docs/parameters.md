@@ -102,14 +102,18 @@ Each stem grows a truss a week from planting, up its twine to a hook on the wire
 
 The leaves: a compound leaf at each of a stem's top nodes, as many as the stem keeps.
 
-A leaf is a petiole and a rachis with a terminal leaflet, three or four pairs of laterals and small leaflets between the pairs. The leaves near the head are still growing, small and upright; a couple of trusses down they are full grown, and the older they are the more they droop. Every leaf draws its own size, angle, droop and leaflet count about these. Leaves are visual only, with no collider.
+A leaf is a petiole and a rachis with a terminal leaflet, three or four pairs of laterals and small leaflets between the pairs, every leaflet cut from its veins, folded along its midrib, puckered between its veins and ruffled at its margin. The leaves near the head are still growing, small and upright, their leaflets narrow and still folded shut from the bud; a couple of trusses down they are full grown and open, and the older they are the more they droop. Every leaf draws its own size, angle, droop and leaflet count about these. Leaves are visual only, with no collider.
 
 | Parameter | Type | Default | Slider range | Description |
 |---|---|---|---|---|
 | `length` | float | `0.45` | 0.3 to 0.6 | Length of a full-grown leaf, from the stem to the tip of its terminal leaflet, in meters. Each leaf draws a little more or less. |
 | `droop` | float | `90.0` | 0 to 150 | How far an old leaf's rachis bends down from where it leaves the stem to its tip, in degrees. The young leaves near the head droop less. |
+| `lobing` | float | `0.85` | 0 to 1 | How deeply the leaflets lobe: 0 leaves every leaflet entire, as on a potato-leaf cultivar, 1 cuts a lateral's basal sinuses nearly to its midrib. The terminal leaflet lobes a little less, and the small leaflets between the pairs hardly at all. |
+| `curl` | float | `1.0` | 0 to 2 | How far a grown leaflet's blade bends out of the flat shape it was cut as: puckered up between its veins and ruffled along its margin, both scaled together. 0 leaves it smooth but for its fold and its droop. |
+| `fold` | float | `0.35` | -0.5 to 1 | How far a grown leaflet folds up along its midrib, in radians each side: 0 holds it flat across, more folds it into a V. A leaflet at the head is folded far harder whatever this is, its halves still closed up toward each other as they lay in the bud, and opens out as the leaf grows. |
+| `asymmetry` | float | `0.5` | 0 to 1 | How lopsided a lateral leaflet is: 0 for halves that are mirror images, 1 for one side much the wider, its base oblique and the blade twisting about its midrib toward the tip. The small leaflets between the pairs lean a little, the terminal leaflet never. |
 | `variations` | int | `32` | 1 to 128 | How many distinct leaf meshes the scene may hold. A budget, not a count: the leaves are clustered and this is how many representatives the clustering may keep. |
-| `detail` | float | `1.0` | 0.1 to 4 | How finely a leaf is meshed, as a multiplier: at 1 a leaflet's margin keeps within 0.6 mm of its curves, about a pixel to a camera half a meter away, and a full-grown leaf comes to about 1500 triangles; about 500 at 0.1 and 4500 at 4. Coarser drops the finest teeth first, then rounds off the sinuses, and keeps the lobes. |
+| `detail` | float | `1.0` | 0.1 to 4 | How finely a leaf is meshed, as a multiplier: at 1 a leaflet's margin keeps within 0.6 mm of its curves, about a pixel to a camera half a meter away, its blade is cut into triangles about 12 mm on a side, and a full-grown leaf comes to about 1500 triangles; about 500 at 0.1 and 4500 at 4. Coarser drops the finest teeth first, then rounds off the sinuses, and keeps the lobes; the pucker and the ruffle soften as the triangles across the blade grow, and the folds are on the veins and sharp at any detail. |
 
 ## Trusses
 

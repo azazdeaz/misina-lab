@@ -30,6 +30,9 @@
 //! The outline is in the frame [`shapes`](misina_lab::geometry::shapes)
 //! builds in: the attachment on the origin, the leaflet along +X with its apex
 //! at `length`, its width across Y, closed across the petiolule at `x = 0`.
+//! It comes with the [`Veins`] it was built from, so what fills and bends
+//! the blade can keep them as edges, pucker it between them and tell how far
+//! off the midrib the margin is.
 
 use std::f64::consts::PI;
 
@@ -96,8 +99,22 @@ const TOOTH_SPACING: f64 = 5.0;
 const EDGE_POINTS: usize = 16;
 const SINUS_POINTS: usize = 8;
 
+/// A leaflet just unfolded, as fractions of what a grown one is cut to: how
+/// far its lobes reach, how deep its sinuses cut and how deep its teeth are.
+/// Young blades are narrow, their lobes still coarse notches, and their teeth
+/// large for their size.
+const YOUNG_WIDTH: f64 = 0.7;
+const YOUNG_LOBING: f64 = 0.5;
+const YOUNG_TEETH: f64 = 1.4;
+
+/// How far along each vein its crease runs, as a fraction: short of the
+/// margin, so the fill's edge along it ends inside the ring.
+const CREASE: f64 = 0.9;
+
 /// A leaflet's shape. Lengths are fractions of the leaflet's own length, from
-/// the petiolule's free end to the apex.
+/// the petiolule's free end to the apex. The presets are cut at the leaf
+/// params' full lobing and asymmetry; [`leaf`](super::leaf) scales
+/// [`lobing`](Self::lobing) and [`lopsided`](Self::lopsided) by them.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Leaflet {
     /// The petiolule, the leaflet's own stalk.
@@ -123,6 +140,10 @@ pub struct Leaflet {
     /// How irregular the lobes are: 0 for a regular margin, 1 for a ragged
     /// one.
     pub jitter: f64,
+    /// How far the leaflet has grown, 0 just unfolded to 1 full size: a
+    /// young one is cut narrower, less lobed and coarser toothed, whatever
+    /// its length.
+    pub grown: f64,
 }
 
 impl Leaflet {
@@ -132,11 +153,12 @@ impl Leaflet {
         stalk: 0.1,
         width: 0.25,
         lobes: 5,
-        lobing: 0.7,
+        lobing: 0.82,
         angle: (95.0, 35.0),
         lopsided: 0.0,
         serration: 0.004,
         jitter: 0.5,
+        grown: 1.0,
     };
 
     /// A lateral leaflet: lopsided, its first lobes deep and the rest of it a
@@ -145,11 +167,12 @@ impl Leaflet {
         stalk: 0.15,
         width: 0.28,
         lobes: 4,
-        lobing: 0.85,
+        lobing: 1.0,
         angle: (100.0, 32.0),
-        lopsided: 0.15,
+        lopsided: 0.3,
         serration: 0.006,
         jitter: 0.5,
+        grown: 1.0,
     };
 
     /// One of the small leaflets between the laterals: ovate, with a lobe
@@ -158,48 +181,80 @@ impl Leaflet {
         stalk: 0.13,
         width: 0.42,
         lobes: 1,
-        lobing: 0.15,
+        lobing: 0.18,
         angle: (99.0, 30.0),
-        lopsided: 0.05,
+        lopsided: 0.1,
         serration: 0.0,
         jitter: 0.5,
+        grown: 1.0,
     };
 
     /// The outline, `length` long, its margin within `tolerance` of the
-    /// curves it is sampled from, both in meters. The points it can do
-    /// without are dropped: a coarser tolerance costs the finest teeth first,
-    /// then the sinuses' round bottoms, and a small leaflet keeps fewer points
-    /// than a large one.
+    /// curves it is sampled from, both in meters, and the veins it was built
+    /// from. The points it can do without are dropped: a coarser tolerance
+    /// costs the finest teeth first, then the sinuses' round bottoms, and a
+    /// small leaflet keeps fewer points than a large one.
     ///
     /// Draws from `rng` the same amount whatever the jitter and the
     /// tolerance: side by side, the -Y side first, and along a side first
     /// every vein's position, angle and reach, then every lobe's tip
     /// half-angle and the depth of the sinus after it.
-    pub fn outline(&self, length: f64, tolerance: f64, rng: &mut Rng) -> Outline {
+    pub fn outline(&self, length: f64, tolerance: f64, rng: &mut Rng) -> (Outline, Veins) {
         let half = STALK_WIDTH / 2.0;
         let tolerance = tolerance / length.max(1e-6);
-        let right = self.side(-1.0, tolerance, rng);
-        let left = self.side(1.0, tolerance, rng);
+        let (right, right_veins) = self.side(-1.0, tolerance, rng);
+        let (left, left_veins) = self.side(1.0, tolerance, rng);
         let ring = std::iter::once(DVec2::new(0.0, -half))
             .chain(right.iter().map(|p| DVec2::new(p.x, -p.y)))
             .chain([DVec2::X])
             .chain(left.iter().rev().copied())
             .chain([DVec2::new(0.0, half)]);
-        Outline {
+        let outline = Outline {
             points: ring
                 .map(|p| Point2::new(p.x * length, p.y * length))
                 .collect(),
-        }
+        };
+        let placed = |veins: Vec<Vein>, sign: f64| -> Vec<Vein> {
+            let flip = DVec2::new(1.0, sign);
+            veins
+                .into_iter()
+                .map(|v| Vein {
+                    u: v.u,
+                    foot: v.foot * length,
+                    dir: v.dir * flip,
+                    tip: v.tip * flip * length,
+                })
+                .collect()
+        };
+        let veins = Veins {
+            length,
+            stalk: self.stalk * length,
+            reach: [-1.0, 1.0].map(|side| self.half_width(side) * length),
+            sides: [placed(right_veins, -1.0), placed(left_veins, 1.0)],
+        };
+        (outline, veins)
+    }
+
+    /// How far the lobes on `side` reach from the midrib, as a fraction of
+    /// the length.
+    fn half_width(&self, side: f64) -> f64 {
+        self.width
+            * lerp(YOUNG_WIDTH, 1.0, self.grown.clamp(0.0, 1.0))
+            * (1.0 + side * self.lopsided)
     }
 
     /// One half of the margin, on the +Y side of the midrib: from where the
     /// blade leaves the petiolule to just short of the apex, within
-    /// `tolerance` of its curves. `side` is +1 for the side
-    /// [`lopsided`](Self::lopsided) lengthens, -1 for the other.
-    fn side(&self, side: f64, tolerance: f64, rng: &mut Rng) -> Vec<DVec2> {
+    /// `tolerance` of its curves, and the side's veins from the base to the
+    /// apex, which closes the list as a vein of its own. `side` is +1 for the
+    /// side [`lopsided`](Self::lopsided) lengthens, -1 for the other.
+    fn side(&self, side: f64, tolerance: f64, rng: &mut Rng) -> (Vec<DVec2>, Vec<Vein>) {
         let (jitter, lobes) = (self.jitter, self.lobes.max(1));
+        let grown = self.grown.clamp(0.0, 1.0);
         let blade = 1.0 - self.stalk;
-        let width = self.width * (1.0 + side * self.lopsided);
+        let width = self.half_width(side);
+        let lobing = self.lobing * lerp(YOUNG_LOBING, 1.0, grown);
+        let serration = self.serration * lerp(YOUNG_TEETH, 1.0, grown);
         let first = VEINS.0 + (-side * self.lopsided * OBLIQUE).max(0.0);
         let gap = (VEINS.1 - first) / lobes as f64;
 
@@ -232,7 +287,7 @@ impl Leaflet {
         let mut heading = DVec2::from_angle(BASE.to_radians());
         for pair in veins.windows(2) {
             let (vein, next) = (pair[0], pair[1]);
-            let opening = (OPENING * self.lobing / 2.0).to_radians();
+            let opening = (OPENING * lobing / 2.0).to_radians();
             let half = POINT * (1.0 + jitter * rng.range(-0.2, 0.2));
             let deeper = 1.0 + jitter * rng.range(-0.25, 0.25);
 
@@ -245,13 +300,13 @@ impl Leaflet {
                 vein.tip - arrive * handle,
                 vein.tip,
             ];
-            edge(&mut out, rise, self.serration, true);
+            edge(&mut out, rise, serration, true);
 
             // The sinus ahead: cut from the line between the two tips toward
             // the midrib, with a round bottom no wider than half its depth,
             // its walls opening out of it at `opening` either side.
             let base = (1.0 - lerp(vein.u, next.u, LEAN)).powf(FALLOFF);
-            let depth = (lerp(DEPTH_AT_APEX, self.lobing, base) * deeper).min(0.9);
+            let depth = (lerp(DEPTH_AT_APEX, lobing, base) * deeper).min(0.9);
             let rim = vein.tip.lerp(next.tip, LEAN);
             let foot = vein.foot.lerp(next.foot, LEAN);
             let bottom = rim.lerp(foot, depth);
@@ -274,7 +329,7 @@ impl Leaflet {
                 into + wall * handle,
                 into,
             ];
-            edge(&mut out, fall, self.serration, false);
+            edge(&mut out, fall, serration, false);
             out.extend((0..SINUS_POINTS).map(|i| {
                 let a = PI * i as f64 / SINUS_POINTS as f64;
                 centre - ahead * (radius * a.cos()) - out_of * (radius * a.sin())
@@ -299,7 +354,7 @@ impl Leaflet {
             DVec2::X - arrive * handle,
             DVec2::X,
         ];
-        edge(&mut out, rise, self.serration, true);
+        edge(&mut out, rise, serration, true);
         for point in &mut out {
             point.y = point.y.max(1e-4); // never across the midrib
         }
@@ -307,18 +362,82 @@ impl Leaflet {
         simplify(&mut out, tolerance);
         untangle(&mut out);
         out.pop();
-        out
+        (out, veins)
     }
 }
 
 /// Where a vein leaves the midrib, which way it runs, and where it ends.
-#[derive(Clone, Copy)]
-struct Vein {
-    /// How far along the blade it leaves the midrib.
-    u: f64,
-    foot: DVec2,
-    dir: DVec2,
-    tip: DVec2,
+#[derive(Clone, Copy, Debug)]
+pub struct Vein {
+    /// How far along the blade it leaves the midrib, as a fraction of the
+    /// blade.
+    pub u: f64,
+    pub foot: DVec2,
+    /// Unit length, on its side of the midrib.
+    pub dir: DVec2,
+    /// At its lobe's tip, on the margin.
+    pub tip: DVec2,
+}
+
+/// The veins an outline was built from, in its frame and in meters: the
+/// midrib along +X from the blade's start to the apex, and on each side,
+/// the -Y side first, a vein per lobe from the base toward the apex, the
+/// apex closing each side's list as a vein of its own.
+#[derive(Clone, Debug)]
+pub struct Veins {
+    pub length: f64,
+    /// Where the blade starts along the midrib: the petiolule's length.
+    pub stalk: f64,
+    /// Per side, how far the farthest lobe tip reaches from the midrib.
+    pub reach: [f64; 2],
+    pub sides: [Vec<Vein>; 2],
+}
+
+impl Veins {
+    /// The lines a fill keeps as edges, so the blade can fold on them: the
+    /// midrib, and the lobes' veins on a side where they are at least
+    /// `spacing` apart along it, so a fill too coarse to pucker between two
+    /// veins is not made to crease on them. Each is stopped [`CREASE`] of the
+    /// way to its end so that it ends inside the margin.
+    pub fn creases(&self, spacing: f64) -> Vec<Vec<Point2<f64>>> {
+        let apex = lerp(self.stalk, self.length, CREASE);
+        let midrib = vec![DVec2::new(self.stalk, 0.0), DVec2::new(apex, 0.0)];
+        let lobes = self
+            .sides
+            .iter()
+            .filter(|side| (self.length - self.stalk) / side.len() as f64 >= spacing)
+            .flatten()
+            .filter(|v| v.u < 1.0)
+            .map(|v| vec![v.foot, v.foot.lerp(v.tip, CREASE)]);
+        std::iter::once(midrib)
+            .chain(lobes)
+            .map(|line| line.iter().map(|p| Point2::new(p.x, p.y)).collect())
+            .collect()
+    }
+
+    /// How far off the midrib the lobes reach at `x`, on the side of `y`:
+    /// where the margin would be but for the sinuses cut into it.
+    pub fn half(&self, x: f64, y: f64) -> f64 {
+        let u = ((x - self.stalk) / (self.length - self.stalk).max(1e-9)).clamp(0.0, 1.0);
+        let side = self.reach[(y >= 0.0) as usize];
+        (side * reach(u)).max(STALK_WIDTH * self.length)
+    }
+
+    /// The pucker between the two veins either side of `at`: a hump from one
+    /// vein to the next as high as the gap between them is wide, in meters,
+    /// zero on the veins themselves. The gap is taken at the point's own
+    /// distance off the midrib, so a slanting vein stays a valley all along
+    /// it, and ends at the apex at the latest. Zero behind the first vein.
+    pub fn ridge(&self, at: DVec2) -> f64 {
+        let out = at.y.abs();
+        let crossing =
+            |v: &Vein| (v.foot.x + out * v.dir.x / v.dir.y.abs().max(0.2)).min(self.length);
+        self.sides[(at.y >= 0.0) as usize]
+            .windows(2)
+            .map(|pair| (crossing(&pair[0]), crossing(&pair[1])))
+            .find(|(a, b)| (*a..*b).contains(&at.x))
+            .map_or(0.0, |(a, b)| (b - a) * (PI * (at.x - a) / (b - a)).sin())
+    }
 }
 
 /// How far the lobe of a vein leaving the midrib `u` of the way along the
@@ -346,7 +465,7 @@ fn edge(out: &mut Vec<DVec2>, curve: [DVec2; 4], serration: f64, toward_end: boo
 mod tests {
     use super::*;
     use crate::elements::leaf::TOLERANCE;
-    use misina_lab::geometry::outline::outline_mesh;
+    use misina_lab::geometry::outline::creased_mesh;
 
     const ALL: [(&str, Leaflet); 3] = [
         ("terminal", Leaflet::TERMINAL),
@@ -354,19 +473,21 @@ mod tests {
         ("intercalary", Leaflet::INTERCALARY),
     ];
 
-    /// The frame every placed outline depends on, and a ring that fills: no
-    /// crossings at any seed, however ragged the jitter makes it, nor at a
-    /// size where most of its points are dropped.
+    /// The frame every placed outline depends on, and a ring that fills with
+    /// its veins as edges: no crossings at any seed, however ragged the
+    /// jitter makes it, nor at a size where most of its points are dropped,
+    /// nor on a leaflet just unfolded.
     #[test]
     fn every_leaflet_hangs_from_the_origin_and_fills() {
         for (name, shape) in ALL {
             for seed in 0..64 {
                 let ragged = Leaflet {
                     jitter: 1.0,
+                    grown: (seed % 3) as f64 / 2.0,
                     ..shape
                 };
                 let length = if seed % 2 == 0 { 0.1 } else { 0.005 };
-                let outline = ragged.outline(length, TOLERANCE, &mut Rng::new(seed));
+                let (outline, veins) = ragged.outline(length, TOLERANCE, &mut Rng::new(seed));
                 let reach = outline.points.iter().fold(0.0f64, |m, p| m.max(p.x));
                 assert!(
                     (reach - length).abs() < 1e-9,
@@ -380,8 +501,30 @@ mod tests {
                     outline.points.iter().any(|p| p.x == 0.0),
                     "{name} {seed}: closed across the petiolule"
                 );
-                outline_mesh(&outline, outline.area() / 20.0)
+                let mesh = creased_mesh(&outline, &veins.creases(0.0), outline.area() / 20.0)
                     .unwrap_or_else(|e| panic!("{name} {seed} fills: {e:#}"));
+                assert!(
+                    mesh.points.len() > outline.points.len(),
+                    "{name} {seed}: the veins are edges of the fill"
+                );
+                for vein in veins.sides.iter().flatten() {
+                    assert!(
+                        vein.foot.y == 0.0 && (0.0..=length).contains(&vein.foot.x),
+                        "{name} {seed}: a vein leaves the midrib, {vein:?}"
+                    );
+                    // Probed a hair along it: on the midrib itself the other
+                    // side's veins answer.
+                    assert!(
+                        veins.ridge(vein.foot + vein.dir * 1e-6).abs() < 1e-9,
+                        "{name} {seed}: a vein is a valley, {vein:?}"
+                    );
+                }
+                let (first, second) = (veins.sides[1][0].foot.x, veins.sides[1][1].foot.x);
+                let between = DVec2::new((first + second) / 2.0, 1e-6);
+                assert!(
+                    veins.ridge(between) > 0.0 && veins.half(between.x, 1.0) > 0.0,
+                    "{name} {seed}: the blade puckers between two veins"
+                );
             }
         }
     }

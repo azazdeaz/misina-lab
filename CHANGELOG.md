@@ -24,6 +24,20 @@ Scene document format 11.
 
 ### Added
 
+- **greenhouse-lab**: Leaflets in relief. A leaflet's midrib and lobe veins
+  are edges of its mesh, and its blade is bent along them: folded up on the
+  midrib, puckered between the veins, ruffled at the margin, and twisting
+  toward the tip where it is lopsided. The leaves at the head are cut
+  narrower, less lobed and coarser toothed than a grown one, and still
+  folded shut from the bud, their leaflets held up along the rachis, opening
+  out as they grow. New: `LeafCfg.lobing`,
+  `LeafCfg.curl`, `LeafCfg.fold` and `LeafCfg.asymmetry`, the cut and the
+  relief from the panel or the cfg. `LeafCfg.detail` now also sets how
+  finely the blade is cut across, which the pucker and the ruffle bend; the
+  triangle counts are about what they were.
+- **misina-lab**: `shapes::Ruffle`, a few plane sinusoids summed over a
+  sheet, drawn off a stream to a given steepness: what both generators'
+  leaves ruffle their margins with.
 - **vinery-lab**: Weeds bend. With `WeedCfg.flexible` on, every weed stem
   at least 30 cm long, a bolter's wand or a broadleaf's runners, is a rod a
   solver bends, held at its base, under `Weed_nnnn/Stalk_n`, its leaves
