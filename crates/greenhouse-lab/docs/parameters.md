@@ -43,7 +43,7 @@ Rows run along X from the row head, where the concrete main path crosses them, a
 
 The pipe rail in every path: two heating pipes a trolley rides on.
 
-The pipes rest on a support every meter, and `unevenness` moves the supports off level, each by a draw of its own: the pair tilts across and each pipe pitches along its length.
+The pipes rest on a support every meter, and `unevenness` moves the supports off level, each by a draw of its own: the pair tilts across and each pipe pitches along its length. Each pipe turns down into the floor at the row head, and a return bend joins the two at the far end.
 
 | Parameter | Type | Default | Slider range | Description |
 |---|---|---|---|---|

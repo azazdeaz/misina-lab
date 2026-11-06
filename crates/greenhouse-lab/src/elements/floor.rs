@@ -2,7 +2,8 @@
 //!
 //! Both are flat slabs with their top on z = 0, sized off the layout, and
 //! each is its own collider: a robot drives on the concrete and rides onto
-//! the rails from it.
+//! the rails from it. The film reaches past the row ends by the layout's
+//! margin, under the rails' return bends.
 
 use bevy::prelude::*;
 use misina_lab::palette::{Response, srgb};
@@ -67,7 +68,7 @@ fn build(
 
     let half = layout.width / 2.0;
     for (name, from, to, (color, response)) in [
-        ("Film", 0.0, layout.length, FILM),
+        ("Film", 0.0, layout.length + layout.margin, FILM),
         ("Concrete", -layout.main_path, 0.0, CONCRETE),
     ] {
         library.clear(name);

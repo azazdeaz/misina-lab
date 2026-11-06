@@ -33,8 +33,8 @@ growers leave it, so the trusses in the harvest band hang off bare stem.
 
 | Part | What it is | Knobs |
 | --- | --- | --- |
-| Floor | white film under the crop and concrete across the row heads, each its own collider | the main path's width |
-| Rail | two heating pipes in every path, on a support every meter, each segment a capsule collider | gauge, pipe diameter, height, unevenness up to and past the 2° spec |
+| Floor | white film under the crop and past the row ends, and concrete across the row heads, each its own collider | the main path's width |
+| Rail | two heating pipes in every path, one loop: on a support every meter, each turned down into the floor through an elbow at the row head, to the mains under the main path, and the pair joined at the far end by two more elbows and a pipe across; each segment a capsule collider, and a chain of them round every bend | gauge, pipe diameter, height, unevenness up to and past the 2° spec |
 | Gutter | a steel channel, hanging or standing, with stone wool slabs and a block at every plant | height, mount, plant spacing |
 | Wires | two crop wires over every gutter, for the V the stems are trained in | height, spread |
 | Stems | two to a plant, each grown up its twine to a hook on its wire and lowered along the gutter from then on, each a little ahead of or behind the crop, so no two hang their trusses level, the lowered runs drifting, crossing and sagging in a loose bundle, each stem climbing out of it along the row; kinked at every truss and a little at every node, thinner toward its head and to a point at its tip, and undulating along it; a leaf at every node and a truss in every third internode, the stem swelling at each and toward its stalk, the leaves stripped below the top few and the trusses picked, each leaving a stub or a scar; colliding as a chain of capsules along the axis from where it leaves the bundle | the crop's age, harvest height, trusses on a stem, how far stems drift out of step, leaves kept, extra stems, trusses turned to the path, head thickness, mesh detail |
@@ -92,6 +92,10 @@ lists every parameter, with its default and range.
   /Paths/Path_03/Rail
     /Pipe_L_007/Steel  /Collision     one segment, support to support
     /Support_L_007 …
+    /Elbow_L                          down into the floor at the row head
+      /Steel  /Collision_00 …
+    /ReturnBend                       the pair joined at the far end
+      /Steel  /Collision_00 …
   /Rows/Row_02
     /Gutter  /Hanger_00 …  /Slab_00 …  /Block_017 …
     /Wire_L  /Wire_R

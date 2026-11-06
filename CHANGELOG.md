@@ -24,6 +24,11 @@ Scene document format 11.
 
 ### Added
 
+- **greenhouse-lab**: A path's heating pipes are one loop. At the row head
+  each turns down through an elbow into the floor, to the mains under the
+  main path, and at the far end two more elbows and a pipe across join the
+  pair; each collides as a chain of capsules. The floor's film reaches half
+  a pitch past the row ends.
 - **greenhouse-lab**: Leaflets in relief. A leaflet's midrib and lobe veins
   are edges of its mesh, and its blade is bent along them: folded up on the
   midrib, puckered between the veins, ruffled at the margin, and twisting
@@ -170,6 +175,9 @@ Scene document format 11.
 
 ### Changed
 
+- **misina-lab**: A storyboard that saves a still or records a video plays in
+  a window that is never shown, so `{PACKAGE}_SHOT` and `{PACKAGE}_RECORD`
+  open nothing on the desktop. A preview still opens its window.
 - **greenhouse-lab**: A truss's rachis ends in its last fruit: its last
   internode is that fruit's pedicel out to the knuckle, where the rachis ran
   on past the fruit to a stump. Every other pedicel leaves the rachis's

@@ -36,8 +36,9 @@ docs/shots/render.sh docs/shots/vinery-lab/editor.json   # one
 Each picture lands in `target/docs-assets/`, laid out as the assets
 repository is, as WebP. The folder a shot is in names what renders it: an
 example with a `shot.py` renders it in Isaac Sim, headless, in a few minutes
-on an RTX GPU; any other folder is a crate whose viewer renders it, in a
-window that opens on the desktop at the shot's size for about ten seconds.
+on an RTX GPU; any other folder is a crate whose viewer renders it in about
+ten seconds, in a window at the shot's size that is never shown: it needs a
+display, but nothing opens on the desktop.
 `butom_capture`'s sets its frames beside the real dataset's, so it needs
 `BUTOM` set to the folder BUTom-ST21's `rgb.tar.gz` unpacks its sequences
 into. Look at every picture before publishing.

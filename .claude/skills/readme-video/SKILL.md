@@ -18,9 +18,9 @@ docs/video/record.sh
 It builds the viewer, plays the storyboard `docs/video/tour.json` in it one
 video frame per rendered frame, and writes `target/video/vinery-lab.mp4` and,
 beside it, `vinery-lab-sheet.png`: the frames at 0, 2, 4… seconds, four to a
-row. About a minute on a GPU. It needs cargo, ffmpeg and a display; the window
-opens on the desktop at the video's size, ignores the pointer, and closes
-itself when the video is done.
+row. About a minute on a GPU. It needs cargo, ffmpeg and a display, though
+nothing opens on the desktop: the window is drawn at the video's size without
+being shown, and closes itself when the video is done.
 
 ## Re-record it
 

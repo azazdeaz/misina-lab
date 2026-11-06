@@ -68,7 +68,8 @@ class RailCfg:
 
     The pipes rest on a support every meter, and `unevenness` moves the supports off
     level, each by a draw of its own: the pair tilts across and each pipe pitches
-    along its length.
+    along its length. Each pipe turns down into the floor at the row head, and a
+    return bend joins the two at the far end.
     """
 
     gauge: float = 0.6

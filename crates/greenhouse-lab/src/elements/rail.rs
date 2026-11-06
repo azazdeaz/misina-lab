@@ -1,5 +1,10 @@
 //! Rail — the pipe rail in every path: two heating pipes a trolley rides on.
 //!
+//! A path's two pipes are one heating loop. At the row head each turns down
+//! through an elbow into the floor, to the mains under the main path that
+//! feed one pipe and take the water back from the other, and at the far end
+//! a return bend joins the pair: two more elbows and a pipe across.
+//!
 //! The pipes rest on a support every meter and run straight from one support
 //! to the next. `unevenness` raises or lowers every support by a draw of its
 //! own, which tilts the pair across and pitches each pipe along: at 1 the two
@@ -8,17 +13,23 @@
 //!
 //! A segment is a meter-long cylinder stretched to its length, beside a
 //! capsule collider whose straight part spans the whole segment, so a wheel
-//! rolls from one segment onto the next without dipping at the joint.
+//! rolls from one segment onto the next without dipping at the joint. A bend
+//! collides as a chain of capsules round each turn and one capsule along
+//! each straight run.
+
+use std::f32::consts::{FRAC_PI_2, PI};
 
 use bevy::prelude::*;
-use misina_lab::geometry::mesh::cylinder_mesh;
+use misina_lab::geometry::mesh::{MeshData, cylinder_mesh};
+use misina_lab::geometry::strand::{Bark, Strand, strand_mesh};
 use misina_lab::palette::srgb;
 use misina_lab::params::Slider;
 use misina_lab::rng::{Rng, salt};
-use misina_lab::scene::{COLLISION, Library, capsule};
+use misina_lab::scene::{COLLISION, Library, capsule, capsule_between};
+use nalgebra::Point3;
 
 use super::layout::{GreenhouseLayout, Path};
-use super::{Grow, STEEL, SceneParams, cuboid};
+use super::{Grow, STEEL, SceneParams, cuboid, vector};
 
 /// Salt splitting the rails' draws off the scene seed.
 const STREAM: u64 = 0x5851_F42D_4C95_7F2D;
@@ -36,6 +47,17 @@ const SUPPORT: Vec2 = Vec2::new(0.04, 0.08);
 /// Vertices around a pipe.
 const SIDES: usize = 12;
 
+/// A head elbow's bend radius, in pipe diameters: a long-radius elbow's.
+const ELBOW: f32 = 1.5;
+
+/// The most a bend turns from one of its collider's capsules to the next, in
+/// radians.
+const BEND_STEP: f32 = PI / 12.0;
+
+/// How far a bend's mesh may stray from its surface, in meters: its rings
+/// bunch round the turns and spread out along the straight runs.
+const TOLERANCE: f64 = 0.0003;
+
 /// Thinnest pipe built, so a diameter of zero from Python still makes a mesh.
 const MIN_DIAMETER: f32 = 0.005;
 
@@ -52,7 +74,8 @@ const SUPPORT_COLOR: u32 = 0x5E6163;
 ///
 /// The pipes rest on a support every meter, and `unevenness` moves the
 /// supports off level, each by a draw of its own: the pair tilts across and
-/// each pipe pitches along its length.
+/// each pipe pitches along its length. Each pipe turns down into the floor at
+/// the row head, and a return bend joins the two at the far end.
 #[derive(Resource, Reflect, Clone, Debug, PartialEq)]
 #[cfg_attr(
     feature = "python",
@@ -115,14 +138,56 @@ fn build(
     paths: Query<(Entity, &Path)>,
 ) {
     commands.despawn_all::<With<Owned>>();
-    library.clear("Pipe");
-    library.clear("Support");
+    for prefix in ["Pipe", "Elbow", "ReturnBend", "Support"] {
+        library.clear(prefix);
+    }
 
     let radius = params.pipe_diameter.max(MIN_DIAMETER) / 2.0;
     let pipe = library.part(
         "Pipe",
         0,
         cylinder_mesh(radius, radius, 1.0, SIDES).to_mesh(),
+        STEEL.surface(srgb(PIPE_COLOR)),
+    );
+    let reach =
+        (params.unevenness.max(0.0) * params.gauge * SPEC_TILT.to_radians().tan()) as f64 / 2.0;
+
+    // A quarter turn from a pipe's end at the row head, out over the main
+    // path and down, then straight on down past the floor under the highest
+    // support: a long-radius elbow, tightened on a rail too low for one to
+    // clear the floor, but never tighter than the pipe is thick.
+    let turn = (ELBOW * 2.0 * radius).min(params.height).max(radius);
+    let step = turn * BEND_STEP;
+    let mut elbow_line = arc(FRAC_PI_2, |a| {
+        turn * Vec3::new(-a.sin(), 0.0, a.cos() - 1.0)
+    });
+    let low = elbow_line[elbow_line.len() - 1];
+    let bottom = -(params.height + reach as f32 + radius);
+    elbow_line.extend(straight(low, low.with_z(bottom.min(low.z)), step));
+    let elbow = library.part(
+        "Elbow",
+        0,
+        tube(&elbow_line, radius).to_mesh(),
+        STEEL.surface(srgb(PIPE_COLOR)),
+    );
+    // At the far end the same elbow turns the left pipe across the pair, a
+    // pipe runs across, and its mirror image turns it back into the right
+    // one; on a pair too narrow for two, the elbows tighten into a half
+    // circle.
+    let half = (params.gauge / 2.0).max(MIN_DIAMETER);
+    let corner = turn.min(half);
+    let across = arc(FRAC_PI_2, |a| {
+        Vec3::new(corner * a.sin(), half - corner * (1.0 - a.cos()), 0.0)
+    });
+    let end = across[across.len() - 1];
+    let bend_line: Vec<Vec3> = (across.iter().copied())
+        .chain(straight(end, end.with_y(-end.y), step))
+        .chain(across.iter().rev().skip(1).map(|p| p.with_y(-p.y)))
+        .collect();
+    let bend = library.part(
+        "ReturnBend",
+        0,
+        tube(&bend_line, radius).to_mesh(),
         STEEL.surface(srgb(PIPE_COLOR)),
     );
     // A meter tall, standing on its origin.
@@ -135,9 +200,7 @@ fn build(
     );
 
     let segments = (layout.length / SUPPORT_SPACING).ceil().max(1.0) as usize;
-    let step = layout.length / segments as f32;
-    let reach =
-        (params.unevenness.max(0.0) * params.gauge * SPEC_TILT.to_radians().tan()) as f64 / 2.0;
+    let spacing = layout.length / segments as f32;
 
     for (path, &Path(index)) in &paths {
         let rail = commands
@@ -157,11 +220,10 @@ fn build(
             .collect();
 
         // Left and right looking along the row from its head.
-        for (side, (name, y)) in [("L", params.gauge / 2.0), ("R", -params.gauge / 2.0)]
-            .into_iter()
-            .enumerate()
-        {
-            let at = |i: usize| Vec3::new(i as f32 * step, y, heights[i][side]);
+        let ys = [params.gauge / 2.0, -params.gauge / 2.0];
+        let on = |side: usize, i: usize| Vec3::new(i as f32 * spacing, ys[side], heights[i][side]);
+        for (side, name) in ["L", "R"].into_iter().enumerate() {
+            let at = |i: usize| on(side, i);
             for i in 0..=segments {
                 let top = at(i).z - radius;
                 if top > 0.0 {
@@ -195,7 +257,89 @@ fn build(
                         capsule(radius, -radius, length + radius),
                     ));
             }
+
+            commands
+                .spawn((
+                    Name::new(format!("Elbow_{name}")),
+                    Transform::from_translation(at(0)),
+                    Visibility::default(),
+                    ChildOf(rail),
+                ))
+                .with_children(|parent| {
+                    parent.spawn((Name::new(STEEL_PRIM), elbow.clone()));
+                    spawn_capsules(parent, &elbow_line, radius);
+                });
         }
+
+        // The return bend, tilted across as the pair's last supports are.
+        let (left, right) = (on(0, segments), on(1, segments));
+        let tilt = ((left.z - right.z) / (2.0 * half)).clamp(-1.0, 1.0).asin();
+        commands
+            .spawn((
+                Name::new("ReturnBend"),
+                Transform::from_translation((left + right) / 2.0)
+                    .with_rotation(Quat::from_rotation_x(tilt)),
+                Visibility::default(),
+                ChildOf(rail),
+            ))
+            .with_children(|parent| {
+                parent.spawn((Name::new(STEEL_PRIM), bend.clone()));
+                spawn_capsules(parent, &bend_line, radius);
+            });
+    }
+}
+
+/// Points along a bend turning `angle` radians, no more than [`BEND_STEP`]
+/// apart: `at(a)` is the point it has turned `a` at.
+fn arc(angle: f32, at: impl Fn(f32) -> Vec3) -> Vec<Vec3> {
+    let pieces = (angle / BEND_STEP).ceil() as usize;
+    (0..=pieces)
+        .map(|k| at(angle * k as f32 / pieces as f32))
+        .collect()
+}
+
+/// Points on from `from` to `to`, `from` left out, no further than `step`
+/// apart, for the strand through them to keep straight.
+fn straight(from: Vec3, to: Vec3, step: f32) -> impl Iterator<Item = Vec3> {
+    let pieces = (from.distance(to) / step).ceil() as usize;
+    (1..=pieces).map(move |k| from.lerp(to, k as f32 / pieces as f32))
+}
+
+/// A pipe of `radius` along `line`.
+fn tube(line: &[Vec3], radius: f32) -> MeshData {
+    let points = line.iter().map(|&p| Point3::from(vector(p))).collect();
+    let strand = Strand {
+        tolerance: Some(TOLERANCE),
+        ..Strand::new(
+            points,
+            vec![radius as f64; line.len()],
+            SIDES,
+            0.0,
+            Bark::none(),
+        )
+    };
+    strand_mesh(&strand).expect("a bend's line has distinct points")
+}
+
+/// A capsule along each piece of `line`, a straight run of pieces as one,
+/// its straight part spanning the piece, so that neighbours meet in the round
+/// at every point.
+fn spawn_capsules(parent: &mut ChildSpawnerCommands, line: &[Vec3], radius: f32) {
+    let turns = line.windows(3).filter_map(|w| {
+        let (a, b) = ((w[1] - w[0]).normalize(), (w[2] - w[1]).normalize());
+        (a.dot(b) < 1.0 - 1e-4).then_some(w[1])
+    });
+    let corners: Vec<Vec3> = (line.first().copied())
+        .into_iter()
+        .chain(turns)
+        .chain(line.last().copied())
+        .collect();
+    for (k, piece) in corners.windows(2).enumerate() {
+        let out = (piece[1] - piece[0]).normalize_or_zero() * radius;
+        parent.spawn((
+            Name::new(format!("{COLLISION}_{k:02}")),
+            capsule_between(radius, piece[0] - out, piece[1] + out),
+        ));
     }
 }
 
@@ -247,6 +391,57 @@ mod tests {
             assert!((drawn - step).abs() < 1e-4, "segment {i} is {drawn} long");
             assert_eq!(shape.radius, spec.pipe_diameter / 2.0);
             assert!((shape.height - step).abs() < 1e-4, "segment {i}");
+        }
+    }
+
+    /// Where a pipe segment starts and ends, in the rail's frame.
+    fn span(world: &mut World, pipe: Entity) -> (Vec3, Vec3) {
+        let placed = *world.entity(pipe).get::<Transform>().unwrap();
+        let steel = named_children(world, pipe)[0].1;
+        let length = world.entity(steel).get::<Transform>().unwrap().scale.z;
+        let along = placed.rotation * Vec3::Z * length;
+        (placed.translation, placed.translation + along)
+    }
+
+    /// The return bend meets both pipes' last segments, tilted across with
+    /// them twice out of spec, and each elbow starts on its pipe's first
+    /// segment and runs down into the floor.
+    #[test]
+    fn the_bends_meet_the_pipe_ends_and_the_elbows_the_floor() {
+        let mut params = GreenhouseParams::default();
+        params.rail.unevenness = 2.0;
+        let spec = params.rail.clone();
+        let (mut app, prims) = rail(params);
+        let world = app.world_mut();
+        let entity = |name: &str| prims.iter().find(|(n, _)| n == name).unwrap().1;
+        let last = prims
+            .iter()
+            .filter(|(n, _)| n.starts_with("Pipe_L_"))
+            .count()
+            - 1;
+        let bend = *world
+            .entity(entity("ReturnBend"))
+            .get::<Transform>()
+            .unwrap();
+
+        for (side, y) in [("L", spec.gauge / 2.0), ("R", -spec.gauge / 2.0)] {
+            let (_, end) = span(world, entity(&format!("Pipe_{side}_{last:03}")));
+            let off = bend.transform_point(Vec3::Y * y).distance(end);
+            assert!(off < 1e-3, "{side}: the bend ends {off} m off its pipe");
+
+            let elbow = entity(&format!("Elbow_{side}"));
+            let head = world.entity(elbow).get::<Transform>().unwrap().translation;
+            let (start, _) = span(world, entity(&format!("Pipe_{side}_000")));
+            assert!(head.distance(start) < 1e-6, "{side}: {head} off {start}");
+            // Its last capsule, the one standing down from the turn.
+            let last = named_children(world, elbow).last().unwrap().1;
+            let placed = world.entity(last).get::<Transform>().unwrap();
+            let shape = world.entity(last).get::<Collider>().unwrap().0;
+            let bottom = head.z + placed.translation.z - shape.height / 2.0 - shape.radius;
+            assert!(
+                bottom < 0.0,
+                "{side}: the elbow stops {bottom} m off the floor"
+            );
         }
     }
 

@@ -19,11 +19,12 @@
 //! The tour changes what a person would — the panel's [`Staged`] params, the
 //! orbit camera, the panel's scroll — so the viewer answers as it does to a
 //! person, the settle before an edit reaches the scene included. It sizes the
-//! window to the video, takes the pointer away from it, and quits the app
-//! after the last step, which finishes the file. Played with neither variable
-//! set, as a preview, it hands the window back to the pointer instead, still at
-//! the storyboard's size: that is how a shot is framed by hand, with
-//! [`print_camera`] on the viewer's `P` key.
+//! window to the video, keeps it off the screen, since what it saves is read
+//! off the window's own image, takes the pointer away from it, and quits the
+//! app after the last step, which finishes the file. Played with neither
+//! variable set, as a preview, it shows the window and hands it back to the
+//! pointer instead, still at the storyboard's size: that is how a shot is
+//! framed by hand, with [`print_camera`] on the viewer's `P` key.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -68,6 +69,11 @@ pub fn plugin<G: Generator>(app: &mut App) {
         WindowResolution::new(tour.size[0], tour.size[1]).with_scale_factor_override(tour.scale);
     // The recorder stops at a resize, since ffmpeg takes one frame size.
     window.resizable = false;
+    // A still or a recording is read off the window's own image, which is
+    // drawn whether or not the window is on screen: it opens hidden. A
+    // preview, which is for looking at, opens shown.
+    let recording = G::env("RECORD").is_some();
+    window.visible = !recording && G::env("SHOT").is_none();
     // A hover would float a tooltip into the shot, and a drag would turn the
     // camera: the pointer is cut off from the window, and from picking too in
     // case the window system lets it through anyway.
@@ -77,7 +83,6 @@ pub fn plugin<G: Generator>(app: &mut App) {
         ..default()
     });
 
-    let recording = G::env("RECORD").is_some();
     if recording {
         // A nanosecond over the period: the recorder captures once a whole
         // period has passed by its f64 sums, which a step of exactly one
