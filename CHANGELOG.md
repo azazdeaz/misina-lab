@@ -175,6 +175,9 @@ Scene document format 11.
 
 ### Changed
 
+- **misina-lab**: A storyboard that saves a still or records a video plays in
+  a window that is never shown, so `{PACKAGE}_SHOT` and `{PACKAGE}_RECORD`
+  open nothing on the desktop. A preview still opens its window.
 - **greenhouse-lab**: A truss's rachis ends in its last fruit: its last
   internode is that fruit's pedicel out to the knuckle, where the rachis ran
   on past the fruit to a stump. Every other pedicel leaves the rachis's

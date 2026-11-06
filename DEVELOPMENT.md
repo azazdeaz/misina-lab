@@ -157,7 +157,10 @@ With `VINERY_LAB_RECORD` set too its clock advances one video frame per
 rendered frame, so the recording is smooth however long the rebuilds take, and
 the app quits at the end; `docs/video/record.sh` records the README video that
 way. `VINERY_LAB_SHOT=still.png` instead saves the window as the storyboard
-ends, and quits. See `crates/misina-lab/src/tour.rs`, and
+ends, and quits. With either set the window is never shown: what is saved is
+read off its own image, drawn whether it is on screen or not, so a still or a
+video needs a display but opens nothing on the desktop. See
+`crates/misina-lab/src/tour.rs`, and
 [the skill](.claude/skills/readme-video/SKILL.md) for changing the video.
 
 The pruning, greenhouse and straddler demos' videos are filmed in Isaac Sim
