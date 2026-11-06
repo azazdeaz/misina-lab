@@ -57,8 +57,6 @@
 //! one full grown, with little blade yet at its base, folded up along its
 //! veins, held in line with its petiole, and a lighter yellow-green.
 
-use std::f64::consts::{PI, TAU};
-
 // Named over the prelude's `ContextExt`, Bevy's own `context`, which would
 // make every call ambiguous.
 use anyhow::Context as ContextExt;
@@ -70,6 +68,7 @@ use super::util::{color, material, par_map};
 use super::{Grow, Rng};
 use misina_lab::geometry::mesh::{MeshData, bend};
 use misina_lab::geometry::outline::{creased_mesh, spacing};
+use misina_lab::geometry::shapes::Ruffle;
 use misina_lab::params::Slider;
 use misina_lab::quantize::{Metric, farthest_first};
 use misina_lab::scene::{Geometry, Library, Order, Surface, UsdAttributes, configs_changed};
@@ -498,10 +497,8 @@ fn flat(config: &LeafConfig) -> anyhow::Result<(MeshData, Veins)> {
 /// The midrib and the main veins are edges of the mesh, so the fold and the
 /// pleats crease on them; the ruffle is kept off the midrib so the fold
 /// there stays clean. The droop and the kink are *bends* rather than
-/// displacements — see [`bend`] — and the ruffle is a sum of sinusoids
-/// rather than sampled noise: the blade is twenty centimeters of domain with
-/// three wavelengths on it, which is a handful of sines and not worth a
-/// lattice.
+/// displacements — see [`bend`] — and the ruffle is a [`Ruffle`], a sum of
+/// sinusoids rather than sampled noise.
 fn curl(mesh: &mut MeshData, veins: &Veins, config: &LeafConfig) {
     let (amount, grown) = (config.curl as f64, config.maturity.clamp(0.0, 1.0) as f64);
     let midrib = veins.midrib;
@@ -519,24 +516,15 @@ fn curl(mesh: &mut MeshData, veins: &Veins, config: &LeafConfig) {
     // As far as the blade is lopsided and grown, and either way.
     let twist =
         TWIST * grown * config.asymmetry.abs() as f64 * if rng.unit() < 0.5 { -1.0 } else { 1.0 };
-    // A heading, a wavenumber, a phase and a depth per wave, each as deep as
-    // it is long so every one is as steep.
     let side = spacing(config.area as f64 / config.detail.max(1) as f64);
     let shortest = RUFFLE_WAVELENGTH.start.max(RESOLVE * side / midrib);
     let longest = RUFFLE_WAVELENGTH.end.max(shortest);
-    let waves: Vec<[f64; 4]> = (0..RUFFLE_WAVES)
-        .map(|_| {
-            let heading = rng.range(0.0, PI);
-            let k = TAU / (rng.range(shortest, longest) * midrib);
-            let depth = RUFFLE * amount * grown / (RUFFLE_WAVES as f64 * k);
-            [
-                k * heading.cos(),
-                k * heading.sin(),
-                rng.range(0.0, TAU),
-                depth,
-            ]
-        })
-        .collect();
+    let waves = Ruffle::draw(
+        &mut rng,
+        RUFFLE_WAVES,
+        shortest * midrib..longest * midrib,
+        RUFFLE * amount * grown,
+    );
 
     for point in &mut mesh.points {
         let flat = DVec2::new(point[0] as f64, point[1] as f64);
@@ -548,11 +536,7 @@ fn curl(mesh: &mut MeshData, veins: &Veins, config: &LeafConfig) {
 
         let margin = (at.radius / at.reach).min(1.0).powi(3)
             * (across.offset.abs() / (CLEAR * midrib)).min(1.0);
-        let ruffle: f64 = waves
-            .iter()
-            .map(|[kx, ky, phase, depth]| depth * (kx * flat.x + ky * flat.y + phase).sin())
-            .sum();
-        let z = margin * ruffle + pleat * at.radius * at.ridge;
+        let z = margin * waves.at(flat.x, flat.y) + pleat * at.radius * at.ridge;
 
         // Either half turned up about the midrib, carrying its pleats and
         // ruffle with it.
