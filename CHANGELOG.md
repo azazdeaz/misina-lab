@@ -24,6 +24,11 @@ Scene document format 11.
 
 ### Added
 
+- **greenhouse-lab**: A path's heating pipes are one loop. At the row head
+  each turns down through an elbow into the floor, to the mains under the
+  main path, and at the far end two more elbows and a pipe across join the
+  pair; each collides as a chain of capsules. The floor's film reaches half
+  a pitch past the row ends.
 - **greenhouse-lab**: Leaflets in relief. A leaflet's midrib and lobe veins
   are edges of its mesh, and its blade is bent along them: folded up on the
   midrib, puckered between the veins, ruffled at the margin, and twisting
