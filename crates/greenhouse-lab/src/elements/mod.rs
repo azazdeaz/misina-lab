@@ -256,7 +256,7 @@ mod tests {
             ("wire height", edited(|p| p.wire.height = 4.0)),
             ("week", edited(|p| p.scene.week = 4.0)),
             ("no trusses yet", edited(|p| p.scene.week = 0.0)),
-            ("leaves kept", edited(|p| p.stem.leaves_kept = 12)),
+            ("deleafing", edited(|p| p.stem.deleafed_to_truss = 5)),
             ("leaf length", edited(|p| p.leaf.length = 0.5)),
             ("leaf detail", edited(|p| p.leaf.detail = 0.5)),
             ("stem detail", edited(|p| p.stem.detail = 2.0)),
