@@ -312,6 +312,7 @@ fn mesh_data(ground: &Ground) -> MeshData {
         points,
         face_vertex_counts: vec![4; face_vertex_indices.len() / 4],
         face_vertex_indices,
+        colors: None,
     }
 }
 

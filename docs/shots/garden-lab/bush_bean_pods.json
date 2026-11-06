@@ -1,0 +1,39 @@
+{
+  "size": [
+    1600,
+    1000
+  ],
+  "warmup": 8,
+  "start": {
+    "note": "Bush bean pods up close: flattened, beaked, each in its calyx.",
+    "set": {
+      "bed.length": 1.2,
+      "bed.columns": 1,
+      "bed.rows": 1,
+      "planting.misses": 0.0,
+      "planting.jitter": 0.0,
+      "weeds.pressure": 0.0,
+      "weeds.path_pressure": 0.0,
+      "scene.week": 8.0,
+      "lettuce.share": 0.0,
+      "kale.share": 0.0,
+      "carrot.share": 0.0,
+      "bush_bean.share": 1.0,
+      "pole_bean.share": 0.0,
+      "zucchini.share": 0.0,
+      "strawberry.share": 0.0,
+      "bush_bean.spacing": 0.3
+    },
+    "camera": {
+      "focus": [
+        0.0,
+        -0.3,
+        0.42
+      ],
+      "yaw": 0,
+      "pitch": 6,
+      "radius": 0.5,
+      "fov": 30
+    }
+  }
+}

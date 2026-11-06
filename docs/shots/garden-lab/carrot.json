@@ -1,0 +1,37 @@
+{
+  "size": [
+    1600,
+    1000
+  ],
+  "warmup": 8,
+  "start": {
+    "note": "Carrots at harvest: the divided leaves over the roots' greened shoulders in the soil.",
+    "set": {
+      "bed.length": 1.2,
+      "bed.columns": 1,
+      "bed.rows": 1,
+      "planting.misses": 0.0,
+      "weeds.pressure": 0.0,
+      "weeds.path_pressure": 0.0,
+      "scene.week": 12.0,
+      "lettuce.share": 0.0,
+      "kale.share": 0.0,
+      "carrot.share": 1.0,
+      "bush_bean.share": 0.0,
+      "pole_bean.share": 0.0,
+      "zucchini.share": 0.0,
+      "strawberry.share": 0.0
+    },
+    "camera": {
+      "focus": [
+        0.0,
+        0.0,
+        0.36
+      ],
+      "yaw": -35,
+      "pitch": 30,
+      "radius": 0.8,
+      "fov": 40
+    }
+  }
+}

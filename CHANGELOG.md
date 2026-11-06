@@ -20,10 +20,68 @@ Two kinds of change break a project that worked on the release before:
 
 ## [Unreleased]
 
-Scene document format 11.
+Scene document format 12: a box collider is a `Cube` prim scaled to its half
+extents, which an earlier builder would author as a plain cube.
 
 ### Added
 
+- **garden-lab**: a third generator, raised vegetable beds: a level floor
+  and a grid of timber-framed beds filled with soil, each its own collider,
+  with the beds' width, length, height, soil level, paths and count as its
+  knobs, and its first crops, dealt out to the beds' 30 cm squares by their
+  shares and grown to the scene's week from each crop's sowing week:
+  lettuce, a rosette of ruffled blades, loose-leaf or heading; kale, an
+  upright stem with a crown of curled leaves on long petioles; and carrots,
+  compound leaves over a taproot whose shoulder shows at the soil, carrying
+  its ripeness, how it is picked and a `Cut` frame; bush beans, a stem
+  branching into a bush of trifoliate leaves with pods in clusters under the
+  upper ones; pole beans, a vine twining up a string to a trellis on its
+  bed's north edge, posts and rail with a string to every plant, the rail's
+  height a bed knob; and zucchini, a stout stem under giant palmate leaves
+  on long petioles with the fruit lying low, cut to pick, one plant every
+  three squares, since a crop spaced wider than a square now gets a lattice
+  of squares; and strawberries, a crown of toothed trifoliate leaves with
+  every berry on a stalk of its own arching from the crown, a rod when the
+  stems bend, and runners lying along the soil with a plantlet at the tip.
+  Weeds, the vineyard's five habits, come up in the beds' soil and on the
+  paths at a pressure of each, `weeds` knobs, named `Weed_` and carrying
+  `crop` false. Scene-wide `physics` switches say what collides, every stem
+  as a chain of capsules and every fruit and root as a capsule, and what
+  bends: with `flexible_stems` a pole bean's vine and a strawberry's fruit
+  stalks are rods in `segment` lengths, the leaves, pods and berries riding
+  the segments with their masses as the cable's loads; `leaves_collide` puts
+  a box round every blade, fitted in the plane it lies flattest in, under
+  `Leaf_NN/Collision` beside the `Blade` that draws it. Every rigid stem
+  swells at its nodes, toward its leaves' petioles and its fruits' stalks
+  and at the scar a stripped kale leaf leaves, and rounds off to a point at
+  its tip, a zucchini's ridged; a crown is a low dome, a strawberry's dark;
+  blades are pleated on their veins, deep on a strawberry leaflet, frilled
+  at a curly kale's and a loose-leaf lettuce's margin, fanning from a
+  zucchini blade's middle, whose margin is toothed, and a simple blade
+  carries a midrib; strawberries hang under a calyx, studded with achenes;
+  a zucchini is ribbed and club-shaped on a ridged stalk, with a blossom
+  scar; a pod is flattened, swells at its beans, hangs by a stalk under a
+  calyx cup and ends in a curled beak; a carrot is creased and tailed; a
+  bush bean is thin-stemmed, a young leaf at every tip and every leaf full
+  grown once its pods set. A stalked fruit's `Cut` sits halfway down the
+  stalk. Leaves and fruit carry a vertex `displayColor`, a strawberry's
+  colouring from its tip as it ripens. `scene.detail` sets how finely the
+  crop is meshed. `cargo run -p
+  garden-lab` opens its viewer, and
+  `garden_lab.isaaclab.GardenCfg` spawns it in Isaac Lab, its `PLANT` and
+  `without_rods()` saying what prim a rod belongs to and whether a cfg
+  authors one.
+- **misina-lab**: `geometry::mesh::MeshData` carries an optional colour per
+  point, which `to_mesh` writes as the vertex colour attribute both
+  consumers multiply by the part's own, `merge_meshes` keeps and `painted`
+  sets, so a generator paints a part instead of building its mesh by hand;
+  `geometry::mesh::lathe`, a closed solid through rings, and
+  `geometry::shapes::fold`, the keel and droop a leaf blade takes, are the
+  framework's, with `shapes::ring` and `shapes::profile` public;
+  `shapes::pinnate` lays a midrib's veins and the crests between them out
+  as creases for `outline::creased_mesh`, and `shapes::between_veins` says
+  where a point lies between them, so a filled blade pleats on its edges.
+  A strand's `apex` rounds its tip off to a point over that length.
 - **vinery-lab**: Weeds bend. With `WeedCfg.flexible` on, every weed stem
   at least 30 cm long, a bolter's wand or a broadleaf's runners, is a rod a
   solver bends, held at its base, under `Weed_nnnn/Stalk_n`, its leaves
@@ -51,6 +109,15 @@ Scene document format 11.
 - **misina-lab**: `Shears.hold(body, frame)` holds a rod body where it lies
   in a frame and carries it as the frame moves, kinematic, the rest of its
   rod hanging from it, until it is let go: a hand's hold on a piece it cut.
+- **misina-lab**: box colliders: `scene::block(half_extents, placed)` spawns
+  a `Cube` prim scaled to the box, which the builder authors with the
+  collision schema as it does a capsule, and the viewer's overlay draws.
+  `rods.let_rods_out_of_their_wood` lets every shape on a rod's body, a
+  segment's own or a rider's, through any static shape of its own plant it
+  overlaps as authored, whatever its shape, a box by the sphere round it.
+- **misina-lab**: `rods.tune_builder`, the tuning `rods.tune_rods` applies
+  inside Isaac Lab's model-init window, as a function on a bare
+  `ModelBuilder`, for a test or a rig outside the app.
 - **misina-lab**: `rods.let_rods_out_of_their_wood` lets each rod through
   any of its own plant's wood colliders it is authored inside, which
   `tune_rods` runs: a proxy can be fatter than the wood, and the segments

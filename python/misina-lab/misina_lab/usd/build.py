@@ -119,7 +119,9 @@ Colliders are authored where physics can reach them
     rasterizes it into a height field at that spacing rather than handing
     MuJoCo a mesh, which MuJoCo would collide as its convex hull. Everything else a robot bumps into is a
     ``Capsule`` prim of its own -- the only round shape PhysX has natively,
-    needing no cooking -- marked ``purpose = "guide"`` so no renderer draws it.
+    needing no cooking -- marked ``purpose = "guide"`` so no renderer draws it;
+    a sheet a capsule fits badly, a leaf, is a ``Cube`` prim of its own
+    instead, a box sized by its scale alone and marked the same way.
 
 A flexible organ is a curve and the material it bends by
     A ``BasisCurves`` carrying ``PhysicsCurvesDeformableSimAPI`` is imported as a
@@ -199,7 +201,7 @@ from typing import Any
 
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
 
-FORMAT = 11
+FORMAT = 12
 """Document version this builder understands. See `crates/misina-lab/src/scene/doc.rs`."""
 
 PARTS = "parts"
@@ -593,6 +595,8 @@ def _author_node(
 
     if collider := node.get("collider"):
         _author_collider(spec, collider)
+    elif spec.typeName == "Cube":
+        _author_box(spec)
 
     if cable := node.get("cable"):
         _author_cable(spec, cable)
@@ -654,10 +658,8 @@ def _author_collider(spec: Sdf.PrimSpec, collider: Mapping[str, Any]) -> None:
     The prim's ``axis`` is left unauthored -- USD's default is already the
     ``+Z`` the document builds capsules about. ``height`` measures the
     cylindrical section alone, so the capsule reaches ``height / 2 + radius``
-    either side of its origin, which is what ``extent`` bounds.
-
-    ``purpose = "guide"`` keeps it out of a render without hiding it from
-    physics, which reads collision independently of purpose.
+    either side of its origin, which is what ``extent`` bounds; `_mark_collider`
+    makes it a proxy.
     """
     radius = float(collider["radius"])
     height = float(collider["height"])
@@ -673,6 +675,25 @@ def _author_collider(spec: Sdf.PrimSpec, collider: Mapping[str, Any]) -> None:
     ):
         Sdf.AttributeSpec(spec, name, value_type).default = value
 
+    _mark_collider(spec)
+
+
+def _author_box(spec: Sdf.PrimSpec) -> None:
+    """A box collision proxy: a ``Cube`` of size 2, so that its half extents
+    are the scale its xform carries, which is all the document says of it.
+    """
+    Sdf.AttributeSpec(spec, "size", Sdf.ValueTypeNames.Double).default = 2.0
+    Sdf.AttributeSpec(spec, "extent", Sdf.ValueTypeNames.Float3Array).default = Vt.Vec3fArray(
+        [Gf.Vec3f(-1.0, -1.0, -1.0), Gf.Vec3f(1.0, 1.0, 1.0)]
+    )
+    _mark_collider(spec)
+
+
+def _mark_collider(spec: Sdf.PrimSpec) -> None:
+    """What makes a proxy one: ``purpose = "guide"`` keeps it out of a render
+    without hiding it from physics, which reads collision independently of
+    purpose, and the collision schema.
+    """
     # Uniform, as the schema declares it: what a prim is for does not vary
     # over time.
     Sdf.AttributeSpec(

@@ -3,7 +3,8 @@
 //!
 //! [`MeshData`] is what [`strand`](super::strand) and
 //! [`outline`](super::outline) hand back: points plus **n-gon** faces, which is
-//! what a tube skinner and a polygon filler naturally produce. The scene holds
+//! what a tube skinner and a polygon filler naturally produce, and a colour
+//! per point when the part's colour varies over it. The scene holds
 //! Bevy [`Mesh`](bevy::mesh::Mesh)es, so [`MeshData::to_mesh`] triangulates on
 //! the way out — the one place a fan triangulation happens, rather than once
 //! per kernel.
@@ -25,6 +26,11 @@ pub struct MeshData {
     pub points: Vec<[f32; 3]>,
     pub face_vertex_counts: Vec<i32>,
     pub face_vertex_indices: Vec<i32>,
+    /// A linear RGB colour per point, for a part whose colour varies over it;
+    /// none leaves the colour to the part's surface. Both consumers multiply
+    /// it by the surface's colour, so a painted part takes white for that —
+    /// see [`palette`](crate::palette).
+    pub colors: Option<Vec<[f32; 3]>>,
 }
 
 impl MeshData {
@@ -42,7 +48,8 @@ impl MeshData {
     /// Normals are *smooth*, because the kernels express shading through
     /// topology: a shape that wants a hard edge gives its faces unshared
     /// vertices (see [`box_mesh`]) and one that wants a round silhouette shares
-    /// them (see [`cylinder_mesh`]).
+    /// them (see [`cylinder_mesh`]). A painted mesh carries its colours as
+    /// `Mesh::ATTRIBUTE_COLOR`, opaque.
     pub fn to_mesh(&self) -> Mesh {
         let mut indices: Vec<u32> = Vec::with_capacity(self.face_vertex_indices.len());
         let mut cursor = 0usize;
@@ -54,14 +61,30 @@ impl MeshData {
             }
         }
 
-        Mesh::new(
+        let mut mesh = Mesh::new(
             PrimitiveTopology::TriangleList,
             RenderAssetUsages::default(),
         )
         .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.points.clone())
-        .with_inserted_indices(Indices::U32(indices))
+        .with_inserted_indices(Indices::U32(indices));
+        if let Some(colors) = &self.colors {
+            assert_eq!(
+                colors.len(),
+                self.points.len(),
+                "a painted mesh has a colour per point"
+            );
+            let rgba: Vec<[f32; 4]> = colors.iter().map(|[r, g, b]| [*r, *g, *b, 1.0]).collect();
+            mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, rgba);
+        }
         // Use area-weighted normals because the angle-weighted normals become zero for small edges
-        .with_computed_area_weighted_normals()
+        mesh.with_computed_area_weighted_normals()
+    }
+
+    /// This mesh with `color` on every point: what a part keeps of its own
+    /// colour when it is merged with painted ones.
+    pub fn painted(mut self, color: [f32; 3]) -> MeshData {
+        self.colors = Some(vec![color; self.points.len()]);
+        self
     }
 
     /// The area of the surface, as the triangles [`to_mesh`](Self::to_mesh)
@@ -103,6 +126,7 @@ impl MeshData {
                 .collect(),
             face_vertex_counts: self.face_vertex_counts.clone(),
             face_vertex_indices: self.face_vertex_indices.clone(),
+            colors: self.colors.clone(),
         }
     }
 }
@@ -124,9 +148,14 @@ pub fn bend(u: f64, z: f64, k: f64) -> (f64, f64) {
 /// One mesh holding every part, with each part's indices rebased.
 ///
 /// A dozen tubes merge for free and cost one prim instead of a dozen, which is
-/// what the export pays for.
+/// what the export pays for. The merged mesh is painted if any part is, a
+/// part without colours of its own white — the surface's colour, unchanged —
+/// so a caller paints every part a merged mesh is to shade, or none.
 pub fn merge_meshes(parts: &[MeshData]) -> MeshData {
     let mut merged = MeshData::default();
+    if parts.iter().any(|part| part.colors.is_some()) {
+        merged.colors = Some(Vec::new());
+    }
     for part in parts {
         let offset = merged.points.len() as i32;
         merged.points.extend_from_slice(&part.points);
@@ -136,6 +165,12 @@ pub fn merge_meshes(parts: &[MeshData]) -> MeshData {
         merged
             .face_vertex_indices
             .extend(part.face_vertex_indices.iter().map(|i| i + offset));
+        if let Some(colors) = &mut merged.colors {
+            match &part.colors {
+                Some(own) => colors.extend_from_slice(own),
+                None => colors.extend(std::iter::repeat_n([1.0; 3], part.points.len())),
+            }
+        }
     }
     merged
 }
@@ -163,6 +198,7 @@ pub fn box_mesh(size: f32) -> MeshData {
         points,
         face_vertex_counts: vec![4; 6],
         face_vertex_indices: (0..24).collect(),
+        colors: None,
     }
 }
 
@@ -216,6 +252,41 @@ pub fn cylinder_mesh(base: f32, top_radius: f32, height: f32, sides: usize) -> M
         points,
         face_vertex_counts,
         face_vertex_indices,
+        colors: None,
+    }
+}
+
+/// A closed surface through `rings`, from `top` down to `bottom`, every ring
+/// the same number of points counter-clockwise seen from above. Faces wind
+/// outward: a fan of triangles from `top` to the first ring, a quad band
+/// between each ring and the next, and a fan from the last ring to `bottom`.
+/// A solid turned from a profile, a fruit or a root, is one.
+pub fn lathe(top: Vec3, rings: &[Vec<Vec3>], bottom: Vec3) -> MeshData {
+    let n = rings[0].len() as i32;
+    let last = rings.len() - 1;
+    let at = |j: usize, i: i32| 1 + j as i32 * n + i.rem_euclid(n);
+    let end = 1 + rings.len() as i32 * n;
+    let mut points = vec![top.to_array()];
+    points.extend(rings.iter().flatten().map(|p| p.to_array()));
+    points.push(bottom.to_array());
+
+    let (mut counts, mut indices) = (Vec::new(), Vec::new());
+    for i in 0..n {
+        counts.extend([3, 3]);
+        indices.extend([0, at(0, i), at(0, i + 1)]);
+        indices.extend([at(last, i), end, at(last, i + 1)]);
+    }
+    for j in 0..last {
+        for i in 0..n {
+            counts.push(4);
+            indices.extend([at(j, i), at(j + 1, i), at(j + 1, i + 1), at(j, i + 1)]);
+        }
+    }
+    MeshData {
+        points,
+        face_vertex_counts: counts,
+        face_vertex_indices: indices,
+        colors: None,
     }
 }
 
@@ -430,6 +501,86 @@ mod tests {
     fn merging_nothing_yields_an_empty_mesh() {
         let merged = merge_meshes(&[]);
         assert!(merged.points.is_empty() && merged.face_vertex_counts.is_empty());
+    }
+
+    /// A painted part keeps its colours through a merge, a move and the
+    /// conversion, where they come out opaque; an unpainted part merged with
+    /// it is white, and a merge of unpainted parts carries no colours.
+    #[test]
+    fn colours_ride_a_point_through_merging_moving_and_conversion() {
+        let red = [0.8, 0.1, 0.1];
+        let painted = box_mesh(1.0).painted(red);
+        assert_eq!(painted.colors.as_ref().unwrap().len(), 24);
+        let moved = painted.transformed(&Transform::from_xyz(1.0, 0.0, 0.0));
+        assert_eq!(moved.colors, painted.colors);
+
+        let merged = merge_meshes(&[box_mesh(2.0), painted]);
+        let colors = merged.colors.as_ref().unwrap();
+        assert_eq!(colors.len(), 48);
+        assert!(colors[..24].iter().all(|c| *c == [1.0; 3]));
+        assert!(colors[24..].iter().all(|c| *c == red));
+        assert!(
+            merge_meshes(&[box_mesh(1.0), box_mesh(2.0)])
+                .colors
+                .is_none()
+        );
+
+        let mesh = merged.to_mesh();
+        let Some(VertexAttributeValues::Float32x4(rgba)) = mesh.attribute(Mesh::ATTRIBUTE_COLOR)
+        else {
+            panic!("a painted mesh carries vertex colours");
+        };
+        assert_eq!(rgba[30], [0.8, 0.1, 0.1, 1.0]);
+        assert!(
+            box_mesh(1.0)
+                .to_mesh()
+                .attribute(Mesh::ATTRIBUTE_COLOR)
+                .is_none()
+        );
+    }
+
+    /// A lathe is closed, every ring stitched to the next and both ends
+    /// fanned, and winds outward whichever way it is looked at.
+    #[test]
+    fn a_lathe_is_a_closed_solid_wound_outward() {
+        let ring = |radius: f32, z: f32| -> Vec<Vec3> {
+            (0..8)
+                .map(|i| {
+                    let a = TAU * i as f32 / 8.0;
+                    Vec3::new(radius * a.cos(), radius * a.sin(), z)
+                })
+                .collect()
+        };
+        let rings = [ring(0.5, -0.2), ring(1.0, -0.6), ring(0.6, -1.0)];
+        let mesh = lathe(Vec3::ZERO, &rings, Vec3::new(0.0, 0.0, -1.2));
+        assert_eq!(mesh.points.len(), 2 + 3 * 8);
+        assert_eq!(mesh.face_vertex_counts.len(), 2 * 8 + 2 * 8);
+        let center = Vec3::new(0.0, 0.0, -0.6);
+        for (i, face) in faces(&mesh).enumerate() {
+            let outward = face_centroid(&mesh, face) - center;
+            assert!(
+                face_normal(&mesh, face).dot(outward) > 0.0,
+                "face {i} winds inward"
+            );
+        }
+        let mut directed: std::collections::HashMap<(i32, i32), usize> = Default::default();
+        for face in faces(&mesh) {
+            for i in 0..face.len() {
+                *directed
+                    .entry((face[i], face[(i + 1) % face.len()]))
+                    .or_default() += 1;
+            }
+        }
+        assert!(
+            directed.values().all(|n| *n == 1),
+            "every directed edge once"
+        );
+        assert!(
+            directed
+                .keys()
+                .all(|(a, b)| directed.contains_key(&(*b, *a))),
+            "every edge has its twin"
+        );
     }
 
     #[test]

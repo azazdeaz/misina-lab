@@ -1,0 +1,37 @@
+{
+  "size": [
+    1600,
+    1000
+  ],
+  "warmup": 8,
+  "start": {
+    "note": "Pole beans at harvest, twining up their strings, pods hanging on stalks from the upper nodes.",
+    "set": {
+      "bed.length": 1.2,
+      "bed.columns": 1,
+      "bed.rows": 1,
+      "planting.misses": 0.0,
+      "weeds.pressure": 0.0,
+      "weeds.path_pressure": 0.0,
+      "scene.week": 10.0,
+      "lettuce.share": 0.0,
+      "kale.share": 0.0,
+      "carrot.share": 0.0,
+      "bush_bean.share": 0.0,
+      "pole_bean.share": 1.0,
+      "zucchini.share": 0.0,
+      "strawberry.share": 0.0
+    },
+    "camera": {
+      "focus": [
+        0.0,
+        0.0,
+        1.36
+      ],
+      "yaw": -35,
+      "pitch": 15,
+      "radius": 2.4,
+      "fov": 40
+    }
+  }
+}

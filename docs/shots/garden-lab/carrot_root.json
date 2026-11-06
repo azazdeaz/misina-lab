@@ -1,0 +1,38 @@
+{
+  "size": [
+    1600,
+    1000
+  ],
+  "warmup": 8,
+  "start": {
+    "note": "A carrot's root under the soil: its fine rings.",
+    "set": {
+      "bed.length": 1.2,
+      "bed.columns": 1,
+      "bed.rows": 1,
+      "planting.misses": 0.0,
+      "planting.jitter": 0.0,
+      "weeds.pressure": 0.0,
+      "weeds.path_pressure": 0.0,
+      "scene.week": 12.0,
+      "lettuce.share": 0.0,
+      "kale.share": 0.0,
+      "carrot.share": 1.0,
+      "bush_bean.share": 0.0,
+      "pole_bean.share": 0.0,
+      "zucchini.share": 0.0,
+      "strawberry.share": 0.0
+    },
+    "camera": {
+      "focus": [
+        0.0375,
+        0.0375,
+        0.18
+      ],
+      "yaw": 45,
+      "pitch": 8,
+      "radius": 0.1,
+      "fov": 40
+    }
+  }
+}

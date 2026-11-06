@@ -1,0 +1,24 @@
+{
+  "size": [
+    1600,
+    1000
+  ],
+  "warmup": 8,
+  "start": {
+    "note": "The default garden at week 10, every crop in, from above the south-west corner.",
+    "set": {
+      "scene.week": 10.0
+    },
+    "camera": {
+      "focus": [
+        0.0,
+        0.0,
+        0.4
+      ],
+      "yaw": -40,
+      "pitch": 32,
+      "radius": 8.5,
+      "fov": 45
+    }
+  }
+}

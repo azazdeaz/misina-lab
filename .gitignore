@@ -4,6 +4,7 @@
 /.venv
 /crates/vinery-lab/python/vinery_lab/*.so
 /crates/greenhouse-lab/python/greenhouse_lab/*.so
+/crates/garden-lab/python/garden_lab/*.so
 __pycache__/
 
 *.local.md

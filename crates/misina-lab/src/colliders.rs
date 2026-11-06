@@ -4,8 +4,9 @@
 //!
 //! One colour per kind of collider:
 //!
-//! - magenta, [`STATIC`]: the [`Collider`] capsules, and the first segment of
-//!   every rod, which is held where it was authored. Nothing moves these.
+//! - magenta, [`STATIC`]: the [`Collider`] capsules and boxes, and the first
+//!   segment of every rod, which is held where it was authored. Nothing moves
+//!   these.
 //! - yellow, [`ROD`]: every other segment of a [`Cable`], one capsule each, as
 //!   a solver's rod importer builds them.
 //! - cyan, [`SURFACE`]: the parts that are their own collider
@@ -79,14 +80,16 @@ fn draw(
 
     let mut shapes = GizmoAsset::new();
     for (collider, placed) in &capsules {
-        let collider = collider.0;
-        capsule_outline(
-            &mut shapes,
-            placed.affine(),
-            collider.height / 2.0,
-            collider.radius,
-            STATIC,
-        );
+        match collider {
+            Collider::Capsule(capsule) => capsule_outline(
+                &mut shapes,
+                placed.affine(),
+                capsule.height / 2.0,
+                capsule.radius,
+                STATIC,
+            ),
+            Collider::Box => box_outline(&mut shapes, placed.affine(), STATIC),
+        }
     }
     for (cable, organ) in &cables {
         // A cable has no transform of its own: its points are in its organ's
@@ -210,6 +213,27 @@ fn capsule_outline(
     }
 }
 
+/// A box of half extents 1 about the origin of `frame`, whose scale sizes
+/// it: its twelve edges.
+fn box_outline(gizmo: &mut GizmoAsset, frame: Affine3A, color: Srgba) {
+    let corner = |x: f32, y: f32, z: f32| frame.transform_point3(Vec3::new(x, y, z));
+    for z in [-1.0, 1.0] {
+        gizmo.linestrip(
+            [
+                corner(-1.0, -1.0, z),
+                corner(1.0, -1.0, z),
+                corner(1.0, 1.0, z),
+                corner(-1.0, 1.0, z),
+                corner(-1.0, -1.0, z),
+            ],
+            color,
+        );
+    }
+    for (x, y) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+        gizmo.line(corner(x, y, -1.0), corner(x, y, 1.0), color);
+    }
+}
+
 /// Every triangle of `mesh`, edges only. An edge two triangles share is drawn
 /// once for each.
 fn triangle_edges(gizmo: &mut GizmoAsset, mesh: &Mesh, frame: Affine3A, color: Srgba) {
@@ -235,7 +259,7 @@ fn triangle_edges(gizmo: &mut GizmoAsset, mesh: &Mesh, frame: Affine3A, color: S
 mod tests {
     use super::*;
     use crate::scene::doc::TRIANGLE_MESH;
-    use crate::scene::{Part, Surface, cable, capsule};
+    use crate::scene::{Part, Surface, block, cable, capsule};
 
     fn part(mesh: Handle<Mesh>, collision: Option<&'static str>) -> Part {
         Part {
@@ -300,6 +324,11 @@ mod tests {
             .spawn(Transform::from_xyz(10.0, 0.0, 0.0).with_scale(Vec3::splat(2.0)))
             .id();
         world.spawn((capsule(0.1, 0.0, 1.0), ChildOf(organ)));
+        // A box 10 cm each way at 1.5 m up the same organ.
+        world.spawn((
+            block(Vec3::splat(0.1), Transform::from_xyz(0.0, 0.0, 1.5)),
+            ChildOf(organ),
+        ));
 
         // Three points a metre apart, 10 cm thick tapering to 6: two segments,
         // the first held.
@@ -336,12 +365,13 @@ mod tests {
         app.update();
 
         let world = app.world_mut();
-        // The proxy reaches 0.2 m round its axis and 0..2 m up it; the held
-        // segment reaches 5 cm past its points, the other 4 cm past its own.
+        // The proxy reaches 0.2 m round its axis and 0..2 m up it, the box
+        // 0.2 m round 3 m up; the held segment reaches 5 cm past its points,
+        // the other 4 cm past its own.
         close(
             bounds(world, STATIC),
             Vec3::new(-0.05, -0.2, -0.05),
-            Vec3::new(10.2, 0.2, 2.0),
+            Vec3::new(10.2, 0.2, 3.2),
         );
         close(
             bounds(world, ROD),

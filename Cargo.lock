@@ -2911,6 +2911,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "garden-lab"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "misina-lab",
+ "nalgebra 0.35.0",
+ "pyo3",
+ "spade",
+]
+
+[[package]]
 name = "gauss-quad"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

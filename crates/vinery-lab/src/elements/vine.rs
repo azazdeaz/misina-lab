@@ -1470,7 +1470,7 @@ mod tests {
             let proxy = trunk_collider(&config).expect("a mature vine has a trunk");
             let at = world.spawn(proxy).id();
             let at = world.entity(at);
-            let shape = at.get::<Collider>().unwrap().0;
+            let shape = at.get::<Collider>().unwrap().capsule().unwrap();
             let z = at.get::<Transform>().unwrap().translation.z;
             let reach = shape.height / 2.0 + shape.radius;
 
@@ -1516,7 +1516,7 @@ mod tests {
                 let proxy = cordon_collider(&config, sign).expect("a mature vine has cordons");
                 let at = world.spawn(proxy).id();
                 let at = world.entity(at);
-                let shape = at.get::<Collider>().unwrap().0;
+                let shape = at.get::<Collider>().unwrap().capsule().unwrap();
                 let frame = at.get::<Transform>().unwrap();
                 let along = frame.rotation * Vec3::Z * (shape.height / 2.0 + shape.radius);
                 let (head, tip) = (frame.translation - along, frame.translation + along);

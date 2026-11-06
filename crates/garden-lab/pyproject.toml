@@ -1,0 +1,28 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "garden-lab"
+description = "Procedural raised-bed vegetable gardens for robotics simulation, authored to USD."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT OR Apache-2.0"
+authors = [{ name = "Andras Polgar", email = "azazdeaz@gmail.com" }]
+dynamic = ["version"]
+# The scene is built in Rust and handed over as JSON; `misina_lab.usd`
+# authors the stage, and brings `usd-core` with it.
+# Pinned exactly, to the workspace version both packages release under: the
+# scene document this extension writes is the one that release reads.
+dependencies = ["misina-lab==0.1.0"]
+
+[project.urls]
+Repository = "https://github.com/azazdeaz/misina-lab"
+
+[tool.uv.sources]
+misina-lab = { workspace = true }
+
+[tool.maturin]
+features = ["extension-module"]
+module-name = "garden_lab._core"
+python-source = "python"

@@ -1478,7 +1478,7 @@ mod tests {
                         let at = world.entity(capsule);
                         let (place, shape) = (
                             at.get::<Transform>().unwrap(),
-                            at.get::<Collider>().unwrap().0,
+                            at.get::<Collider>().unwrap().capsule().unwrap(),
                         );
                         let half = place.rotation * Vec3::Z * shape.height / 2.0;
                         (place.translation - half, place.translation + half)

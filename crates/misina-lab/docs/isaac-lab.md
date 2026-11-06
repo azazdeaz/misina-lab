@@ -101,11 +101,13 @@ importer reads one as static, since the prim is no rigid body, and left so
 it would stand where it was authored while the segment moved on. Seated, it
 moves and falls with the segment, takes the plant's group, and passes
 through its own rod, which it was authored just clear of. Once the
-groups are set, `let_rods_out_of_their_wood` lets each rod through any of
-its own plant's wood colliders it is authored inside: a proxy is
+groups are set, `let_rods_out_of_their_wood` lets every shape on a rod's
+body, a segment's own or a rider's, through any static shape of its own
+plant it is authored overlapping, its wood or its support: a proxy is
 straighter and often fatter than the wood, the segments next to the held
 one can start in it, and a pair overlapping at rest would shove the rod off
-its rest shape at the first step. A pair let through stays so for the
+its rest shape at the first step. A capsule or a sphere meets by its axis,
+any other shape by the sphere round it. A pair let through stays so for the
 model's life, a piece cut free included; the rod's other shapes still meet
 that wood.
 

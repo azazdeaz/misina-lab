@@ -320,13 +320,10 @@ def tune_rods(
     every plant and every other rod.
     """
     global _tuning
-    # Matches a label up to and including its plant prim.
-    plant_path = re.compile(rf"(.*/{re.escape(plant)}_[^/]*)/")
     # Imported here and not at module scope: `newton` brings `pxr` with it, and
     # Kit's own `pxr` wins the import only if nothing loaded the pip one first.
     from isaaclab.sim import SimulationContext
     from isaaclab_newton.physics import NewtonBuilderCfg, NewtonManager
-    from newton import JointType
 
     if _tuning is not None and _tuning.id in NewtonManager._callbacks:
         return _tuning
@@ -334,57 +331,7 @@ def tune_rods(
     def tune(_payload) -> None:
         sim = SimulationContext.instance()
         builder = sim.get_or_create_backend(NewtonBuilderCfg(physics_cfg=sim.cfg.physics))
-        rods: set[int] = set()
-        for joint, kind in enumerate(builder.joint_type):
-            if kind != JointType.ROD:
-                continue
-            # Both ends, so a chain's first body is counted too: it is the
-            # first rod joint's parent and no rod joint's child.
-            rods.update((builder.joint_parent[joint], builder.joint_child[joint]))
-            # A rod's four slots, in the builder's order: stretch, shear, bend,
-            # twist.
-            dof = builder.joint_qd_start[joint]
-            for slot in (dof, dof + 1):
-                builder.joint_target_ke[slot] *= stretch
-            lone = not plant_path.match(builder.body_label[builder.joint_child[joint]])
-            fraction = lone_damping if lone and lone_damping is not None else damping
-            for slot in (dof + 2, dof + 3):
-                builder.joint_target_kd[slot] = fraction * builder.joint_target_ke[slot]
-
-        carry_riders(builder)
-
-        # Groups: a plant's for its rods and wood, allotted as they turn up,
-        # a rod under no plant counting as a plant of its own; `SCENE_GROUP`
-        # for any other shape under no plant; one of its own for every other
-        # body. Group 0 is a site, which collides with nothing, and stays.
-        plants: dict[str, int] = {}
-
-        def plant_group(label: str, alone: str | None = None) -> int:
-            owner = plant_path.match(label)
-            key = owner.group(1) if owner is not None else alone
-            if key is None:
-                return SCENE_GROUP
-            return plants.setdefault(key, PLANT_GROUPS + len(plants))
-
-        def regroup(shapes: Sequence[int], group: int) -> None:
-            for shape in shapes:
-                if builder.shape_collision_group[shape] != 0:
-                    builder.shape_collision_group[shape] = group
-
-        # `body_shapes` is keyed by body index, and a static shape has none,
-        # so -1 is the whole of the static scene.
-        for body in range(builder.body_count):
-            label = builder.body_label[body]
-            if body in rods:
-                # Keyed alone by its curve, the label short of the suffix.
-                group = plant_group(label, alone=re.sub(rf"{_ROD_BODY_SUFFIX}$", "", label))
-            else:
-                group = -(2 + body)
-            regroup(builder.body_shapes.get(body, ()), group)
-        for shape in builder.body_shapes[-1]:
-            regroup((shape,), plant_group(builder.shape_label[shape]))
-
-        let_rods_out_of_their_wood(builder)
+        tune_builder(builder, plant, damping, stretch, lone_damping)
 
     def reserve(_payload) -> None:
         # With no simulation running, as when a test dispatches the event by
@@ -396,6 +343,82 @@ def tune_rods(
     _tuning = NewtonManager.register_callback(tune, PhysicsEvent.MODEL_INIT)
     NewtonManager.register_callback(reserve, PhysicsEvent.PHYSICS_READY)
     return _tuning
+
+
+def tune_builder(
+    builder,
+    plant: str,
+    damping: float = ROD_DAMPING,
+    stretch: float = ROD_STRETCH,
+    lone_damping: float | None = None,
+) -> int:
+    """What `tune_rods` does to the builder once the importer has filled it:
+    softens every rod joint's stretch and shear by `stretch`, damps its bend
+    and twist by `damping` times their stiffness (`lone_damping` for a rod
+    under no plant's prim, when given), seats the riders, groups each plant's
+    rods and wood under its own collision group, a rod under no plant as a
+    plant of its own and every other shape under no plant into the scene's,
+    and lets each rod out of the wood it is authored inside. Returns how many
+    pairs that let through.
+
+    For a builder outside Isaac Lab, a test or a rig: `tune_rods` is the same
+    call inside the app's `MODEL_INIT` window.
+    """
+    from newton import JointType
+
+    # Matches a label up to and including its plant prim.
+    plant_path = re.compile(rf"(.*/{re.escape(plant)}_[^/]*)/")
+    rods: set[int] = set()
+    for joint, kind in enumerate(builder.joint_type):
+        if kind != JointType.ROD:
+            continue
+        # Both ends, so a chain's first body is counted too: it is the
+        # first rod joint's parent and no rod joint's child.
+        rods.update((builder.joint_parent[joint], builder.joint_child[joint]))
+        # A rod's four slots, in the builder's order: stretch, shear, bend,
+        # twist.
+        dof = builder.joint_qd_start[joint]
+        for slot in (dof, dof + 1):
+            builder.joint_target_ke[slot] *= stretch
+        lone = not plant_path.match(builder.body_label[builder.joint_child[joint]])
+        fraction = lone_damping if lone and lone_damping is not None else damping
+        for slot in (dof + 2, dof + 3):
+            builder.joint_target_kd[slot] = fraction * builder.joint_target_ke[slot]
+
+    carry_riders(builder)
+
+    # Groups: a plant's for its rods and wood, allotted as they turn up,
+    # a rod under no plant counting as a plant of its own; `SCENE_GROUP`
+    # for any other shape under no plant; one of its own for every other
+    # body. Group 0 is a site, which collides with nothing, and stays.
+    plants: dict[str, int] = {}
+
+    def plant_group(label: str, alone: str | None = None) -> int:
+        owner = plant_path.match(label)
+        key = owner.group(1) if owner is not None else alone
+        if key is None:
+            return SCENE_GROUP
+        return plants.setdefault(key, PLANT_GROUPS + len(plants))
+
+    def regroup(shapes: Sequence[int], group: int) -> None:
+        for shape in shapes:
+            if builder.shape_collision_group[shape] != 0:
+                builder.shape_collision_group[shape] = group
+
+    # `body_shapes` is keyed by body index, and a static shape has none,
+    # so -1 is the whole of the static scene.
+    for body in range(builder.body_count):
+        label = builder.body_label[body]
+        if body in rods:
+            # Keyed alone by its curve, the label short of the suffix.
+            group = plant_group(label, alone=re.sub(rf"{_ROD_BODY_SUFFIX}$", "", label))
+        else:
+            group = -(2 + body)
+        regroup(builder.body_shapes.get(body, ()), group)
+    for shape in builder.body_shapes[-1]:
+        regroup((shape,), plant_group(builder.shape_label[shape]))
+
+    return let_rods_out_of_their_wood(builder)
 
 
 def carry_riders(builder) -> int:
@@ -451,8 +474,9 @@ def carry_riders(builder) -> int:
 
 
 def let_rods_out_of_their_wood(builder) -> int:
-    """Let every shape on a rod through each collider of its own plant's
-    wood that it overlaps as authored. Returns how many pairs were let
+    """Let every shape on a rod's body, a segment's own or a rider seated on
+    it, through each static shape of its own plant that it overlaps as
+    authored, its wood or its support. Returns how many pairs were let
     through.
 
     A rod is held where it leaves the wood it grows from, and a wood collider
@@ -462,35 +486,39 @@ def let_rods_out_of_their_wood(builder) -> int:
     simulation starts, at the joint a flush cut is made at.
 
     A pair let through stays so for as long as the model stands, a piece cut
-    free included: such a segment passes through the whole of that collider,
+    free included: such a segment passes through the whole of that shape,
     however long. Every other pair of the rod's shapes and its wood still
-    meets.
+    meets; what rides the rod passes its own rod by `carry_riders`.
 
-    Capsules and spheres only, which is what a rod and a proxy are made of.
+    Capsules and spheres meet by their axes; any other shape, a box, by the
+    sphere round it, so a pair let through on its account need not touch.
     Call it on a builder whose collision groups are set, as `tune_rods` does:
-    a plant's group is what says whose wood a rod's shape may meet.
+    a plant's group is what says whose wood a rod's shape may be let through.
     """
     from newton import GeoType, ShapeFlags
 
     def own(shape: int) -> bool:
         return (
             bool(builder.shape_flags[shape] & ShapeFlags.COLLIDE_SHAPES)
-            and builder.shape_type[shape] in (GeoType.CAPSULE, GeoType.SPHERE)
             and builder.shape_collision_group[shape] >= PLANT_GROUPS
         )
 
     def axis(shape: int) -> tuple[np.ndarray, np.ndarray, float]:
         """The shape's axis, its two ends in the world, and its radius out to
-        where it touches."""
+        where it touches: a capsule's and a sphere's own, any other's the
+        sphere round it."""
         pose = builder.shape_transform[shape]
         if (body := builder.shape_body[shape]) >= 0:
             pose = builder.body_q[body] * pose
         pose = np.array(pose, dtype=float)
         x, y, z, w = pose[3:]
         up = np.array([2 * (x * z + y * w), 2 * (y * z - x * w), 1 - 2 * (x * x + y * y)])
-        scale = builder.shape_scale[shape]
-        reach = up * (scale[1] if builder.shape_type[shape] == GeoType.CAPSULE else 0.0)
-        return pose[:3] - reach, pose[:3] + reach, scale[0] + builder.shape_margin[shape]
+        scale = np.array(builder.shape_scale[shape], dtype=float)
+        kind = builder.shape_type[shape]
+        reach = up * (scale[1] if kind == GeoType.CAPSULE else 0.0)
+        round_ = kind in (GeoType.CAPSULE, GeoType.SPHERE)
+        radius = scale[0] if round_ else float(np.linalg.norm(scale))
+        return pose[:3] - reach, pose[:3] + reach, radius + builder.shape_margin[shape]
 
     woods: dict[int, list[int]] = {}
     for shape in filter(own, builder.body_shapes[-1]):

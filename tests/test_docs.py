@@ -31,16 +31,19 @@ LINE = re.compile(r"#L\d+|:\d+$")
 """A line anchor, `#L42`, or a line suffix, `lib.rs:42`."""
 GENERATOR = re.compile(
     r"\b(vine\w*|grape\w*|canes?|cordons?|spurs?|swards?"
-    r"|greenhouse\w*|glasshouse\w*|tomato\w*|gutters?|slabs?|truss\w*)\b",
+    r"|greenhouse\w*|glasshouse\w*|tomato\w*|gutters?|slabs?|truss\w*"
+    r"|garden\w*|beds?|lettuce\w*|kale|carrots?|beans?|zucchinis?|strawberr\w*)\b",
     re.IGNORECASE,
 )
 """What the generators in this repo go by: the vineyard's names and the parts
-of a vine it is built from, and the greenhouse's names and the parts of its
-rows. A generator that joins the repo adds its own."""
+of a vine it is built from, the greenhouse's names and the parts of its rows,
+and the garden's names and its crops. A generator that joins the repo adds its
+own."""
 INDEXES = {
     "crates/misina-lab/docs": "crates/misina-lab/README.md",
     "crates/vinery-lab/docs": "crates/vinery-lab/README.md",
     "crates/greenhouse-lab/docs": "crates/greenhouse-lab/README.md",
+    "crates/garden-lab/docs": "crates/garden-lab/README.md",
 }
 """Each docs folder, and the file that lists every page in it."""
 GUIDES = {"AGENTS.md", "CLAUDE.md"}

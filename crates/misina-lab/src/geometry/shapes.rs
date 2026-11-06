@@ -15,9 +15,14 @@
 //! [`untangle`] cuts out the loops a jittered margin folds into. A generator
 //! strings those into its own ring; the frame is the same.
 //!
-//! Also here: [`bent`], which fills a ring and folds it the way a leaf folds,
-//! and the two rotations that take a shape out of this frame — [`standing`]
-//! and [`lying`] — so every element places its foliage the same way.
+//! A shape's veins are lines through it: [`pinnate`] lays a midrib's
+//! veins and the crests between them out as creases, and [`between_veins`]
+//! says how far a point lies from the nearest, for pleating the sheet.
+//!
+//! Also here: [`fold`], which folds a filled sheet the way a leaf folds, and
+//! [`bent`], which fills a ring and folds it; and the two rotations that take
+//! a shape out of this frame — [`standing`] and [`lying`] — so every element
+//! places its foliage the same way.
 
 use std::f64::consts::{FRAC_PI_2, PI};
 
@@ -34,7 +39,7 @@ const STATIONS: usize = 10;
 
 /// Narrowest a base may be, as a fraction of the half-width: a shape that
 /// tapers to nothing at both ends has no edge to attach by.
-const BASE: f64 = 0.08;
+pub const BASE: f64 = 0.08;
 
 /// How deep a tooth cuts into the edge, as a fraction of the profile there.
 const TOOTH: f64 = 0.55;
@@ -62,19 +67,21 @@ pub fn toothed(length: f64, width: f64, peak: f64, teeth: usize) -> Outline {
     })
 }
 
-/// A hump over `0..1` peaking at `peak`, as a fraction of the half-width.
-fn profile(t: f64, peak: f64) -> f64 {
+/// A hump over `0..1` peaking at `peak`, as a fraction of the half-width: a
+/// [`leaf`]'s half-width `t` of the way along.
+pub fn profile(t: f64, peak: f64) -> f64 {
     let peak = peak.clamp(0.05, 0.95);
     // `sin(pi * t^p)` peaks where `t^p = 1/2`, so `p` is solved from the peak.
     let p = 0.5f64.ln() / peak.ln();
     (std::f64::consts::PI * t.powf(p)).sin().max(0.0)
 }
 
-/// The ring: down the -Y edge from the base to the tip, back up the +Y edge,
-/// closing across the base. `half(i, t)` is the half-width at station `i`
-/// (`t` of the way along) as a fraction of `width / 2`; the tip is pinched to
-/// a point and the base held open to at least [`BASE`].
-fn ring(length: f64, width: f64, stations: usize, half: impl Fn(usize, f64) -> f64) -> Outline {
+/// The ring every shape here is: down the -Y edge from the base to the tip in
+/// `stations` steps, back up the +Y edge, closing across the base. `half(i,
+/// t)` is the half-width at station `i` (`t` of the way along) as a fraction
+/// of `width / 2`; the tip is pinched to a point and the base held open to at
+/// least [`BASE`].
+pub fn ring(length: f64, width: f64, stations: usize, half: impl Fn(usize, f64) -> f64) -> Outline {
     let (length, width) = (length.max(1e-4), width.max(1e-5));
     let stations = stations.max(2);
     let w = |i: usize| -> f64 {
@@ -196,7 +203,60 @@ fn crossing(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> Option<DVec2> {
     ((1e-9..1.0 - 1e-9).contains(&t) && (1e-9..1.0 - 1e-9).contains(&u)).then(|| a + r * t)
 }
 
+// ─── Veins ──────────────────────────────────────────────────────────
+
+/// Pinnate veins on a shape in this frame: one leaving the midrib, the X
+/// axis, every `spacing` along it, `angle` radians off it toward the tip,
+/// straight out to `reach` either side, and a crest line midway between
+/// every two. As creases for
+/// [`creased_mesh`](super::outline::creased_mesh), which keeps what lies
+/// inside the ring, so a sheet pleated by [`between_veins`] folds on edges.
+/// Veins start behind the base too, so the shape is veined to its foot.
+pub fn pinnate(length: f64, reach: f64, spacing: f64, angle: f64) -> Vec<Vec<Point2<f64>>> {
+    let half = spacing.max(1e-6) / 2.0;
+    let run = reach / angle.tan();
+    let first = -(run / half).ceil() as i64;
+    let last = (length / half).floor() as i64;
+    (first..=last)
+        .flat_map(|k| {
+            let foot = k as f64 * half;
+            [-1.0, 1.0].map(|side| {
+                vec![
+                    Point2::new(foot, 0.0),
+                    Point2::new(foot + run, side * reach),
+                ]
+            })
+        })
+        .collect()
+}
+
+/// Where `(x, y)` lies between [`pinnate`]'s veins: 0 on a vein, 1 on the
+/// crest midway to the next, linear between them.
+pub fn between_veins(x: f64, y: f64, spacing: f64, angle: f64) -> f64 {
+    let foot = x - y.abs() / angle.tan();
+    let phase = (foot / spacing.max(1e-6)).rem_euclid(1.0);
+    1.0 - (2.0 * phase - 1.0).abs()
+}
+
 // ─── Filling and placing ────────────────────────────────────────────
+
+/// Folds a sheet lying on the XY plane the way a leaf folds: keeled about
+/// its midrib, the X axis, by `keel`, a curvature in 1/m that curls the edges
+/// up toward the face, +Z, and then drooped along it by `droop`, a curvature
+/// in 1/m, tip down. Either at zero leaves the sheet as it is. Neither
+/// stretches it: see [`bend`].
+pub fn fold(mesh: &mut MeshData, keel: f64, droop: f64) {
+    for point in &mut mesh.points {
+        let (mut x, mut y, mut z) = (point[0] as f64, point[1] as f64, point[2] as f64);
+        if keel != 0.0 {
+            (y, z) = bend(y, z, -keel);
+        }
+        if droop != 0.0 {
+            (x, z) = bend(x, z, droop);
+        }
+        *point = [x as f32, y as f32, z as f32];
+    }
+}
 
 /// `outline` filled at about `triangles` triangles and folded like a leaf:
 /// keeled about its midrib by `keel`, a curvature in 1/m that curls the
@@ -209,16 +269,7 @@ pub fn bent(outline: Outline, droop: f64, keel: f64, triangles: f64) -> Result<M
         .fold(0.0f64, |m, p| m.max(p.x))
         .max(1e-6);
     let mut mesh = outline_mesh(&outline, outline.area() / triangles.max(1.0))?;
-    for point in &mut mesh.points {
-        let (mut x, mut y, mut z) = (point[0] as f64, point[1] as f64, point[2] as f64);
-        if keel != 0.0 {
-            (y, z) = bend(y, z, -keel);
-        }
-        if droop != 0.0 {
-            (x, z) = bend(x, z, droop / reach);
-        }
-        *point = [x as f32, y as f32, z as f32];
-    }
+    fold(&mut mesh, keel, droop / reach);
     Ok(mesh)
 }
 
@@ -300,6 +351,43 @@ mod tests {
         let plain = leaf(0.08, 0.02, 0.3).area();
         let cut = toothed(0.08, 0.02, 0.3, 6).area();
         assert!(cut < plain, "teeth take area away: {cut} vs {plain}");
+    }
+
+    /// Every crease `pinnate` lays out is all vein or all crest by
+    /// `between_veins`, half of each, and a sheet filled with them has
+    /// vertices along its veins.
+    #[test]
+    fn pinnate_creases_run_along_the_veins_and_crests_between_them() {
+        let (spacing, angle) = (0.01, 1.0);
+        let creases = pinnate(0.05, 0.02, spacing, angle);
+        assert!(creases.len() > 2 * 10, "{} creases", creases.len());
+        for crease in &creases {
+            let [a, b] = [crease[0], crease[crease.len() - 1]];
+            let along = |f: f64| {
+                between_veins(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, spacing, angle)
+            };
+            let level = along(0.0);
+            assert!(!(1e-9..=1.0 - 1e-9).contains(&level), "{level}");
+            assert!((along(0.5) - level).abs() < 1e-9 && (along(1.0) - level).abs() < 1e-9);
+        }
+        let veins = creases
+            .iter()
+            .filter(|c| between_veins(c[0].x, c[0].y, spacing, angle) < 0.5);
+        assert_eq!(
+            2 * veins.count(),
+            creases.len(),
+            "every other crease is a vein"
+        );
+
+        // A sheet filled with them has vertices on every vein inside it.
+        let sheet =
+            crate::geometry::outline::creased_mesh(&leaf(0.05, 0.03, 0.5), &creases, 1e-5).unwrap();
+        let on_veins = sheet
+            .points
+            .iter()
+            .filter(|p| between_veins(p[0] as f64, p[1] as f64, spacing, angle) < 1e-4)
+            .count();
+        assert!(on_veins > 20, "{on_veins} points on veins");
     }
 
     /// A droop takes the tip below the plane it was drawn on, and a keel lifts

@@ -78,11 +78,13 @@ The document says *what* collides and the builder applies the schemas. A
 part can be its own collider through `Library::collide`, the ground at
 `physics:approximation = "none"`; anything a proxy describes better gets a
 `Capsule` prim from `scene::capsule`, which needs no cooking and is the only
-round shape PhysX has natively. Nothing is a rigid body, so every collider is
-static, which is what makes an exact triangle mesh legal for the ground. A
-part carrying a collider is referenced non-instanceable: a collider inside a
-prototype is reachable only through an instance proxy, and the ground has
-one instance, so it gives up nothing.
+round shape PhysX has natively, or, for a sheet a capsule fits badly, a
+`Cube` prim from `scene::block`, a box carried in the prim's scale alone,
+which Newton and cuRobo both read as a box. Nothing is a rigid body, so
+every collider is static, which is what makes an exact triangle mesh legal
+for the ground. A part carrying a collider is referenced non-instanceable: a
+collider inside a prototype is reachable only through an instance proxy, and
+the ground has one instance, so it gives up nothing.
 
 A `Cable` is the one thing that moves: a flexible organ authored as a curve,
 which a solver that understands one turns into bodies of its own
@@ -139,6 +141,6 @@ being the one part a scene has at most one of.
 
 - [`src/scene/doc.rs`](../src/scene/doc.rs): the document, and the conventions the builder relies on
 - [`src/scene/export.rs`](../src/scene/export.rs): the walk
-- [`src/scene/mod.rs`](../src/scene/mod.rs): the export directives; `UsdRoot`, `UsdReference`, `UsdAttributes`, `capsule`, `cable`, `segment_frames`, `z_up_to_y_up`
+- [`src/scene/mod.rs`](../src/scene/mod.rs): the export directives; `UsdRoot`, `UsdReference`, `UsdAttributes`, `capsule`, `block`, `cable`, `segment_frames`, `z_up_to_y_up`
 - [`misina_lab/usd/build.py`](../../../python/misina-lab/misina_lab/usd/build.py): the builder, and every USD rule
 - [`misina_lab/usd/ground.py`](../../../python/misina-lab/misina_lab/usd/ground.py): `Ground`
