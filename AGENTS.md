@@ -32,6 +32,17 @@ every push and pull request. Isaac Lab is not installed there, so the tests
 that need it skip themselves; run those from a demo venv — see
 [DEVELOPMENT.md](DEVELOPMENT.md).
 
+To look at the scene, take a still rather than opening the viewer:
+
+```bash
+GREENHOUSE_LAB_TOUR=shot.json GREENHOUSE_LAB_SHOT=out.png cargo run --release -p greenhouse-lab
+```
+
+plays a shot file, the scene and the panel as the docs' pictures show them,
+saves it and quits, without ever showing its window; `VINERY_LAB_` and a bare
+`cargo run` for the vineyard. A shot file can live anywhere, and
+[docs-shots](.claude/skills/docs-shots/SKILL.md) says how one is written.
+
 ## Where things are
 
 ### Rust

@@ -68,7 +68,8 @@ class RailCfg:
 
     The pipes rest on a support every meter, and `unevenness` moves the supports off
     level, each by a draw of its own: the pair tilts across and each pipe pitches
-    along its length.
+    along its length. Each pipe turns down into the floor at the row head, and a
+    return bend joins the two at the far end.
     """
 
     gauge: float = 0.6
@@ -276,6 +277,16 @@ class TrussCfg:
     """Angle between the stem and the peduncle where it leaves, in degrees: 90 leaves
     level, less leaves rising.
     """
+    pedicel_angle: float = 45.0
+    """How far under the rachis its pedicels leave it, in degrees below its sides: 0
+    leaves them level out to the sides, and more hangs the fruit further under it. At
+    45 the two ranks, down alternate flanks, meet at a right angle, as they do on a
+    tomato truss; past 50, neighbouring fruit hang into each other.
+    """
+    jointed: bool = True
+    """Whether a pedicel has a knuckle, the joint a fruit breaks off at, as most truss
+    varieties do.
+    """
     missing_fruit: float = 0.05
     """Chance that a fruit is missing from its pedicel."""
     variations: int = 16
@@ -320,10 +331,6 @@ class FruitCfg:
     ribbing: float = 0.03
     """Depth of the grooves between a fruit's lobes, as a fraction of its radius: 0 is
     smooth, and a beefsteak's are about 0.15.
-    """
-    jointed: bool = True
-    """Whether a pedicel has a knuckle, the joint a fruit breaks off at, as most truss
-    varieties do.
     """
     variations: int = 24
     """How many distinct fruit meshes the scene may hold, by size, shape and stage. A

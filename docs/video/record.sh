@@ -6,8 +6,8 @@
 #   docs/video/record.sh [tour.json] [out.mp4]
 #
 # Defaults to tour.json beside this script and target/video/vinery-lab.mp4.
-# Needs cargo, ffmpeg and a display: the window opens on the desktop, at the
-# storyboard's size, and ignores the pointer while it records.
+# Needs cargo, ffmpeg and a display, though the window it records, at the
+# storyboard's size, is never shown.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 tour=$(realpath "${1:-$here/tour.json}")

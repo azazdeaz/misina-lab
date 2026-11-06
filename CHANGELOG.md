@@ -24,6 +24,11 @@ Scene document format 11.
 
 ### Added
 
+- **greenhouse-lab**: A path's heating pipes are one loop. At the row head
+  each turns down through an elbow into the floor, to the mains under the
+  main path, and at the far end two more elbows and a pipe across join the
+  pair; each collides as a chain of capsules. The floor's film reaches half
+  a pitch past the row ends.
 - **greenhouse-lab**: Leaflets in relief. A leaflet's midrib and lobe veins
   are edges of its mesh, and its blade is bent along them: folded up on the
   midrib, puckered between the veins, ruffled at the margin, and twisting
@@ -170,6 +175,23 @@ Scene document format 11.
 
 ### Changed
 
+- **misina-lab**: A storyboard that saves a still or records a video plays in
+  a window that is never shown, so `{PACKAGE}_SHOT` and `{PACKAGE}_RECORD`
+  open nothing on the desktop. A preview still opens its window.
+- **greenhouse-lab**: A truss's rachis ends in its last fruit: its last
+  internode is that fruit's pedicel out to the knuckle, where the rachis ran
+  on past the fruit to a stump. Every other pedicel leaves the rachis's
+  underside, down one flank and then the other, where it left out to the
+  sides, so the fruit hang under the rachis in two ranks at a right angle. A
+  pedicel runs out to its knuckle, bends down there and runs on into its
+  fruit's calyx, where a stub on the fruit stood between them, and it leans
+  the fruit out the way it left, so the fruit's top faces back toward the
+  rachis. Each pedicel draws its own reach, swing and lean. Pedicels no longer
+  run through the fruit above them, and the rachis is a little longer between
+  fruit. New: `TrussCfg.pedicel_angle`, how far under the rachis the pedicels
+  leave it; 0 leaves them out to its sides.
+- **greenhouse-lab** (**cfg**): `FruitCfg.jointed` is now `TrussCfg.jointed`:
+  the knuckle is on the truss's pedicel, and a fruit has no stub of its own.
 - **misina-lab**: `rods.make_physics_cfg_newton` takes `broad_phase`.
   `"explicit"`, as it was, tests the shape pairs `Model.finalize` listed from
   the collision groups, for the life of the model. `"nxn"` and `"sap"` read

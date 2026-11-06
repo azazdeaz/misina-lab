@@ -4,8 +4,8 @@
 //! centred on y = 0, with a path on both sides of every one: each crop wall
 //! faces a path a robot can drive, so there is one path more than there are
 //! rows. Every row holds the same slabs and plants. The floor reaches half a
-//! pitch past the outermost paths, and the main path runs across the row
-//! heads at negative x.
+//! pitch past the outermost paths and past the row ends, where the rails
+//! turn, and the main path runs across the row heads at negative x.
 //!
 //! [`author`] solves the layout and replaces the `Rows` and `Paths` prims: an
 //! Xform per row on its gutter's centreline and one per path on the path's,
@@ -84,6 +84,9 @@ pub struct GreenhouseLayout {
     pub length: f32,
     /// The floor's extent across the rows, centred on y = 0.
     pub width: f32,
+    /// How far the floor reaches past the outermost paths and past the row
+    /// ends: half a pitch.
+    pub margin: f32,
     /// How far the main path reaches along -X from the row head.
     pub main_path: f32,
     /// Each slab's centre along a row, the same in every row.
@@ -191,6 +194,7 @@ fn solve(params: &LayoutParams) -> GreenhouseLayout {
             .collect(),
         length,
         width: (count + 1) as f32 * pitch,
+        margin: pitch / 2.0,
         main_path: params.main_path.max(0.0),
         slabs,
         plants,

@@ -1,16 +1,14 @@
 //! Fruit — the tomatoes, each its own prim, hung from a pedicel's tip.
 //!
 //! A fruit is built round its own axis and hangs below its origin, where the
-//! truss's pedicel ends. A stub carries on from there down to the calyx,
-//! with a knuckle on a jointed variety, and the body hangs from the calyx by
-//! its stem scar, which sits in a dip between the shoulders. The sepals,
-//! narrow and pointed, lie on the shoulder for a short way and lift off it
-//! to spread, each folded along its midrib and twisted a little:
+//! truss's pedicel ends in the calyx. The body hangs from the calyx by its
+//! stem scar, which sits in a dip between the shoulders. The sepals, narrow
+//! and pointed, lie on the shoulder for a short way and lift off it to
+//! spread, each folded along its midrib and twisted a little:
 //!
 //! ```text
-//!          ┃      the pedicel's tip at the origin, a knuckle just below it
-//!    ╲     ┃     ╱   the stub down to the calyx
-//!     ╲ ╭──┸──╮ ╱    sepals off the shoulders, spreading out and up
+//!          ┃         the truss's pedicel, ending in the calyx at the origin
+//!    ╲  ╭──┸──╮  ╱   sepals off the shoulders, spreading out and up
 //!      (         )
 //!       ╲       ╱    colour starts at the blossom end
 //!        `─────'
@@ -18,8 +16,7 @@
 //!
 //! Every fruit is an Xform carrying its stage, with the mesh as `Skin` under
 //! it and a `Collision` capsule round the body: a sphere on a round fruit,
-//! a capsule standing on an elongated one. The calyx and the stub stand
-//! clear of it.
+//! a capsule standing on an elongated one. The calyx stands clear of it.
 //!
 //! A fruit's `stage` runs from fruit set through expanding and mature green,
 //! over which it grows to full size, to the USDA colour classes breaker,
@@ -60,7 +57,6 @@ use misina_lab::scene::{
     COLLISION, Library, Order, Surface, UsdAttributes, capsule, configs_changed,
 };
 
-use super::truss::pedicel_radius;
 use super::{Grow, smooth};
 
 /// The mesh-library prefix the fruit register under, and the prim under a
@@ -123,10 +119,8 @@ const BELOW_RIM: usize = 6;
 const LEAN: f64 = 0.06;
 const BULGE: f64 = 0.04;
 
-/// The stub from the pedicel's tip to the calyx, and a sepal, as fractions
-/// of the full-grown diameter; a sepal's width as a fraction of its length,
-/// and where along it it is widest.
-const STUB: f32 = 0.2;
+/// A sepal's length, as a fraction of the full-grown diameter; its width as
+/// a fraction of its length, and where along it it is widest.
 const SEPAL: f32 = 0.5;
 const SEPAL_WIDTH: f32 = 0.2;
 const SEPAL_PEAK: f64 = 0.2;
@@ -156,12 +150,6 @@ const HUG: f32 = 1.2;
 const SEPAL_START: f32 = 0.4;
 const GAP: f32 = 0.0004;
 
-/// Sides round the stub, the knuckle's radius in pedicels, and where it sits
-/// down the stub: just under the pedicel's tip, where the fruit's tilt bends
-/// the stub off the pedicel, so the bend is at the joint.
-const STUB_SIDES: usize = 5;
-const KNUCKLE: (f32, f32) = (1.5, 0.12);
-
 /// How far past a point the colour front has to climb before the point is
 /// fully coloured, as a share of the fruit's height.
 const FRONT: f32 = 0.3;
@@ -176,9 +164,8 @@ const YOUNG: u32 = 0x74A83A;
 const MATURE: u32 = 0x9DB55A;
 const BLUSH: u32 = 0xD6A35E;
 
-/// The calyx and the stub.
+/// The calyx.
 const SEPAL_COLOR: u32 = 0x355E1E;
-const STUB_COLOR: u32 = 0x6A8A34;
 
 /// A tomato's waxy skin.
 const SKIN: Response = Response {
@@ -246,7 +233,7 @@ pub struct Hung {
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct FruitConfig {
     /// Across when full grown, in meters. The size it is now follows from its
-    /// stage, and the calyx and stub from this.
+    /// stage, and the calyx's from this.
     pub diameter: f32,
     /// How far it has come, 0 just set to 8 fully red; see [`STAGES`].
     pub stage: f32,
@@ -256,7 +243,6 @@ pub struct FruitConfig {
     pub ribbing: f32,
     pub lobes: u32,
     pub sepals: u32,
-    pub jointed: bool,
     /// The stream its calyx and its lean are drawn from.
     pub seed: u64,
     pub hung: Hung,
@@ -289,7 +275,6 @@ impl FruitConfig {
             ribbing: params.ribbing.clamp(0.0, 0.5),
             lobes,
             sepals,
-            jointed: params.jointed,
             seed,
             hung,
         }
@@ -313,10 +298,6 @@ pub struct FruitMetric;
 
 impl Metric<FruitConfig> for FruitMetric {
     fn distance(&self, a: &FruitConfig, b: &FruitConfig) -> f32 {
-        // A knuckle more or less is a different stub, not a near one.
-        if a.jointed != b.jointed {
-            return 1.0;
-        }
         let (across_a, across_b) = (a.across(), b.across());
         let radius = across_a.max(across_b) / 2.0;
         [
@@ -375,10 +356,6 @@ pub struct FruitParams {
     /// radius: 0 is smooth, and a beefsteak's are about 0.15.
     #[reflect(@Slider { min: 0.0, max: 0.3, step: 0.01 })]
     pub ribbing: f32,
-    /// Whether a pedicel has a knuckle, the joint a fruit breaks off at, as
-    /// most truss varieties do.
-    #[reflect(@Label("Jointed pedicels"))]
-    pub jointed: bool,
     /// How many distinct fruit meshes the scene may hold, by size, shape and
     /// stage. A budget, not a count: the fruit are clustered and this is how
     /// many representatives the clustering may keep.
@@ -394,7 +371,6 @@ impl Default for FruitParams {
             color: Ripe::default().name().into(),
             aspect: 0.9,
             ribbing: 0.03,
-            jointed: true,
             variations: 24,
         }
     }
@@ -474,8 +450,7 @@ fn lathe(top: Vec3, rings: &[Vec<Vec3>], bottom: Vec3) -> MeshData {
     }
 }
 
-/// The body's surface, solved from a config: its stem scar on the axis at
-/// `top`, the stub's foot.
+/// The body's surface, solved from a config: its stem scar at the origin.
 struct Body {
     radius: f32,
     half: f32,
@@ -486,7 +461,6 @@ struct Body {
     /// much, as fractions of the radius.
     lean: Vec2,
     bulge: (f32, f32),
-    top: f32,
     /// Polar angles of the rings, from the stem end, and the azimuths of the
     /// points round each.
     rings: Vec<f32>,
@@ -514,7 +488,6 @@ impl Body {
             lobes: config.lobes as f32,
             lean,
             bulge,
-            top: -STUB * config.diameter,
             rings,
             sectors: (0..n).map(|i| TAU * i as f32 / n as f32).collect(),
         }
@@ -531,11 +504,8 @@ impl Body {
         // 0 at the stem end to 1 at the blossom end.
         let down = (1.0 - z / self.half) / 2.0;
         let r = rho * rib * bulge;
-        Vec3::new(
-            r * phi.cos(),
-            r * phi.sin(),
-            self.top - self.half + self.dip + z - dip,
-        ) + (self.lean * self.radius * down).extend(0.0)
+        Vec3::new(r * phi.cos(), r * phi.sin(), z - self.half + self.dip - dip)
+            + (self.lean * self.radius * down).extend(0.0)
     }
 
     fn mesh(&self) -> MeshData {
@@ -698,28 +668,6 @@ fn calyx(config: &FruitConfig, body: &Body, rng: &mut Rng) -> Result<Vec<MeshDat
         .collect()
 }
 
-/// The stub from the pedicel's tip down to the calyx, with a knuckle on a
-/// jointed fruit, flaring where it meets the sepals.
-fn stub(config: &FruitConfig) -> MeshData {
-    let (length, r) = (STUB * config.diameter, pedicel_radius(config.diameter));
-    let ring = |z: f32, radius: f32| -> Vec<Vec3> {
-        (0..STUB_SIDES)
-            .map(|i| {
-                let a = TAU * i as f32 / STUB_SIDES as f32;
-                Vec3::new(radius * a.cos(), radius * a.sin(), -z * length)
-            })
-            .collect()
-    };
-    let (swell, at) = KNUCKLE;
-    let mut rings = if config.jointed {
-        vec![ring(at - 0.1, r), ring(at, r * swell), ring(at + 0.1, r)]
-    } else {
-        vec![ring(0.06, r)]
-    };
-    rings.extend([ring(0.85, r * 1.15), ring(1.0, r * 2.0)]);
-    lathe(Vec3::ZERO, &rings, Vec3::new(0.0, 0.0, -length - r))
-}
-
 /// One fruit in its own frame, hanging below the origin, with a colour per
 /// point.
 fn fruit_mesh(config: &FruitConfig, ripe: [f32; 3]) -> Result<Mesh> {
@@ -739,17 +687,11 @@ fn fruit_mesh(config: &FruitConfig, ripe: [f32; 3]) -> Result<Mesh> {
         .collect();
 
     let sepals = calyx(config, &body, &mut rng)?;
-    let stub = stub(config);
-    for (piece, hex) in sepals
-        .iter()
-        .map(|s| (s, SEPAL_COLOR))
-        .chain([(&stub, STUB_COLOR)])
-    {
-        colors.extend(std::iter::repeat_n(srgb(hex), piece.points.len()));
+    for sepal in &sepals {
+        colors.extend(std::iter::repeat_n(srgb(SEPAL_COLOR), sepal.points.len()));
     }
     let mut pieces = vec![skin_mesh];
     pieces.extend(sepals);
-    pieces.push(stub);
 
     let rgba: Vec<[f32; 4]> = colors.iter().map(|[r, g, b]| [*r, *g, *b, 1.0]).collect();
     Ok(merge_meshes(&pieces)
@@ -798,7 +740,7 @@ fn build(
         // which a capsule this wide spans only on an elongated fruit.
         let radius = config.across() / 2.0;
         let half = radius * config.aspect;
-        let middle = -STUB * config.diameter - half + DIP * radius;
+        let middle = DIP * radius - half;
         commands
             .entity(*entity)
             .insert(
@@ -844,16 +786,17 @@ mod tests {
         }
     }
 
-    /// The body and the stub are closed and wound outward: every edge is
-    /// walked once each way, and the volume they enclose is positive. They
-    /// hang below the fruit's origin; it carries a sheet per sepal, and grows
-    /// from set to mature green while its calyx stays the size it was.
+    /// The body is closed and wound outward: every edge is walked once each
+    /// way, and the volume it encloses is positive. It hangs from its stem
+    /// scar at the fruit's origin, its shoulders rising round it no higher
+    /// than the dip is deep; it carries a sheet per sepal, and grows from set
+    /// to mature green while its calyx stays the size it was.
     #[test]
     fn a_fruit_is_closed_wound_outward_and_grows_inside_its_calyx() {
         let shapes: [fn(&mut FruitParams); 3] = [
             |_| {},
             |p| (p.aspect, p.ribbing) = (0.6, 0.2),
-            |p| (p.aspect, p.jointed) = (1.6, false),
+            |p| p.aspect = 1.6,
         ];
         for edit in shapes {
             let mut widths = Vec::new();
@@ -864,36 +807,33 @@ mod tests {
                 let sepals = calyx(&config, &body, &mut rng).unwrap();
                 assert_eq!(sepals.len(), config.sepals as usize);
 
-                for (what, mesh) in [("body", body.mesh()), ("stub", stub(&config))] {
-                    let mut edges: HashMap<(i32, i32), i32> = HashMap::new();
-                    let mut volume = 0.0;
-                    let mut cursor = 0;
-                    for count in &mesh.face_vertex_counts {
-                        let face = &mesh.face_vertex_indices[cursor..cursor + *count as usize];
-                        cursor += face.len();
-                        for (k, a) in face.iter().enumerate() {
-                            *edges.entry((*a, face[(k + 1) % face.len()])).or_default() += 1;
-                        }
-                        let p = |i: i32| Vec3::from(mesh.points[i as usize]);
-                        for k in 1..face.len() - 1 {
-                            volume += p(face[0]).dot(p(face[k]).cross(p(face[k + 1])));
-                        }
+                let mesh = body.mesh();
+                let mut edges: HashMap<(i32, i32), i32> = HashMap::new();
+                let mut volume = 0.0;
+                let mut cursor = 0;
+                for count in &mesh.face_vertex_counts {
+                    let face = &mesh.face_vertex_indices[cursor..cursor + *count as usize];
+                    cursor += face.len();
+                    for (k, a) in face.iter().enumerate() {
+                        *edges.entry((*a, face[(k + 1) % face.len()])).or_default() += 1;
                     }
-                    assert!(
-                        edges
-                            .iter()
-                            .all(|((a, b), n)| *n == 1 && edges.get(&(*b, *a)) == Some(&1)),
-                        "{what} at {stage} is open or mis-wound"
-                    );
-                    assert!(volume > 0.0, "{what} at {stage} is inside out");
+                    let p = |i: i32| Vec3::from(mesh.points[i as usize]);
+                    for k in 1..face.len() - 1 {
+                        volume += p(face[0]).dot(p(face[k]).cross(p(face[k + 1])));
+                    }
                 }
-
-                // The sepals spread from the shoulders, so a young fruit's,
-                // the size the flower left them, may reach up past the stub.
-                let hung = merge_meshes(&[body.mesh(), stub(&config)]);
                 assert!(
-                    hung.points.iter().all(|p| p[2] <= 1e-6),
-                    "{stage}: above the pedicel's tip"
+                    edges
+                        .iter()
+                        .all(|((a, b), n)| *n == 1 && edges.get(&(*b, *a)) == Some(&1)),
+                    "body at {stage} is open or mis-wound"
+                );
+                assert!(volume > 0.0, "body at {stage} is inside out");
+
+                assert!(body.at(0.0, 0.0).length() < 1e-6, "{stage}: off its calyx");
+                assert!(
+                    mesh.points.iter().all(|p| p[2] <= body.dip + 1e-6),
+                    "{stage}: above its calyx"
                 );
                 let triangles = fruit_mesh(&config, [1.0; 3])
                     .unwrap()
@@ -979,8 +919,8 @@ mod tests {
                 let (radius, half) = (config.across() / 2.0, config.across() / 2.0 * config.aspect);
                 assert!((shape.radius - radius).abs() < 1e-6);
                 assert!((shape.height - 2.0 * (half - radius).max(0.0)).abs() < 1e-6);
-                // Centered on the body, which hangs below the stub.
-                let middle = -STUB * config.diameter - half + DIP * radius;
+                // Centered on the body, which hangs below the calyx.
+                let middle = DIP * radius - half;
                 assert!((placed.translation.z - middle).abs() < 1e-6, "{placed:?}");
             }
         }

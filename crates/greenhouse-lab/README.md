@@ -33,14 +33,14 @@ growers leave it, so the trusses in the harvest band hang off bare stem.
 
 | Part | What it is | Knobs |
 | --- | --- | --- |
-| Floor | white film under the crop and concrete across the row heads, each its own collider | the main path's width |
-| Rail | two heating pipes in every path, on a support every meter, each segment a capsule collider | gauge, pipe diameter, height, unevenness up to and past the 2° spec |
+| Floor | white film under the crop and past the row ends, and concrete across the row heads, each its own collider | the main path's width |
+| Rail | two heating pipes in every path, one loop: on a support every meter, each turned down into the floor through an elbow at the row head, to the mains under the main path, and the pair joined at the far end by two more elbows and a pipe across; each segment a capsule collider, and a chain of them round every bend | gauge, pipe diameter, height, unevenness up to and past the 2° spec |
 | Gutter | a steel channel, hanging or standing, with stone wool slabs and a block at every plant | height, mount, plant spacing |
 | Wires | two crop wires over every gutter, for the V the stems are trained in | height, spread |
 | Stems | two to a plant, each grown up its twine to a hook on its wire and lowered along the gutter from then on, each a little ahead of or behind the crop, so no two hang their trusses level, the lowered runs drifting, crossing and sagging in a loose bundle, each stem climbing out of it along the row; kinked at every truss and a little at every node, thinner toward its head and to a point at its tip, and undulating along it; a leaf at every node and a truss in every third internode, the stem swelling at each and toward its stalk, the leaves stripped below the top few and the trusses picked, each leaving a stub or a scar; colliding as a chain of capsules along the axis from where it leaves the bundle | the crop's age, harvest height, trusses on a stem, how far stems drift out of step, leaves kept, extra stems, trusses turned to the path, head thickness, mesh detail |
 | Leaves | a compound leaf: a petiole flaring out of the stem and a rachis with a terminal leaflet, three or four pairs of laterals and small leaflets between them, each leaflet outlined from its veins and bent along them, folded up on its midrib, puckered between its veins, ruffled at its margin and twisting toward its tip where it is lopsided; small and upright at the head, its leaflets cut narrow, folded shut from the bud and held up along the rachis, full grown and drooping further down. Visual only, with no collider | length, droop, lobing, curl, fold, asymmetry, variations, mesh detail |
-| Trusses | the peduncle flaring out of the stem and bending over into a rachis that zigzags from fruit to fruit, swelling and kinking away from each pedicel and hanging nearer vertical toward its tip, and an arched pedicel flaring out of it to every fruit, with a `Cut` and a `Bend` frame; below a height, a rod a solver bends and a robot cuts, carrying its fruit | fruit count and diameter, branched, peduncle length, diameter and angle, missing fruit; the height trusses bend below, on the stems |
-| Fruit | every fruit its own prim with a collider round it, a calyx of five or six narrow sepals spreading off its shoulders, and a stage from fruit set to red: fruit grow toward the head, a stem ripens from the bottom up, a truss from its base to its tip, and a fruit from its blossom end | ripe trusses on a stem, the spread in a truss, the ripe colour, height to width, ribbing, jointed pedicels |
+| Trusses | the peduncle flaring out of the stem and bending over into a rachis that zigzags from fruit to fruit, swelling and kinking away from each pedicel, hanging nearer vertical toward its tip and ending in its last fruit, its last internode that fruit's pedicel; a pedicel flaring out of its underside to every other fruit, down one flank and then the other, bent down at its knuckle and on into the fruit's calyx, the fruit's top leaning back toward the rachis; a `Cut` and a `Bend` frame; below a height, a rod a solver bends and a robot cuts, carrying its fruit | fruit count and diameter, branched, peduncle length, diameter and angle, pedicel angle, jointed pedicels, missing fruit; the height trusses bend below, on the stems |
+| Fruit | every fruit its own prim with a collider round it, a calyx of five or six narrow sepals spreading off its shoulders round its pedicel's end, and a stage from fruit set to red: fruit grow toward the head, a stem ripens from the bottom up, a truss from its base to its tip, and a fruit from its blossom end | ripe trusses on a stem, the spread in a truss, the ripe colour, height to width, ribbing |
 
 Rows run along +X from the row head at x = 0, the main path lies at
 negative x, and z = 0 is the top of the floor. Every gutter has a path on
@@ -92,6 +92,10 @@ lists every parameter, with its default and range.
   /Paths/Path_03/Rail
     /Pipe_L_007/Steel  /Collision     one segment, support to support
     /Support_L_007 …
+    /Elbow_L                          down into the floor at the row head
+      /Steel  /Collision_00 …
+    /ReturnBend                       the pair joined at the far end
+      /Steel  /Collision_00 …
   /Rows/Row_02
     /Gutter  /Hanger_00 …  /Slab_00 …  /Block_017 …
     /Wire_L  /Wire_R
