@@ -207,9 +207,10 @@ class LeafCfg:
     folded along its midrib, puckered between its veins and ruffled at its margin.
     The leaves near the head are still growing, small and upright, their leaflets
     narrow and still folded shut from the bud; a couple of trusses down they are full
-    grown and open, and the older they are the more they droop. Every leaf draws its
-    own size, angle, droop and leaflet count about these. Leaves are visual only,
-    with no collider.
+    grown and open, and the older they are the more they droop. The young leaves are
+    a lighter green, and the oldest yellow. Every leaf draws its own size, angle,
+    droop, leaflet count and yellowing about these. Leaves are visual only, with no
+    collider.
     """
 
     length: float = 0.45
@@ -243,7 +244,14 @@ class LeafCfg:
     toward the tip. The small leaflets between the pairs lean a little, the terminal
     leaflet never.
     """
-    variations: int = 32
+    yellowing: float = 1.0
+    """How far the oldest leaves have yellowed. A leaf starts to fade fourteen nodes
+    below the head and may fade fully by eighteen, how far each one goes a draw of
+    its own: at 1 a leaf that old is anywhere from green to a senescent leaf's pale
+    yellow-green, at 2 half of them have faded all the way, and 0 keeps every leaf
+    green.
+    """
+    variations: int = 40
     """How many distinct leaf meshes the scene may hold. A budget, not a count: the
     leaves are clustered and this is how many representatives the clustering may
     keep.
