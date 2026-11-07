@@ -2,16 +2,19 @@
 //! fruit hang under, and a pedicel to every fruit.
 //!
 //! A truss is built in its own frame, on the stem's axis at the node it grew
-//! from, facing +X with +Z up. The peduncle leaves the stem `peduncle_angle`
-//! off vertical and bends over under the fruit's weight into the rachis,
-//! which hangs [`RACHIS_TILT`] off straight down, out from the stem, at its
-//! first fruit. The rachis is a chain of internodes, one to a fruit. A
-//! pedicel leaves at every node but the last, off the rachis's underside,
-//! the inside of its bend, down one flank and then the other, `pedicel_angle`
-//! below its sides; the rachis kinks away from it there, so it zigzags, and
-//! hangs closer to straight down node by node under the weight past it. The
-//! last fruit has no pedicel of its own: the rachis's last internode is its
-//! pedicel out to the knuckle, at the last node, one stalk with the rachis.
+//! from, facing +X with +Z up. It grows carrying nothing: the peduncle
+//! leaves the stem `peduncle_angle` off vertical and bends round to level
+//! into the rachis, which runs on out from the stem, a chain of internodes,
+//! one to a fruit. Then its fruit's weight bends it down against its
+//! `stiffness` ([`sag`]), each joint by the weight past it, the rachis more
+//! than the peduncle, being thinner, so it hangs nearer straight down node
+//! by node. A truss in flower stands out from the stem, and one sags as its
+//! fruit swell until it hangs from its bend. A pedicel leaves at every node but
+//! the last, off the rachis's underside, the inside of its bend, down one
+//! flank and then the other, `pedicel_angle` below its sides; the rachis
+//! kinks away from it there, so it zigzags. The last fruit has no pedicel of
+//! its own: the rachis's last internode is its pedicel out to the knuckle,
+//! at the last node, one stalk with the rachis.
 //! Every pedicel heads out the way it leaves to its knuckle, where its fruit
 //! bends it down, and runs on into the fruit's calyx. It leans the fruit out
 //! the way it left, so the fruit hangs with its top toward the rachis. Each
@@ -34,16 +37,17 @@
 //! fruit and shares its fruit between them.
 //!
 //! Peduncle, rachis and pedicels are one mesh, quantized like any organ, to a
-//! budget of `variations`. The representative a truss drew decides where its
-//! `Cut` and `Bend` and its fruit go, and how its rachis kinks and its
-//! pedicels lie; which fruit are missing, how big each one is and how it is
-//! turned about its axis are drawn per truss.
+//! budget of `variations`, a truss's sag among what tells two apart. The
+//! representative a truss drew decides where its `Cut` and `Bend` and its
+//! fruit go, how far it sags, and how its rachis kinks and its pedicels lie;
+//! which fruit are missing, how big each one is and how it is turned about
+//! its axis are drawn per truss.
 //!
 //! ```text
 //! Truss_04            Xform, a TrussConfig
 //!   Peduncle          -> parts/Truss_k
 //!   Cut               Xform at the peduncle's base, +X along the peduncle
-//!   Bend              Xform where the peduncle bends most, +X along it
+//!   Bend              Xform halfway round the peduncle's bend, +X along it
 //!   Fruit_00 …        a FruitConfig, its calyx on a pedicel's end, +Z up it
 //! ```
 //!
@@ -80,6 +84,7 @@ use std::f32::consts::{FRAC_PI_2, PI, TAU};
 use std::iter::once;
 
 use bevy::prelude::*;
+use misina_lab::geometry::bending::{rigidity, sag};
 use misina_lab::geometry::mesh::{MeshData, merge_meshes};
 use misina_lab::geometry::par_map;
 use misina_lab::geometry::strand::{Bark, Bulge, Collar, Strand, sides_within, strand_mesh};
@@ -138,17 +143,11 @@ const DIAMETER_JITTER: f64 = 0.08;
 const FRUIT_JITTER: f64 = 0.05;
 const TIP_SHRINK: f32 = 0.15;
 
-/// How far the rachis hangs off straight down, out from the stem, at its
-/// first fruit, in radians; and how much closer to straight down it hangs
-/// past each node, under the weight past it, never past straight down.
-const RACHIS_TILT: f32 = 0.6;
-const SAG: f32 = 0.1;
-
 /// How far the rachis kinks at a node, in radians, away from the pedicel
 /// that leaves there. Pedicels leave to alternate sides, so it zigzags.
 const KINK: f32 = 0.6;
 
-/// How far a node's sag and kink vary about those, as a fraction.
+/// How far a node's kink varies about that, as a fraction.
 const NODE_JITTER: f64 = 0.5;
 
 /// Rachis between neighbouring fruit, in fruit diameters. Neighbours hang off
@@ -205,11 +204,18 @@ fn pedicel_radius(diameter: f32) -> f32 {
     (PEDICEL_RADIUS * diameter).max(MIN_PEDICEL)
 }
 
-/// Floors on what Python may set, so that every truss still builds.
+/// Floors on what Python may set, so that every truss still builds; the
+/// stiffness in MPa.
 const MIN_LENGTH: f32 = 0.01;
 const MIN_RADIUS: f32 = 0.0005;
 const MIN_DIAMETER: f32 = 0.005;
-const ANGLE: (f32, f32) = (0.05, PI - RACHIS_TILT - MIN_TURN);
+const ANGLE: (f32, f32) = (0.05, PI - MIN_TURN);
+const MIN_STIFFNESS: f32 = 1.0;
+
+/// The params' `stiffness`, in pascals.
+fn modulus(params: &TrussParams) -> f32 {
+    params.stiffness.max(MIN_STIFFNESS) * 1e6
+}
 
 /// The fewest vertices round any of a truss's stems.
 const MIN_SIDES: usize = 5;
@@ -259,8 +265,9 @@ pub struct TrussConfig {
     pub node: Node,
 }
 
-/// What a truss takes from the node of the stem it hangs on. Placement and
-/// ripening, not shape: [`TrussMetric`] reads none of it.
+/// What a truss takes from the node of the stem it hangs on: placement and
+/// ripening. [`TrussMetric`] reads none of it, only the sag the weight of
+/// the fruit its age and rank grow gives the truss.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Node {
     /// The stem's radius at the node; the `Cut` sits that far out along the
@@ -304,18 +311,32 @@ impl TrussConfig {
     }
 }
 
+/// A truss as it is clustered: its config and how far its fruit's weight
+/// moves its first rachis's tip from where it stands carrying nothing, which
+/// [`TrussMetric`] reads, and the mass of each of its fruit in kilograms,
+/// none where one is missing, which a representative is built bent under.
+#[derive(Clone, Debug)]
+struct Laden {
+    config: TrussConfig,
+    loads: Vec<f32>,
+    droop: Vec3,
+}
+
 /// Two trusses share a mesh when they are close in every dimension that
 /// shows, weighted as roughly how far apart each moves a fruit.
-pub struct TrussMetric;
+struct TrussMetric;
 
-impl Metric<TrussConfig> for TrussMetric {
-    fn distance(&self, a: &TrussConfig, b: &TrussConfig) -> f32 {
+impl Metric<Laden> for TrussMetric {
+    fn distance(&self, a: &Laden, b: &Laden) -> f32 {
+        let droop = a.droop.distance(b.droop);
+        let (a, b) = (&a.config, &b.config);
         // A forked truss and a simple one are different shapes, not near
         // sizes of one.
         if a.branched != b.branched {
             return 1.0;
         }
         [
+            droop,
             a.peduncle_length - b.peduncle_length,
             (a.peduncle_radius - b.peduncle_radius) * 8.0,
             // A radian swings the rachis's root by a peduncle's length.
@@ -366,6 +387,13 @@ pub struct TrussParams {
     /// 90 leaves level, less leaves rising.
     #[reflect(@Slider { min: 5.0, max: 139.0, step: 1.0 })]
     pub peduncle_angle: f32,
+    /// How stiff the peduncle and rachis are, as a Young's modulus in MPa.
+    /// A truss grows standing out from the stem, and its fruit's weight bends
+    /// it down against this: one in flower barely bends, and one sags further
+    /// as its fruit swell. Below green wood's, as a stalk under a load for
+    /// weeks gives way to it more than it would at once.
+    #[reflect(@Slider { min: 20.0, max: 1000.0, step: 10.0 })]
+    pub stiffness: f32,
     /// How far under the rachis its pedicels leave it, in degrees below its
     /// sides: 0 leaves them level out to the sides, and more hangs the fruit
     /// further under it. At 45 the two ranks, down alternate flanks, meet at
@@ -396,10 +424,11 @@ impl Default for TrussParams {
             peduncle_length: 0.079,
             peduncle_diameter: 0.007,
             peduncle_angle: 70.0,
+            stiffness: 130.0,
             pedicel_angle: 45.0,
             jointed: true,
             missing_fruit: 0.05,
-            variations: 16,
+            variations: 24,
         }
     }
 }
@@ -413,9 +442,12 @@ pub fn plugin(app: &mut App) {
             reauthor.run_if(resource_changed::<TrussParams>),
             build.run_if(
                 configs_changed::<TrussConfig>
-                    // `pedicel_angle`, `jointed`, `variations` and
-                    // `missing_fruit` reach no config.
-                    .or_eager(resource_changed::<TrussParams>),
+                    // `pedicel_angle`, `jointed`, `stiffness`, `variations`
+                    // and `missing_fruit` reach no config.
+                    .or_eager(resource_changed::<TrussParams>)
+                    // The fruit's params set their weight, which bends a
+                    // truss.
+                    .or_eager(resource_changed::<FruitParams>),
             ),
         )
             .chain()
@@ -463,30 +495,26 @@ fn jitter(rng: &mut Rng, by: f64) -> f32 {
     rng.range(1.0 - by, 1.0 + by) as f32
 }
 
-/// A rachis from `base` hanging `mean`, node by node: `nodes` of them a
-/// `pitch` apart, the pedicel at each leaving to alternate sides, `first` the
-/// first. At every node the rachis hangs [`SAG`] closer to straight down, and
-/// each internode runs half of [`KINK`] off that, away from its node's
-/// pedicel, so the rachis turns the whole kink at the node after.
+/// A rachis from `base` heading `mean`, as it grows before its fruit weigh
+/// it down, node by node: `nodes` of them a `pitch` apart, the pedicel at
+/// each leaving to alternate sides, `first` the first. Each internode runs
+/// half of [`KINK`] off `mean`, away from its node's pedicel, so the rachis
+/// turns the whole kink at the node after.
 ///
-/// Draws, per node: how far the sag varies, then how far the kink does.
+/// Draws, per node: how far the kink varies.
 fn rachis(
     base: Vec3,
-    mut mean: Vec3,
+    mean: Vec3,
     pitch: f32,
     nodes: usize,
     first: f32,
     rng: &mut Rng,
 ) -> Vec<Internode> {
-    // Across the rachis, level. The mean only ever pitches about it, so it
-    // holds down the whole rachis.
+    // Across the rachis, level.
     let side = Vec3::Z.cross(mean).try_normalize().unwrap_or(Vec3::Y);
     let mut from = base;
     (0..nodes)
         .map(|i| {
-            let upright = (-mean.z).clamp(-1.0, 1.0).acos();
-            let sag = (SAG * jitter(rng, NODE_JITTER)).min(upright);
-            mean = Quat::from_axis_angle(side, sag) * mean;
             let flip = if i % 2 == 0 { first } else { -first };
             let (sin, cos) = (KINK * jitter(rng, NODE_JITTER) / 2.0).sin_cos();
             let run = Internode {
@@ -501,104 +529,208 @@ fn rachis(
         .collect()
 }
 
+/// `lead`, the stalk a rachis grows on from, and the rachis's `runs`, the
+/// first starting where `lead` ends, bent under `loads` against `rigidity`,
+/// each one to a point, the lead's and then the nodes: where the lead's
+/// points settle, and the runs moved and turned with their nodes.
+fn sag_rachis(
+    lead: &[Vec3],
+    runs: &[Internode],
+    rigidity: &[f32],
+    loads: &[f32],
+) -> (Vec<Vec3>, Vec<Internode>) {
+    let points: Vec<Vec3> = lead
+        .iter()
+        .copied()
+        .chain(runs.iter().map(|run| run.from))
+        .collect();
+    let (points, turns) = sag(&points, rigidity, loads);
+    let nodes = points[lead.len()..].iter().zip(&turns[lead.len()..]);
+    let runs = runs
+        .iter()
+        .zip(nodes)
+        .map(|(run, (from, turn))| Internode {
+            from: *from,
+            along: *turn * run.along,
+            side: *turn * run.side,
+            up: *turn * run.up,
+        })
+        .collect();
+    (points[..lead.len()].to_vec(), runs)
+}
+
 /// A truss's main axis by arc length: out of the stem's axis along the
 /// peduncle, round its bend, down the first rachis to its last node, the
-/// last fruit's knuckle, and on from there to that fruit's calyx. The peduncle and the first
-/// rachis are drawn along it, and a bent truss's rod is cut from it.
+/// last fruit's knuckle, and on from there to that fruit's calyx, bent under
+/// its fruit's weight. The peduncle and the first rachis are drawn along it,
+/// and a bent truss's rod is cut from it.
 struct Axis {
-    /// Off vertical where it leaves the stem, and how much further the bend
-    /// turns it, in radians.
+    /// Its points, and how far along it each one is: the peduncle's, `lead`
+    /// of them out of the stem and round its bend, then the first rachis's
+    /// nodes from the fork, then the points the last fruit's pedicel runs
+    /// through from its knuckle, at the last node, on to the calyx, once
+    /// [`build_truss`] draws it.
+    points: Vec<Vec3>,
+    stations: Vec<f32>,
+    lead: usize,
+    /// Off vertical where it leaves the stem, which its straight run out of
+    /// the stem keeps, and that run's length, in meters.
     angle: f32,
-    turn: f32,
-    /// The straight run out of the stem, and the bend's radius, in meters.
     straight: f32,
-    bend: f32,
-    /// The first rachis's internodes, from the bend's end to the last node,
-    /// and how far apart its nodes are.
-    rachis: Vec<Internode>,
+    /// How far along the fork is, where the bend ends and the rachis starts,
+    /// at the first fruit.
+    fork: f32,
+    /// Each rachis's internodes, from the fork to its last node: the first's,
+    /// and a branched truss's second's. How far apart their nodes are.
+    rachises: Vec<Vec<Internode>>,
     pitch: f32,
-    /// The points the last fruit's pedicel runs through from its knuckle, at
-    /// the last node, on to the calyx: none until [`build_truss`] draws it.
-    tail: Vec<Vec3>,
     /// The peduncle's radius, which the rachis tapers from, and the last
     /// pedicel's, no thicker than the rachis it carries on.
     radius: f32,
     thin: f32,
+    /// How far the fruit's weight moved the first rachis's last node.
+    droop: Vec3,
 }
 
 impl Axis {
-    /// Draws the first rachis's kinks.
-    fn new(config: &TrussConfig, rng: &mut Rng) -> Self {
+    /// The axis of a truss carrying `loads`, the mass of each of its fruit in
+    /// kilograms, none where one is missing, bent against a Young's modulus
+    /// of `modulus` pascals.
+    ///
+    /// Draws the first rachis's kinks, then a branched truss's second's.
+    fn new(config: &TrussConfig, loads: &[f32], modulus: f32, rng: &mut Rng) -> Self {
         let angle = config.peduncle_angle;
-        let turn = (PI - RACHIS_TILT - angle).max(MIN_TURN);
+        // Carrying nothing, the peduncle bends round to level, or by the
+        // least turn if it leaves at or below level.
+        let turn = (FRAC_PI_2 - angle).max(MIN_TURN);
+        let straight = config.peduncle_length * STRAIGHT;
+        let bend = config.peduncle_length * (1.0 - STRAIGHT) / turn;
+        let round = |a: f32| {
+            heading(angle) * straight
+                + bend * Vec3::new(angle.cos() - a.cos(), 0.0, a.sin() - angle.sin())
+        };
+        // Out of the stem along `angle`, holding straight, then round a
+        // circle to the fork.
+        let mut points: Vec<Vec3> = [0.0, 0.5, 1.0]
+            .map(|t| heading(angle) * straight * t)
+            .to_vec();
+        let held = points.len();
+        points
+            .extend((1..BEND_POINTS).map(|i| round(angle + turn * i as f32 / BEND_POINTS as f32)));
+        let lead = points.len();
+
         let arms = arms(config);
-        let per_arm = (config.fruits as usize).div_ceil(arms.len());
         let pitch = config.fruit_diameter * FRUIT_PITCH;
+        let rest = heading(angle + turn);
+        let first = rachis(
+            round(angle + turn),
+            Quat::from_rotation_z(arms[0]) * rest,
+            pitch,
+            (config.fruits as usize).div_ceil(arms.len()),
+            1.0,
+            rng,
+        );
+        let tip = first[first.len() - 1].from;
+        points.extend(first.iter().map(|run| run.from));
         let radius = config.peduncle_radius;
         let mut axis = Self {
+            stations: chords(&points),
+            points,
+            lead,
             angle,
-            turn,
-            straight: config.peduncle_length * STRAIGHT,
-            bend: config.peduncle_length * (1.0 - STRAIGHT) / turn,
-            rachis: Vec::new(),
+            straight,
+            fork: 0.0,
+            rachises: vec![first],
             pitch,
-            tail: Vec::new(),
             radius,
             thin: pedicel_radius(config.fruit_diameter).min(radius * RACHIS_TAPER),
+            droop: Vec3::ZERO,
         };
-        let hang = Quat::from_rotation_z(arms[0]) * heading(angle + turn);
-        axis.rachis = rachis(axis.at(axis.fork()), hang, pitch, per_arm, 1.0, rng);
+        axis.fork = axis.stations[lead];
+
+        // The straight run holds, and past it the axis bends as thick as it
+        // is. The first rachis's fruit weigh on its nodes, and a branched
+        // truss's second rachis's on the fork as well as on its own nodes.
+        let stiff = |s: f32| rigidity(modulus, axis.radius_at(s));
+        let bends: Vec<f32> = (axis.stations.iter().enumerate())
+            .map(|(k, s)| if k < held { f32::INFINITY } else { stiff(*s) })
+            .collect();
+        let second: Vec<f32> = loads.iter().skip(1).step_by(arms.len()).copied().collect();
+        let second_bends: Vec<f32> = once(f32::INFINITY)
+            .chain((0..second.len()).map(|i| stiff(axis.fork + i as f32 * pitch)))
+            .collect();
+        let grown = axis.entering();
+        let mut weights = vec![0.0; axis.points.len()];
+        for (j, mass) in loads.iter().enumerate() {
+            let node = if j % arms.len() == 0 {
+                j / arms.len()
+            } else {
+                0
+            };
+            weights[lead + node] += mass;
+        }
+        let (peduncle, first) =
+            sag_rachis(&axis.points[..lead], &axis.rachises[0], &bends, &weights);
+        axis.points = peduncle
+            .into_iter()
+            .chain(first.iter().map(|run| run.from))
+            .collect();
+        axis.droop = first[first.len() - 1].from - tip;
+        axis.rachises[0] = first;
+
+        // A second rachis grows on from where the peduncle ends, turned as
+        // the peduncle's end turned, from half a pitch back inside the first.
+        if let Some(yaw) = arms.get(1) {
+            let (fork, into) = (axis.points[lead], axis.entering());
+            let hang = Quat::from_rotation_arc(grown, into) * Quat::from_rotation_z(*yaw) * rest;
+            let runs = rachis(fork, hang, pitch, second.len(), -1.0, rng);
+            let weights: Vec<f32> = once(0.0).chain(second).collect();
+            let back = [fork - into * pitch * 0.5];
+            axis.rachises
+                .push(sag_rachis(&back, &runs, &second_bends, &weights).1);
+        }
         axis
     }
 
-    /// Where the bend ends and the rachis starts, at the first fruit; where a
-    /// branched truss forks.
-    fn fork(&self) -> f32 {
-        self.straight + self.bend * self.turn
+    /// Which way the peduncle runs into the fork.
+    fn entering(&self) -> Vec3 {
+        (self.points[self.lead] - self.points[self.lead - 1]).normalize()
     }
 
     /// The first rachis's length, from the fork to its last node: none on a
     /// truss of one fruit.
     fn reach(&self) -> f32 {
-        (self.rachis.len() - 1) as f32 * self.pitch
+        (self.rachises[0].len() - 1) as f32 * self.pitch
     }
 
     fn length(&self) -> f32 {
-        self.fork() + self.reach() + chords(&self.tail).last().unwrap_or(&0.0)
+        self.stations[self.stations.len() - 1]
+    }
+
+    /// Carries the axis on through `points`.
+    fn extend(&mut self, points: &[Vec3]) {
+        for point in points {
+            let last = self.points[self.points.len() - 1];
+            self.stations.push(self.length() + last.distance(*point));
+            self.points.push(*point);
+        }
     }
 
     /// The point `s` along.
     fn at(&self, s: f32) -> Vec3 {
-        if s <= self.straight {
-            return heading(self.angle) * s;
-        }
-        let fork = self.fork();
-        if s < fork || self.rachis.is_empty() {
-            // Round a circle from where the straight run ends.
-            let a = self.angle + ((s - self.straight) / self.bend).min(self.turn);
-            return heading(self.angle) * self.straight
-                + self.bend
-                    * Vec3::new(self.angle.cos() - a.cos(), 0.0, a.sin() - self.angle.sin());
-        }
-        // Down the rachis node by node, then along the last pedicel.
-        let nodes = self.rachis.iter().map(|run| run.from);
-        let mut points = nodes.chain(self.tail.iter().skip(1).copied());
-        let (mut from, mut left) = (points.next().unwrap(), s - fork);
-        for to in points {
-            let span = from.distance(to);
-            if left < span {
-                return from.lerp(to, left / span);
-            }
-            (from, left) = (to, left - span);
-        }
-        from
+        let k = segment_of(&self.stations, s);
+        let (from, to) = (self.stations[k], self.stations[k + 1]);
+        self.points[k].lerp(
+            self.points[k + 1],
+            ((s - from) / (to - from)).clamp(0.0, 1.0),
+        )
     }
 
     /// The radius `s` along: the peduncle's, tapering down the rachis to
     /// [`RACHIS_TAPER`] of it at the last node, and the last pedicel's past
     /// it.
     fn radius_at(&self, s: f32) -> f32 {
-        let down = (s - self.fork()) / self.reach().max(f32::EPSILON);
+        let down = (s - self.fork) / self.reach().max(f32::EPSILON);
         if down > 1.0 + f32::EPSILON {
             return self.thin;
         }
@@ -790,31 +922,27 @@ fn calyx(knee: Vec3, out: Vec3, fruit: f32, rng: &mut Rng) -> Vec3 {
     knee + down * (DISTAL * fruit)
 }
 
-/// Builds one truss in its own frame, its pedicels as the params lay them
-/// and its stems meshed to `tolerance`: as one mesh if `whole`, and as a rod
-/// if `bent`.
+/// Builds one truss in its own frame, bent under `loads`, the mass of each of
+/// its fruit, its pedicels as the params lay them and its stems meshed to
+/// `tolerance`: as one mesh if `whole`, and as a rod if `bent`.
 ///
-/// Draws, off the config's own stream: the first rachis's kinks, then how
-/// each of its pedicels lies, from its base to its tip; then a branched
-/// truss's second rachis's likewise.
+/// Draws, off the config's own stream: its rachises' kinks, as [`Axis::new`]
+/// does, then how each of the first rachis's pedicels lies, from its base to
+/// its tip, then a branched truss's second rachis's likewise.
 fn build_truss(
     config: &TrussConfig,
+    loads: &[f32],
     params: &TrussParams,
     tolerance: f64,
     whole: bool,
     bent: bool,
 ) -> Result<Built<Mesh>> {
     let mut rng = Rng::new(config.seed);
-    let mut axis = Axis::new(config, &mut rng);
-    let (straight, fork) = (axis.straight, axis.fork());
-    // Out of the stem along `angle`, then round the bend until it heads `turn`
-    // further over.
-    let mut peduncle = vec![axis.at(0.0), axis.at(straight / 2.0), axis.at(straight)];
-    peduncle.extend(
-        (1..=BEND_POINTS)
-            .map(|i| axis.at(straight + (fork - straight) * i as f32 / BEND_POINTS as f32)),
-    );
-    let (base, hang) = (axis.at(fork), heading(axis.angle + axis.turn));
+    let mut axis = Axis::new(config, loads, modulus(params), &mut rng);
+    let (straight, fork) = (axis.straight, axis.fork);
+    let peduncle = axis.points[..axis.lead].to_vec();
+    // A second rachis starts half a pitch back inside the first.
+    let back = axis.points[axis.lead] - axis.entering() * axis.pitch * 0.5;
 
     let arms = arms(config);
     let (pitch, fruit) = (axis.pitch, config.fruit_diameter / 2.0);
@@ -849,26 +977,19 @@ fn build_truss(
     let mut riders = Vec::new();
     let mut hangs = vec![Transform::IDENTITY; config.fruits as usize];
     let mut holds = vec![fork; config.fruits as usize];
-    for (arm, yaw) in arms.iter().enumerate() {
+    for (arm, runs) in axis.rachises.clone().into_iter().enumerate() {
         // Fruit alternate between the arms, then between the flanks of each.
         let fruits: Vec<usize> = (arm..config.fruits as usize).step_by(arms.len()).collect();
         // A rachis ends in its last fruit, so one with none is not grown.
         let Some(last) = fruits.len().checked_sub(1) else {
             continue;
         };
-        let runs = if arm == 0 {
-            axis.rachis.clone()
-        } else {
-            let hang = Quat::from_rotation_z(*yaw) * hang;
-            rachis(base, hang, pitch, fruits.len(), -1.0, &mut rng)
-        };
-        // A second rachis starts a little back inside the first. Node by node
-        // to the last; the first node is the point before it, which the
-        // strand merges.
+        // On from the peduncle, or from inside the first rachis; node by
+        // node to the last.
         let mut points = if arm == 0 {
             peduncle.clone()
         } else {
-            vec![base - hang * pitch * 0.5, base]
+            vec![back]
         };
         let mut radii = vec![r; points.len()];
         let nodes = points.len();
@@ -890,7 +1011,7 @@ fn build_truss(
         points.extend(&tail[1..]);
         radii.extend([axis.thin; 2]);
         if arm == 0 {
-            axis.tail = tail.to_vec();
+            axis.extend(&tail[1..]);
         }
         let along = chords(&points);
 
@@ -966,20 +1087,22 @@ fn build_truss(
     } else {
         None
     };
-    let turned = axis.angle + axis.turn / 2.0;
+    // Along the axis there, from a millimeter either side.
+    let toward = axis.at(middle + 0.001) - axis.at(middle - 0.001);
     Ok(Built {
         mesh,
         rod,
         leaves: heading(axis.angle),
         bend: Transform::from_translation(axis.at(middle))
-            .with_rotation(Quat::from_rotation_y(turned - FRAC_PI_2)),
+            .with_rotation(facing(toward.normalize())),
         fruit: hangs,
     })
 }
 
-/// The rotation turning +X onto `direction`, which lies in the XZ plane.
+/// The least rotation turning +X onto `direction`: about +Y alone for one in
+/// the XZ plane.
 fn facing(direction: Vec3) -> Quat {
-    Quat::from_rotation_y(-direction.z.atan2(direction.x))
+    Quat::from_rotation_arc(Vec3::X, direction)
 }
 
 /// `fruit`, a station and a mass for each, as loads on the points of a rod
@@ -1006,7 +1129,8 @@ fn loads(stations: &[f32], fruit: impl Iterator<Item = (f32, f32)>) -> Vec<f32> 
 /// turned about its axis, made for every pedicel so a higher `missing_fruit`
 /// drops fruit without resizing the rest.
 /// A fruit's own shape is drawn off a stream keyed on its truss and its
-/// pedicel.
+/// pedicel. A truss's fruit are drawn before its shape is chosen, as their
+/// weight bends it.
 pub(crate) fn build(
     mut commands: Commands,
     mut library: Library,
@@ -1026,17 +1150,56 @@ pub(crate) fn build(
         .collect();
     hung.sort_by_key(|(order, ..)| *order);
 
-    let configs: Vec<TrussConfig> = hung.iter().map(|(_, _, config)| *config).collect();
-    let book = farthest_first(
-        &configs,
-        params.variations.max(1) as usize,
-        0.0,
-        &TrussMetric,
-    );
+    // A truss's fruit on `pedicels` of them, each with how it is turned about
+    // its axis. Drawn per pedicel, so the fruit on the pedicels two counts
+    // share are drawn alike.
+    let hang_fruit = |order: Order, config: &TrussConfig, pedicels: usize| {
+        let mut rng = Rng::new(scene.seed ^ FRUIT_STREAM ^ salt(order.0));
+        let last = (pedicels - 1).max(1) as f32;
+        (0..pedicels)
+            .filter_map(|j| {
+                let missing = rng.unit() < params.missing_fruit as f64;
+                let size = rng.range(1.0 - FRUIT_JITTER, 1.0 + FRUIT_JITTER) as f32;
+                let spin = rng.unit() as f32 * TAU;
+                let along = j as f32 / last;
+                let fruit = || {
+                    FruitConfig::new(
+                        &fruit_params,
+                        // A truss holds fewer than 256 fruit.
+                        scene.seed ^ FRUIT_SHAPE_STREAM ^ salt(order.0 << 8 | j as u64),
+                        config.fruit_diameter * (1.0 - TIP_SHRINK * along) * size,
+                        Hung {
+                            rank: config.node.rank,
+                            along,
+                            age: config.node.age,
+                        },
+                    )
+                };
+                (!missing).then(|| (j, spin, fruit()))
+            })
+            .collect::<Vec<_>>()
+    };
+    // What each truss's own fruit weigh, which its shape and its share of the
+    // budget are read off; it hangs them on the pedicels of the
+    // representative it draws.
+    let modulus = modulus(&params);
+    let laden = par_map(&hung, |_, (order, _, config)| {
+        let mut loads = vec![0.0; config.fruits as usize];
+        for (j, _, fruit) in hang_fruit(*order, config, config.fruits as usize) {
+            loads[j] = fruit.mass();
+        }
+        let droop = Axis::new(config, &loads, modulus, &mut Rng::new(config.seed)).droop;
+        Laden {
+            config: *config,
+            loads,
+            droop,
+        }
+    });
+    let book = farthest_first(&laden, params.variations.max(1) as usize, 0.0, &TrussMetric);
     // Which ways each representative is drawn: whole for the trusses that drew
     // it and stay rigid, as a rod for the ones that bend.
     let mut ways = vec![(false, false); book.len()];
-    for (config, drew) in configs.iter().zip(&book.assignment) {
+    for ((_, _, config), drew) in hung.iter().zip(&book.assignment) {
         let way = &mut ways[*drew as usize];
         if config.node.flexible {
             way.1 = true;
@@ -1045,8 +1208,9 @@ pub(crate) fn build(
         }
     }
     let tolerance = TOLERANCE / stem.detail.max(MIN_DETAIL) as f64;
-    let shapes = par_map(&book.representatives, |index, config| {
-        build_truss(config, &params, tolerance, ways[index].0, ways[index].1)
+    let shapes = par_map(&book.representatives, |index, laden| {
+        let (whole, bent) = ways[index];
+        build_truss(&laden.config, &laden.loads, &params, tolerance, whole, bent)
     });
 
     // Tubes and pedicels are numbered across the whole layer, because how many
@@ -1099,32 +1263,15 @@ pub(crate) fn build(
     let mut fruit_order = 0u64;
     for ((order, entity, config), drew) in hung.iter().zip(&book.assignment) {
         let (built, surface) = &built[*drew as usize];
-
-        let mut rng = Rng::new(scene.seed ^ FRUIT_STREAM ^ salt(order.0));
-        let last = (built.fruit.len() - 1).max(1) as f32;
-        let mut fruit = Vec::new();
-        for (j, hang) in built.fruit.iter().enumerate() {
-            let missing = rng.unit() < params.missing_fruit as f64;
-            let size = rng.range(1.0 - FRUIT_JITTER, 1.0 + FRUIT_JITTER) as f32;
-            let spin = rng.unit() as f32 * TAU;
-            if missing {
-                continue;
-            }
-            let along = j as f32 / last;
-            let config = FruitConfig::new(
-                &fruit_params,
-                // A truss holds fewer than 256 fruit.
-                scene.seed ^ FRUIT_SHAPE_STREAM ^ salt(order.0 << 8 | j as u64),
-                config.fruit_diameter * (1.0 - TIP_SHRINK * along) * size,
-                Hung {
-                    rank: config.node.rank,
-                    along,
-                    age: config.node.age,
-                },
-            );
-            let placement = hang.with_rotation(hang.rotation * Quat::from_rotation_z(spin));
-            fruit.push((j, placement, config));
-        }
+        let fruit: Vec<(usize, Transform, FruitConfig)> =
+            hang_fruit(*order, config, built.fruit.len())
+                .into_iter()
+                .map(|(j, spin, fruit)| {
+                    let hang = built.fruit[j];
+                    let placement = hang.with_rotation(hang.rotation * Quat::from_rotation_z(spin));
+                    (j, placement, fruit)
+                })
+                .collect();
 
         let mut truss = commands.entity(*entity);
         // The layer owns everything below a truss, and a rebuild may hang a
@@ -1363,10 +1510,17 @@ mod tests {
         };
         let params = TrussParams::default();
         let config = TrussConfig::new(&params, 0, 0, node);
-        let rod = build_truss(&config, &params, TOLERANCE, false, true)
-            .unwrap()
-            .rod
-            .unwrap();
+        let rod = build_truss(
+            &config,
+            &laden(&config, 1.0),
+            &params,
+            TOLERANCE,
+            false,
+            true,
+        )
+        .unwrap()
+        .rod
+        .unwrap();
         // How far tube `k` reaches off its segment's axis, as a fraction of
         // the least radius it tapers between.
         let swell = |k: usize| {
@@ -1392,24 +1546,31 @@ mod tests {
         }
     }
 
+    /// The mass of each fruit on a truss with all of them, `share` of a
+    /// full-grown fruit's.
+    fn laden(config: &TrussConfig, share: f32) -> Vec<f32> {
+        let hung = Hung {
+            rank: 0.0,
+            along: 0.0,
+            age: 8.0,
+        };
+        let full = FruitConfig::new(&FruitParams::default(), 0, config.fruit_diameter, hung);
+        vec![full.mass() * share; config.fruits as usize]
+    }
+
     /// Down a rachis every internode runs off its node's pedicel, the next
-    /// one back the other way, a pitch apart; and the rachis hangs closer to
-    /// straight down as it goes, never past it, nor ever up.
+    /// one back the other way, a pitch apart, about the way it grows.
     #[test]
-    fn a_rachis_zigzags_away_from_its_pedicels_and_hangs_closer_to_vertical() {
+    fn a_rachis_zigzags_away_from_its_pedicels() {
         let mut rng = Rng::new(7);
-        let runs = rachis(
-            Vec3::ZERO,
-            heading(PI - RACHIS_TILT),
-            0.033,
-            12,
-            1.0,
-            &mut rng,
-        );
+        let mean = heading(FRAC_PI_2);
+        let runs = rachis(Vec3::ZERO, mean, 0.033, 12, 1.0, &mut rng);
         assert_eq!(runs.len(), 12);
+        let kink = KINK * (1.0 + NODE_JITTER as f32) / 2.0;
         for (i, run) in runs.iter().enumerate() {
             assert!(
-                (run.along.length() - 1.0).abs() < 1e-5 && run.along.z < 0.0,
+                (run.along.length() - 1.0).abs() < 1e-5
+                    && run.along.angle_between(mean) <= kink + 1e-5,
                 "{i}: {run:?}"
             );
             assert!(
@@ -1424,21 +1585,76 @@ mod tests {
         for pair in runs.windows(2) {
             assert!((pair[1].from.distance(pair[0].from) - 0.033).abs() < 1e-5);
         }
-        // Off straight down: by the end, only its own half kink.
-        let tilt = |run: &Internode| (-run.along.z).acos();
-        let (first, last) = (tilt(&runs[0]), tilt(&runs[11]));
-        let kink = KINK * (1.0 + NODE_JITTER as f32) / 2.0;
-        assert!(
-            last < first - 0.2 && last <= kink + 1e-5,
-            "{first} to {last}"
-        );
+    }
+
+    /// Carrying nothing, a truss stands out from the stem, its rachis level;
+    /// the heavier its fruit the lower it hangs, its rachis nearer straight
+    /// down, and full grown it hangs from its bend. Its nodes stay a pitch
+    /// apart however far it bends.
+    #[test]
+    fn a_truss_stands_out_in_flower_and_sags_as_its_fruit_swell() {
+        let params = TrussParams::default();
+        let node = Node {
+            stem_radius: 0.006,
+            rank: 0.0,
+            age: 8.0,
+            flexible: false,
+        };
+        for order in 0..20 {
+            let config = TrussConfig::new(&params, 0, order, node);
+            let shares = [0.0, 0.05, 0.3, 1.0];
+            let rachises = shares.map(|share| {
+                let loads = laden(&config, share);
+                Axis::new(
+                    &config,
+                    &loads,
+                    modulus(&params),
+                    &mut Rng::new(config.seed),
+                )
+                .rachises
+            });
+            // How far the rachis's first and last internodes hang off
+            // straight down, and how low its tip hangs.
+            let hang = |runs: &[Internode]| {
+                let tilt = |run: &Internode| run.along.angle_between(Vec3::NEG_Z);
+                let tip = runs[runs.len() - 1].from.z;
+                (
+                    tilt(&runs[0]),
+                    tilt(&runs[runs.len().saturating_sub(2)]),
+                    tip,
+                )
+            };
+            let hangs = rachises.each_ref().map(|arms| hang(&arms[0]));
+            let (level, _, standing) = hangs[0];
+            assert!(
+                (level - FRAC_PI_2).abs() < KINK && standing > 0.0,
+                "{order}: in flower {:?}",
+                hangs[0]
+            );
+            for (lighter, heavier) in hangs.iter().zip(&hangs[1..]) {
+                assert!(heavier.2 < lighter.2, "{order}: {hangs:?}");
+            }
+            let (first, last, tip) = hangs[3];
+            assert!(
+                first < 1.0 && last < first && tip < -config.peduncle_length,
+                "{order}: full grown {:?}",
+                hangs[3]
+            );
+            for runs in rachises.iter().flatten() {
+                for pair in runs.windows(2) {
+                    let pitch = config.fruit_diameter * FRUIT_PITCH;
+                    assert!((pair[1].from.distance(pair[0].from) - pitch).abs() < 1e-5);
+                }
+            }
+        }
     }
 
     /// Every pedicel but the last leaves the rachis under its sides, down its
     /// own flank; the last hangs off the rachis's last node, its knuckle,
-    /// where a bent truss's rod ends at the fruit's calyx. Every fruit hangs top up,
-    /// leaning back toward the node it hangs from, and no two hang more than
-    /// a little into each other.
+    /// where a bent truss's rod ends at the fruit's calyx. Every fruit hangs
+    /// top up, leaning back toward the node it hangs from, and no two hang
+    /// more than a little into each other: full grown, and grown to a third
+    /// of their weight on a truss that sags less.
     #[test]
     fn a_truss_hangs_its_fruit_under_its_rachis_and_ends_in_the_last() {
         let params = TrussParams::default();
@@ -1449,14 +1665,18 @@ mod tests {
             flexible: true,
         };
         let mut nearest = f32::MAX;
-        for order in 0..200 {
+        for (order, share) in (0..200).zip([1.0, 0.3].into_iter().cycle()) {
             let config = TrussConfig::new(&params, 0, order, node);
             let bent = order < 3;
-            let built = build_truss(&config, &params, TOLERANCE, false, bent).unwrap();
-            let rachis = Axis::new(&config, &mut Rng::new(config.seed)).rachis;
+            let loads = laden(&config, share);
+            let built = build_truss(&config, &loads, &params, TOLERANCE, false, bent).unwrap();
+            let modulus = modulus(&params);
+            let rachis = Axis::new(&config, &loads, modulus, &mut Rng::new(config.seed)).rachises;
+            let rachis = &rachis[0];
             let last = built.fruit.len() - 1;
-            // Where a default fruit's body centers, below its calyx.
-            let radius = config.fruit_diameter / 2.0;
+            // Where a default fruit's body centers, below its calyx, at the
+            // size its share of a full-grown one's mass makes it.
+            let radius = config.fruit_diameter / 2.0 * share.cbrt();
             let middle = |hang: &Transform| hang.transform_point(-Vec3::Z * 0.73 * radius);
             for (j, (run, hang)) in rachis.iter().zip(&built.fruit).enumerate() {
                 let off = hang.translation - run.from;
@@ -1477,7 +1697,7 @@ mod tests {
                 );
                 for other in &built.fruit[..j] {
                     let apart = middle(hang).distance(middle(other));
-                    nearest = nearest.min(apart / config.fruit_diameter);
+                    nearest = nearest.min(apart / (2.0 * radius));
                 }
             }
             if let Some(rod) = built.rod {

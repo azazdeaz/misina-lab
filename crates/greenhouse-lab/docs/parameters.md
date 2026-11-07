@@ -133,10 +133,11 @@ The peduncle numbers default to the means measured on medium trusses in a high-w
 | `peduncle_length` | float | `0.079` | 0.03 to 0.14 | Length of the peduncle from the stem to the first fruit, in meters. |
 | `peduncle_diameter` | float | `0.007` | 0.004 to 0.012 | Diameter of the peduncle, in meters. |
 | `peduncle_angle` | float | `70.0` | 5 to 139 | Angle between the stem and the peduncle where it leaves, in degrees: 90 leaves level, less leaves rising. |
+| `stiffness` | float | `130.0` | 20 to 1000 | How stiff the peduncle and rachis are, as a Young's modulus in MPa. A truss grows standing out from the stem, and its fruit's weight bends it down against this: one in flower barely bends, and one sags further as its fruit swell. Below green wood's, as a stalk under a load for weeks gives way to it more than it would at once. |
 | `pedicel_angle` | float | `45.0` | 0 to 50 | How far under the rachis its pedicels leave it, in degrees below its sides: 0 leaves them level out to the sides, and more hangs the fruit further under it. At 45 the two ranks, down alternate flanks, meet at a right angle, as they do on a tomato truss; past 50, neighbouring fruit hang into each other. |
 | `jointed` | bool | `True` |  | Whether a pedicel has a knuckle, the joint a fruit breaks off at, as most truss varieties do. |
 | `missing_fruit` | float | `0.05` | 0 to 0.3 | Chance that a fruit is missing from its pedicel. |
-| `variations` | int | `16` | 1 to 64 | How many distinct truss meshes the scene may hold. A budget, not a count: the trusses are clustered and this is how many representatives the clustering may keep. |
+| `variations` | int | `24` | 1 to 64 | How many distinct truss meshes the scene may hold. A budget, not a count: the trusses are clustered and this is how many representatives the clustering may keep. |
 
 ## Fruit
 

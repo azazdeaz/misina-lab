@@ -356,6 +356,13 @@ class TrussParams:
     """Angle between the stem and the peduncle where it leaves, in degrees: 90 leaves
     level, less leaves rising.
     """
+    stiffness: float
+    """How stiff the peduncle and rachis are, as a Young's modulus in MPa. A truss grows
+    standing out from the stem, and its fruit's weight bends it down against this:
+    one in flower barely bends, and one sags further as its fruit swell. Below green
+    wood's, as a stalk under a load for weeks gives way to it more than it would at
+    once.
+    """
     pedicel_angle: float
     """How far under the rachis its pedicels leave it, in degrees below its sides: 0
     leaves them level out to the sides, and more hangs the fruit further under it. At
@@ -383,10 +390,11 @@ class TrussParams:
         peduncle_length: float = 0.079,
         peduncle_diameter: float = 0.007,
         peduncle_angle: float = 70.0,
+        stiffness: float = 130.0,
         pedicel_angle: float = 45.0,
         jointed: bool = True,
         missing_fruit: float = 0.05,
-        variations: int = 16,
+        variations: int = 24,
     ) -> None: ...
     def __repr__(self) -> str: ...
 

@@ -24,6 +24,18 @@ Scene document format 11.
 
 ### Added
 
+- **greenhouse-lab**: A truss sags under its fruit's weight. It grows
+  standing out from the stem, its rachis level, and its fruit bend its
+  peduncle and rachis down as they swell: a truss in flower stands out, and
+  one of grown fruit hangs from its bend much as every truss did before.
+  New: `TrussCfg.stiffness`, the Young's modulus they bend against, 130 MPa
+  by default. `TrussCfg.variations` is 24 by default, up from 16, as how far
+  a truss sags is one more way two trusses differ.
+- **misina-lab**: `geometry::bending::sag` finds where a rod held by its
+  first segment settles under the masses on its points, against its
+  flexural rigidity, and how each point turned, so whatever rides the rod
+  turns with it; `bending::rigidity` is a round section's. An organ is drawn
+  in the shape it grew into carrying nothing, then sagged under its load.
 - **greenhouse-lab**: Trusses flower. A truss shows at the head as a
   cluster of buds, opens its flowers from its base to its tip from about
   15 cm below the head, and sets them over the week after. A flower is a

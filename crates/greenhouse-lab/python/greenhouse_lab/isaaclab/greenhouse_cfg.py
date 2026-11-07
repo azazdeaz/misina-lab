@@ -295,6 +295,13 @@ class TrussCfg:
     """Angle between the stem and the peduncle where it leaves, in degrees: 90 leaves
     level, less leaves rising.
     """
+    stiffness: float = 130.0
+    """How stiff the peduncle and rachis are, as a Young's modulus in MPa. A truss grows
+    standing out from the stem, and its fruit's weight bends it down against this:
+    one in flower barely bends, and one sags further as its fruit swell. Below green
+    wood's, as a stalk under a load for weeks gives way to it more than it would at
+    once.
+    """
     pedicel_angle: float = 45.0
     """How far under the rachis its pedicels leave it, in degrees below its sides: 0
     leaves them level out to the sides, and more hangs the fruit further under it. At
@@ -307,7 +314,7 @@ class TrussCfg:
     """
     missing_fruit: float = 0.05
     """Chance that a fruit is missing from its pedicel."""
-    variations: int = 16
+    variations: int = 24
     """How many distinct truss meshes the scene may hold. A budget, not a count: the
     trusses are clustered and this is how many representatives the clustering may
     keep.
