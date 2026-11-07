@@ -24,6 +24,14 @@ Scene document format 11.
 
 ### Added
 
+- **greenhouse-lab**: A truss's stalks grow with its flowers. Each pedicel,
+  and the internode of rachis leading to it, is a third of its full length
+  when its flower opens, shorter in bud, and grows to full length over the
+  two and a half weeks after, before its fruit is full size. So a truss in
+  flower is short, its buds crowded at its tip, and the peduncle and rachis
+  thicken as it grows. A ripe truss is as before. New:
+  `TrussCfg.stalks_in_flower`, a stalk's length when its flower opens as a
+  share of its full length, 0.35 by default.
 - **greenhouse-lab**: A truss sags under its fruit's weight. It grows
   standing out from the stem, its rachis level, and its fruit bend its
   peduncle and rachis down as they swell: a truss in flower stands out, and

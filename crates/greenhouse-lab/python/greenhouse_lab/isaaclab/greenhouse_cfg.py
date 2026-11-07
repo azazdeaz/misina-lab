@@ -312,6 +312,12 @@ class TrussCfg:
     """Whether a pedicel has a knuckle, the joint a fruit breaks off at, as most truss
     varieties do.
     """
+    stalks_in_flower: float = 0.35
+    """How long a pedicel, and the internode of rachis leading to it, are when its
+    flower opens, as a share of their length under the grown fruit. A large-fruited
+    truss's stalks grow to about three times their length in flower, and a
+    small-fruited one's barely grow on.
+    """
     missing_fruit: float = 0.05
     """Chance that a fruit is missing from its pedicel."""
     variations: int = 24

@@ -333,6 +333,14 @@ pub struct Hung {
     pub age: f32,
 }
 
+impl Hung {
+    /// Weeks since its flower opened, under 0 while it is a bud: a truss
+    /// opens its flowers from its base to its tip.
+    pub fn opened(&self) -> f32 {
+        self.age - OPENS - FLOWERING * self.along
+    }
+}
+
 /// One fruit's shape and stage, as the truss that holds it specified.
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct FruitConfig {
@@ -370,9 +378,7 @@ impl FruitConfig {
         let lobes = LOBES.0 + (rng.unit() * (LOBES.1 - LOBES.0 + 1) as f64) as u32;
         let sepals = if rng.unit() < 0.5 { 5 } else { 6 };
 
-        // Weeks since its own flower opened: a truss opens its flowers from
-        // its base to its tip.
-        let opened = hung.age - OPENS - FLOWERING * hung.along;
+        let opened = hung.opened();
         let ripening = params.ripe_trusses - hung.rank - params.spread * hung.along;
         let stage = if opened < 0.0 {
             // A bud from when its truss shows, at the tip latest.
