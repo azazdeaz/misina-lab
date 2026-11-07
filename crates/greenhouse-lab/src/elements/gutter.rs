@@ -12,7 +12,7 @@ use misina_lab::palette::{Response, srgb};
 use misina_lab::params::{Choices, Slider};
 use misina_lab::scene::{Geometry, Library};
 
-use super::layout::{GreenhouseLayout, Row, SLAB};
+use super::layout::{BLOCK, GreenhouseLayout, Row, SLAB};
 use super::wire::WireParams;
 use super::{Grow, STEEL, cuboid};
 
@@ -20,9 +20,6 @@ use super::{Grow, STEEL, cuboid};
 pub const WIDTH: f32 = 0.2;
 pub const DEPTH: f32 = 0.06;
 const SHEET: f32 = 0.002;
-
-/// A propagation block, in meters.
-const BLOCK: Vec3 = Vec3::new(0.1, 0.1, 0.065);
 
 /// Distance between the hangers, or the stands, along a gutter, in meters. An
 /// estimate.

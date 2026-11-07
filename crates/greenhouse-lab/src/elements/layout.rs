@@ -22,6 +22,9 @@ use super::Grow;
 /// them nearest this long: [`GreenhouseLayout::slab`].
 pub const SLAB: Vec3 = Vec3::new(1.2, 0.195, 0.075);
 
+/// A propagation block, in meters.
+pub const BLOCK: Vec3 = Vec3::new(0.1, 0.1, 0.065);
+
 /// The gap left between two slabs along a gutter, in meters.
 const SLAB_GAP: f32 = 0.05;
 
@@ -30,9 +33,10 @@ const SLAB_GAP: f32 = 0.05;
 const BARE_END: f32 = 0.2;
 
 /// Floors on what Python may set, so that nothing is laid out at zero size;
-/// plants no closer than a block is wide.
+/// plants far enough apart that each block sits whole on its slab, the
+/// slab's ends `SLAB_GAP / 2` inside its plants' stretch.
 const MIN_PITCH: f32 = 0.1;
-const MIN_PLANT_SPACING: f32 = 0.1;
+const MIN_PLANT_SPACING: f32 = BLOCK.x + SLAB_GAP;
 
 /// Where the rows go.
 ///
@@ -248,9 +252,9 @@ mod tests {
     }
 
     /// Slabs lie between the row's bare ends with a gap between each two,
-    /// each within half a plant's spacing of 1.2 m long, and every plant
-    /// stands on one, all of them exactly the spacing asked for apart and
-    /// filling the planted stretch — Python's stops included.
+    /// each within half a plant's spacing of 1.2 m long, and every plant's
+    /// block sits whole on one, all of them exactly the spacing asked for
+    /// apart and filling the planted stretch — Python's stops included.
     #[test]
     fn every_plant_stands_on_a_slab_inside_the_row() {
         for (row_length, plant_spacing) in [
@@ -286,11 +290,11 @@ mod tests {
                 "{params:?}: slabs touch"
             );
             assert!(
-                layout
-                    .plants
+                layout.plants.iter().all(|x| layout
+                    .slabs
                     .iter()
-                    .all(|x| layout.slabs.iter().any(|slab| (x - slab).abs() < half)),
-                "{params:?}: a plant off every slab"
+                    .any(|slab| (x - slab).abs() + BLOCK.x / 2.0 <= half + 1e-4)),
+                "{params:?}: a block off every slab"
             );
             assert!(
                 layout
