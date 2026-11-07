@@ -111,6 +111,34 @@ def test_the_crates_boxes_are_its_mesh():
     assert corners.max(axis=0) == pytest.approx(points.max(axis=0), abs=0.001)
 
 
+def test_newton_reads_the_hand_friction_on_every_collider_on_the_hand_alone():
+    """On a stage laid out as the URDF importer lays out the robot, links
+    nested in their parents and their pieces instances of a prototype,
+    Newton's importer gives every collider on the hand, the shear's links
+    under it included, `HAND_FRICTION`, and the arm's the default."""
+    from newton import ModelBuilder
+    from pxr import Usd, UsdGeom, UsdPhysics
+
+    stage = Usd.Stage.CreateInMemory()
+    stage.CreateClassPrim("/Piece")
+    UsdPhysics.CollisionAPI.Apply(UsdGeom.Cube.Define(stage, "/Piece/mesh").GetPrim())
+    hand = f"/Robot/forearm_link/{harvester.HAND}"
+    for path in ("/Robot/forearm_link/elbow", f"{hand}/jaw", f"{hand}/blade_link/finger"):
+        piece = stage.DefinePrim(path, "Xform")
+        piece.GetReferences().AddInternalReference("/Piece")
+        piece.SetInstanceable(True)
+    UsdPhysics.CollisionAPI.Apply(UsdGeom.Cube.Define(stage, f"{hand}/head").GetPrim())
+    harvester.bind_hand_friction(stage.GetPrimAtPath("/Robot"))
+    builder = ModelBuilder()
+    builder.add_usd(stage, root_path="/Robot")
+    assert dict(zip(builder.shape_label, builder.shape_material_mu, strict=True)) == {
+        "/Robot/forearm_link/elbow/mesh": ModelBuilder.ShapeConfig().mu,
+        f"{hand}/jaw/mesh": harvester.HAND_FRICTION,
+        f"{hand}/blade_link/finger/mesh": harvester.HAND_FRICTION,
+        f"{hand}/head": harvester.HAND_FRICTION,
+    }
+
+
 @pytest.mark.parametrize(("way", "clear"), [(MACHINE.way_in, True), ((0.0, 0.0, 1.0), False)])
 def test_a_peduncle_comes_in_under_the_hook(way, clear):
     """The mouth coming in along `way_in`, a 7 mm peduncle passes under the
