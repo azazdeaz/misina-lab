@@ -330,6 +330,19 @@ Scene document format 11.
 
 ### Fixed
 
+- **greenhouse-lab** (**cfg**): `LayoutCfg.plant_spacing` is how far apart
+  the plants stand, exactly. A slab is cut to the whole number of plants
+  that brings it nearest 1.2 m, where every slab was 1.2 m and took the
+  nearest whole number of plants, so every spacing from 0.35 to 0.48 m built
+  the same rows, three plants to a slab. A row leaves at least 0.2 m of its
+  gutter bare at each end, and plants stand no closer than a block is wide,
+  0.1 m. A lowered crop's stems rise along a wire as far apart as
+  the plants: every hook is slid by the same step, where each stem was
+  lowered as far as it had grown past the wire, give or take 15%, which
+  bunched some stems a few centimetres apart and left gaps of over half a
+  metre. The stems that run round a gutter's end rise on in step with the
+  rest, and trusses of neighbouring stems no longer run into each other or
+  into the stems.
 - **misina-lab**: The rods' solver keeps up to 1024 contacts for each body,
   `rods.BODY_CONTACTS`, where it kept Newton's 64. A robot body that meets
   rods as a proxy touches every rod shape against it at once, and VBD

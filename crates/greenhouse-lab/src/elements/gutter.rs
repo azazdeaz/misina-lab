@@ -168,7 +168,7 @@ fn build(
     let steel = STEEL.surface(srgb(GUTTER_COLOR));
     let gutter = library.part("Gutter", 0, channel(layout.length).to_mesh(), steel);
     let [slab, block] = [
-        ("Slab", SLAB, SLAB_SURFACE),
+        ("Slab", SLAB.with_x(layout.slab), SLAB_SURFACE),
         ("Block", BLOCK, BLOCK_SURFACE),
     ]
     .map(|(name, size, (color, response))| {

@@ -35,7 +35,7 @@ Rows run along X from the row head, where the concrete main path crosses them, a
 | `pitch` | float | `1.6` | 1.5 to 1.8 | Distance between neighbouring gutters, in meters: the row pitch. |
 | `row_length` | float | `20.0` | 5 to 120 | Length of a row from the main path to its far end, in meters. Farm rows run 90 to 115 m; a shorter one simulates faster. |
 | `main_path` | float | `3.0` | 3 to 5 | Width of the concrete main path across the row heads, in meters: where a robot changes rows. |
-| `plant_spacing` | float | `0.36` | 0.3 to 0.5 | Distance between plants along a gutter, in meters, each in a propagation block on a slab. A slab carries the whole number of plants closest to this, so the real spacing comes out close to it rather than equal to it. |
+| `plant_spacing` | float | `0.36` | 0.3 to 0.5 | Distance between plants along a gutter, in meters, each in a propagation block on a slab. A slab is as long as the whole number of plants that brings it nearest 1.2 m, so the plants stand this far apart the whole row along. |
 
 ## Pipe rail
 

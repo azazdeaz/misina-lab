@@ -4,9 +4,10 @@
 //! the block it is rooted in. It grows a truss a week, three nodes to a
 //! truss, up a twine hung from its hook on the wire, until its head is tied
 //! under the hook's reel. From then on it is lowered as it grows: every week
-//! the hooks are slid along the wire and the stems let down, so the oldest
-//! part of a stem lies bare beside the gutter and only its top few meters
-//! stand:
+//! every hook is slid along the wire by the same step, as far as the crop
+//! has grown past it, and the stems let down, so the heads stand as far
+//! apart as the plants, the oldest part of a stem lies bare beside the
+//! gutter and only its top few meters stand:
 //!
 //! ```text
 //!         ┬   the hook on the wire, its twine reel HOOK below
@@ -21,8 +22,9 @@
 //!
 //! The runs go round the gutter the way growers move them: toward the far
 //! end on the left, round the gutter's end, and back toward the row head on
-//! the right. A stem rooted near an end may so rise on the other wire, and
-//! every stretch of the row stands as dense as the rest.
+//! the right, turning where the plants end. A stem rooted near an end may so
+//! rise on the other wire, as far along it as it was lowered past the end,
+//! so every stretch of the row stands as dense and as evenly as the rest.
 //!
 //! Every plant within a run's length of a place has a run lying there, so
 //! late in the season a bundle of a dozen or more lies along each side of
@@ -261,20 +263,13 @@ const TIP: (f32, f32) = (0.5, 0.08);
 /// How deep the ridges along a stem are, as a fraction of its radius.
 const RIDGES: f64 = 0.08;
 
-/// How far in from each end of the gutter the runs turn round it, in meters.
-const RUN_TURN: f32 = 0.2;
-
-/// How far a run's length varies about what its stem has grown past the
-/// wire, as a fraction.
-const LOWERED_JITTER: f64 = 0.15;
-
 /// How much faster or slower a stem grows than the crop, as a fraction, so
 /// how much further apart or nearer its trusses hang (est.).
 const GROWTH_JITTER: f64 = 0.05;
 
-/// How much further an extra stem is lowered, in meters, so that it rises
-/// between its plant's two rather than beside one of them, from the week it
-/// is taken on.
+/// How much further round the gutter an extra stem rises than its plant's
+/// stem beside it, in meters, so that it rises between two plants' stems
+/// rather than beside one: its hook hung that far on, and slid with the rest.
 const EXTRA_RUN: f32 = 0.15;
 
 /// Weeks after it flowered, so trusses below the head, that a truss's fruit
@@ -509,21 +504,21 @@ impl Round {
         }
     }
 
-    /// `u`, or the end of the turn it falls in: a stem rises beside the
-    /// gutter, never off its end.
-    fn beside(&self, u: f32) -> f32 {
+    /// The place `run` further round than `u`, a place beside the gutter,
+    /// counting only the gutter's sides: a run passes each turn whole, so it
+    /// ends beside the gutter, never off its end, as far along the other side
+    /// as it ran on past the turn.
+    fn past(&self, u: f32, run: f32) -> f32 {
         let (straight, turn) = (self.straight(), self.turn());
         let w = u.rem_euclid(self.length());
-        let past = if w < straight {
-            0.0
-        } else if w < straight + turn {
-            straight + turn - w
-        } else if w < 2.0 * straight + turn {
-            0.0
+        // How far along its side `u` is, so how many turns the run passes.
+        let along = if w <= straight {
+            w
         } else {
-            self.length() - w
+            w - straight - turn
         };
-        u + past
+        let turns = (((along + run) / straight).ceil() - 1.0).max(0.0);
+        u + run + turns * turn
     }
 }
 
@@ -549,6 +544,17 @@ struct Live {
     flexible_below: f32,
     /// How many leaves a stem keeps, down from its head.
     leaves_kept: u32,
+}
+
+impl Live {
+    /// How far round the gutter every stem has been lowered `week` weeks
+    /// after planting, rooted `root` high: every hook is slid by the same
+    /// step, as far in all as the crop has grown past the head, a week's
+    /// growth a week from the transplant.
+    fn travel(&self, root: f32, week: f32) -> f32 {
+        let weekly = (self.head - self.harvest).max(MIN_LIVE) / self.trusses as f32;
+        (root + TRANSPLANT + weekly * week - self.head).max(0.0)
+    }
 }
 
 /// One stem, solved in the row frame: everything its meshes and its trusses
@@ -648,14 +654,14 @@ fn thinning(d: f32) -> f32 {
 }
 
 /// Grows the stem rooted at `root` that starts round on `side`, `age` weeks
-/// after it was planted and lowered `more` further than its growth calls for,
+/// after it was planted, that rises `run` round the gutter from its block,
 /// from its own three streams.
 ///
 /// The *draw order* is part of this element's output. `rng` draws how thick
 /// its head is, how far its development runs ahead, how much faster it grows,
-/// how far the run's length strays, where across and up the bundle
-/// the run lies, the hook's place along the wire, the bow's bearing and the
-/// ripening offset, then three per hung truss — whether it was turned to the
+/// where across and up the bundle the run lies, the hook's place along the
+/// wire, the bow's bearing and the ripening offset, then three per hung
+/// truss — whether it was turned to the
 /// path, how far it wanders off it, and the bearing it faces when it was not
 /// — and last the yaw of the leaf nearest the head and, node by node down,
 /// how far the next one turns from it. `lie` draws the four waves the run
@@ -674,7 +680,7 @@ fn grow(
     root: Vec3,
     side: f32,
     age: f32,
-    more: f32,
+    run: f32,
     turned_to_path: f32,
     live: Live,
     rng: &mut Rng,
@@ -699,7 +705,6 @@ fn grow(
     let ahead = live.development_spread * age.sqrt() * rng.range(-1.0, 1.0) as f32;
     let age = (age + ahead).max(0.0);
     let growth = rng.range(1.0 - GROWTH_JITTER, 1.0 + GROWTH_JITTER) as f32;
-    let stray = rng.range(1.0 - LOWERED_JITTER, 1.0 + LOWERED_JITTER) as f32;
     let round = Round {
         from: live.ends.0,
         to: live.ends.1,
@@ -721,11 +726,10 @@ fn grow(
     let harvest = head - (head - harvest) * growth;
     let weekly = (head - harvest) / live.trusses as f32;
     let node = weekly / NODES_PER_TRUSS as f32;
-    // How tall it would stand, so how much of it the wire is too low for.
+    // How tall it would stand.
     let tall = root.z + TRANSPLANT + weekly * age;
-    let run = ((tall - head).max(0.0) + more) * stray;
     let start = round.start(root.x, side);
-    let end = round.beside(start + run);
+    let end = round.past(start, run);
     let lowered = end > start + RUN_START;
     let rise_side = if lowered {
         round.at(end).0.y.signum()
@@ -1197,11 +1201,12 @@ fn author(
         development_spread: params.development_spread,
         spread: wire.spread,
         head_diameter: params.head_diameter,
-        ends: (RUN_TURN, (layout.length - RUN_TURN).max(RUN_TURN)),
+        ends: layout.planted,
         flexible_below: params.flexible_below,
         leaves_kept: params.leaves_kept,
     };
     let week = scene.week.max(0.0);
+    let travel = live.travel(root_z, week);
 
     // In row order, so the trusses' `Order` follows from the layout alone.
     let mut rows: Vec<(usize, Entity)> = rows.iter().map(|(e, row)| (row.0, e)).collect();
@@ -1219,12 +1224,12 @@ fn author(
             for index in 0..count {
                 // Alternately left and right, and an extra stem, taken on
                 // later, to the side its plant's place along the row picks.
-                let (side, more, age) = match index {
-                    0 => (1.0, 0.0, week),
-                    1 => (-1.0, 0.0, week),
+                let (side, run, age) = match index {
+                    0 => (1.0, travel, week),
+                    1 => (-1.0, travel, week),
                     _ => (
                         if plant % 2 == 0 { 1.0 } else { -1.0 },
-                        EXTRA_RUN,
+                        travel + EXTRA_RUN,
                         week - EXTRA_START,
                     ),
                 };
@@ -1233,7 +1238,7 @@ fn author(
                     Vec3::new(x, 0.0, root_z),
                     side,
                     age,
-                    more,
+                    run,
                     params.turned_to_path,
                     live,
                     &mut Rng::new(scene.seed ^ STEM_STREAM ^ salted),
@@ -1563,7 +1568,7 @@ mod tests {
                 root,
                 1.0,
                 12.0,
-                0.0,
+                live.travel(root.z, 12.0),
                 0.8,
                 live,
                 &mut Rng::new(seed),
@@ -1596,10 +1601,10 @@ mod tests {
 
     /// A stem stands on its twine with green fruit only until its head
     /// reaches the wire, about week 9, when its lowest truss colours. From
-    /// then on it is lowered: its hook slides along the wire about a week's
-    /// growth a week, and its lowest truss hangs less than a week's growth
-    /// above the harvest height whatever the week, give or take how much
-    /// faster it grows.
+    /// then on it is lowered: its hook slides along the wire a week of the
+    /// crop's growth a week, and its lowest truss hangs less than a week's
+    /// growth above the harvest height whatever the week, give or take how
+    /// much faster it grows.
     #[test]
     fn a_stem_grows_up_its_twine_and_is_lowered() {
         let live = Live {
@@ -1622,7 +1627,7 @@ mod tests {
                 root,
                 1.0,
                 age,
-                0.0,
+                live.travel(root.z, age),
                 0.8,
                 live,
                 &mut Rng::new(3),
@@ -1675,10 +1680,9 @@ mod tests {
             lowered.hook.x
         });
         let slid = hooks[2] - hooks[0];
-        let (g, l) = (GROWTH_JITTER as f32, LOWERED_JITTER as f32);
         assert!(
-            (weekly * (1.0 - g) * (1.0 - l)..=weekly * (1.0 + g) * (1.0 + l)).contains(&slid),
-            "slid {slid} m in a week, grew {weekly} m"
+            (slid - weekly).abs() < 1e-4,
+            "slid {slid} m in a week, the crop grew {weekly} m"
         );
     }
 
@@ -1704,7 +1708,7 @@ mod tests {
             Vec3::new(9.0, 0.0, 0.64),
             1.0,
             30.0,
-            0.0,
+            live.travel(0.64, 30.0),
             0.8,
             live,
             &mut Rng::new(5),
@@ -1733,9 +1737,43 @@ mod tests {
         }
     }
 
+    /// Every hook along a wire is slid by the same step, and a run passes a
+    /// gutter's end whole, so a lowered crop's stems rise along each wire as
+    /// far apart as the plants, give or take how far a hook strays.
+    #[test]
+    fn the_stems_rise_as_far_apart_as_the_plants() {
+        for spacing in [0.3, 0.42] {
+            let mut params = small();
+            (params.layout.rows, params.layout.plant_spacing) = (1, spacing);
+            let mut app = grown(params);
+            let world = app.world_mut();
+            let hooks: Vec<Entity> = world
+                .query::<(Entity, &Name)>()
+                .iter(world)
+                .filter(|(_, name)| name.as_str() == "Hook")
+                .map(|(hook, _)| hook)
+                .collect();
+            let mut wires = [Vec::new(), Vec::new()];
+            for hook in hooks {
+                let at = in_scene(world, hook).translation;
+                wires[(at.y > 0.0) as usize].push(at.x);
+            }
+            for xs in &mut wires {
+                xs.sort_by(f32::total_cmp);
+                let gaps: Vec<f32> = xs.windows(2).map(|pair| pair[1] - pair[0]).collect();
+                assert!(
+                    gaps.iter()
+                        .all(|gap| (gap - spacing).abs() <= 2.0 * HOOK_JITTER as f32),
+                    "{spacing}: {gaps:?}"
+                );
+            }
+        }
+    }
+
     /// A place round the gutter maps onto the left side running +X, the far
     /// turn, the right side running -X and the head turn, and every place a
-    /// run may end at is beside the gutter.
+    /// run may end at is beside the gutter, a run round an end as far along
+    /// the other side as it ran on past it.
     #[test]
     fn the_runs_go_round_the_gutter() {
         let round = Round {
@@ -1747,17 +1785,26 @@ mod tests {
         assert!(left.distance(Vec2::new(3.0, 0.13)) < 1e-5 && along == Vec2::X);
         let (right, along) = round.at(round.start(3.0, -1.0));
         assert!(right.distance(Vec2::new(3.0, -0.13)) < 1e-4 && along == -Vec2::X);
-        for u in (0..400).map(|i| i as f32 * 0.07) {
-            let (at, _) = round.at(round.beside(u));
-            assert!(
-                (at.y.abs() - round.out).abs() < 1e-4 && (round.from..=round.to).contains(&at.x),
-                "{u}: {at}"
-            );
+        for (x, side) in [(3.0, 1.0), (3.0, -1.0), (9.8, 1.0), (0.2, -1.0)] {
+            for run in (0..400).map(|i| i as f32 * 0.07) {
+                let (at, _) = round.at(round.past(round.start(x, side), run));
+                assert!(
+                    (at.y.abs() - round.out).abs() < 1e-4
+                        && (round.from - 1e-4..=round.to + 1e-4).contains(&at.x),
+                    "{x} {side} run {run}: {at}"
+                );
+            }
         }
-        // Round the far end from the left lands on the right.
-        let (back, _) = round.at(round.beside(round.start(9.0, 1.0) + 2.0));
+        // Round the far end from the left lands on the right, and round the
+        // row head from the right on the left.
+        let (back, _) = round.at(round.past(round.start(9.0, 1.0), 2.0));
         assert!(
-            back.y < 0.0 && (back.x - (9.8 - 1.2 + round.turn())).abs() < 1e-3,
+            back.y < 0.0 && (back.x - (9.8 - 1.2)).abs() < 1e-3,
+            "{back}"
+        );
+        let (back, _) = round.at(round.past(round.start(1.0, -1.0), 2.0));
+        assert!(
+            back.y > 0.0 && (back.x - (0.2 + 1.2)).abs() < 1e-3,
             "{back}"
         );
     }
