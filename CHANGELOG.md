@@ -24,6 +24,15 @@ Scene document format 11.
 
 ### Added
 
+- **greenhouse-lab**: Trusses flower. A truss shows at the head as a
+  cluster of buds, opens its flowers from its base to its tip from about
+  15 cm below the head, and sets them over the week after. A flower is a
+  calyx, five or six yellow petals swept back and the anther cone, on the
+  prim its fruit grows from, and a young fruit's calyx grows on from the
+  flower's. `greenhouse_lab:stage` is `bud` or `flower` until a fruit sets.
+  New: `FruitCfg.petal_length` and `FruitCfg.petal_reflex`.
+  `FruitCfg.variations` is 32 by default, up from 24, so the flowers' meshes
+  leave the fruit as many of their own as they had.
 - **greenhouse-lab**: Leaves change colour with age. A leaf at the head is
   a lighter, yellower green than a grown one, and from fourteen nodes below
   the head a leaf may fade toward a senescent leaf's pale yellow-green, each

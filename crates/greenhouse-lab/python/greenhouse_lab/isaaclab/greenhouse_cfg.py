@@ -141,7 +141,7 @@ class StemCfg:
     """
     trusses: int = 9
     """Trusses on a stem in full production, from the lowest still on it up to the head.
-    At a truss a week, also the weeks from a truss flowering at the head to its
+    At a truss a week, also the weeks from a truss showing at the head to its
     picking.
     """
     development_spread: float = 0.2
@@ -316,19 +316,23 @@ class TrussCfg:
 
 @configclass
 class FruitCfg:
-    """The fruit: their shape, how ripe the crop is, and what colour ripe is.
+    """The fruit and the flowers they set from: their shape, how ripe the crop is, and
+    what colour ripe is.
 
-    Every fruit has a stage: set, expanding and mature green while it grows, then
-    breaker, turning, pink, light red and red as it colours from its blossom end up.
-    A truss sets its fruit near the head, and they reach full size five trusses down.
-    A stem colours from its lowest truss up and a truss from its base to its tip, so
-    in full production the lowest `ripe_trusses` trusses on a stem are colouring and
-    the ones above them still green; a young crop's trusses are all green until the
-    first are old enough. A truss is due once its tip fruit is turning. Every stem
-    runs a little ahead of or behind the rest.
+    Every fruit has a stage: bud and flower before it sets, set, expanding and mature
+    green while it grows, then breaker, turning, pink, light red and red as it
+    colours from its blossom end up. A truss shows at the head in bud, opens its
+    flowers from its base to its tip from about 15 cm below the head, sets them over
+    the week after, and they reach full size about five trusses further down. A stem
+    colours from its lowest truss up and a truss from its base to its tip, so in full
+    production the lowest `ripe_trusses` trusses on a stem are colouring and the ones
+    above them still green; a young crop's trusses are all green until the first are
+    old enough. A truss is due once its tip fruit is turning. Every stem runs a
+    little ahead of or behind the rest.
 
     Every fruit draws its own lobe count, its five or six sepals and how each curls,
-    and a slight lean, within the ranges the research notes give.
+    and a slight lean, within the ranges the research notes give; its flower has a
+    petal between each two sepals.
     """
 
     ripe_trusses: float = 1.0
@@ -350,10 +354,18 @@ class FruitCfg:
     """Depth of the grooves between a fruit's lobes, as a fraction of its radius: 0 is
     smooth, and a beefsteak's are about 0.15.
     """
-    variations: int = 24
-    """How many distinct fruit meshes the scene may hold, by size, shape and stage. A
-    budget, not a count: the fruit are clustered and this is how many representatives
-    the clustering may keep.
+    petal_length: float = 0.011
+    """Length of a flower's petals, in meters: an open tomato flower is under 25 mm
+    across, and a cherry tomato's smaller.
+    """
+    petal_reflex: float = 125.0
+    """How far an open flower's petals sweep back, in degrees off pointing straight
+    ahead: 90 opens it flat, and a tomato's sweep back past that toward its pedicel.
+    """
+    variations: int = 32
+    """How many distinct fruit and flower meshes the scene may hold, by size, shape and
+    stage. A budget, not a count: the fruit are clustered and this is how many
+    representatives the clustering may keep.
     """
 
 

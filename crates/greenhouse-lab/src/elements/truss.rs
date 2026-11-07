@@ -269,9 +269,9 @@ pub struct Node {
     /// How many weeks this one is behind its stem's ripening front, a truss
     /// a week, which its fruit's ripeness is read off.
     pub rank: f32,
-    /// How far its fruit have come toward full size, 0 just set to 1: the
-    /// trusses nearest the head set theirs last.
-    pub growth: f32,
+    /// Weeks since it showed at the head, a truss a week: its flowers open
+    /// and set, and its fruit grow, by it.
+    pub age: f32,
     /// Whether it is a rod a solver bends rather than a static mesh: its node
     /// is below [`StemParams::flexible_below`](super::stem::StemParams::flexible_below).
     pub flexible: bool,
@@ -1119,7 +1119,7 @@ pub(crate) fn build(
                 Hung {
                     rank: config.node.rank,
                     along,
-                    growth: config.node.growth,
+                    age: config.node.age,
                 },
             );
             let placement = hang.with_rotation(hang.rotation * Quat::from_rotation_z(spin));
@@ -1358,7 +1358,7 @@ mod tests {
         let node = Node {
             stem_radius: 0.006,
             rank: 0.0,
-            growth: 1.0,
+            age: 8.0,
             flexible: true,
         };
         let params = TrussParams::default();
@@ -1445,7 +1445,7 @@ mod tests {
         let node = Node {
             stem_radius: 0.006,
             rank: 0.0,
-            growth: 1.0,
+            age: 8.0,
             flexible: true,
         };
         let mut nearest = f32::MAX;

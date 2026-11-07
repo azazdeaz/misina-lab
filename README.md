@@ -147,7 +147,7 @@ The rows of a high-wire tomato greenhouse, grown to any week of the season.
 
 ![A greenhouse built on Misina Lab, in Isaac Lab](https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/greenhouse_demo/rows.webp)
 
-- 🍅 Every fruit its own prim, with its ripening stage
+- 🍅 Every fruit its own prim, with its stage from bud and flower to ripe
 - 🦾 A `Cut` and a `Bend` frame on every truss, where a gripper takes it
 - 📅 The crop's age in weeks, from young plants on their twines to meters of
   lowered stem
