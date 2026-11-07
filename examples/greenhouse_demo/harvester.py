@@ -572,31 +572,39 @@ def harvester_cfg(machine: Harvester, prim_path: str, position) -> ArticulationC
 
 
 def spawn_harvester(prim_path: str, cfg: sim_utils.UrdfFileCfg, *args, **kwargs):
-    """Spawn the robot's URDF as `UrdfFileCfg` does, then give every collider
-    on `HAND` `HAND_FRICTION`, which URDF cannot say: a physics material
-    bound to each. USD's physics parser reads a collider's own binding only,
-    not one on the link above it, and the importer makes most of the link's
-    pieces instances, which cannot be edited inside, so they are made plain
-    prims first. It has to be done here, as the scene builds the Newton
-    model's robot from the stage as soon as the robot is spawned."""
+    """Spawn the robot's URDF as `UrdfFileCfg` does, then `bind_hand_friction`.
+    It has to be done here: the scene builds the Newton model's robot from
+    the stage as soon as the robot is spawned, and an edit after that never
+    reaches the model."""
+    robot = sim_utils.spawn_from_urdf(prim_path, cfg, *args, **kwargs)
+    bind_hand_friction(robot)
+    return robot
+
+
+def bind_hand_friction(robot) -> None:
+    """Give every collider on `HAND` under the prim `robot` `HAND_FRICTION`,
+    which URDF cannot say: a physics material bound to each. USD's physics
+    parser reads a collider's own binding only, not one on the link above
+    it, and the importer makes most of the link's pieces instances, which
+    cannot be edited inside, so those under the hand are made plain prims
+    first. Raises if it finds no collider there to bind."""
     from pxr import Usd, UsdPhysics, UsdShade
 
-    robot = sim_utils.spawn_from_urdf(prim_path, cfg, *args, **kwargs)
     material = UsdShade.Material.Define(robot.GetStage(), robot.GetPath().AppendChild("Friction"))
     api = UsdPhysics.MaterialAPI.Apply(material.GetPrim())
     api.CreateStaticFrictionAttr(HAND_FRICTION)
     api.CreateDynamicFrictionAttr(HAND_FRICTION)
-    hands = [p for p in Usd.PrimRange(robot) if p.GetName() == HAND]
-    if not hands:
-        raise ValueError(f"no {HAND} under {robot.GetPath()}")
-    for hand in hands:
+    bound = 0
+    for hand in [p for p in Usd.PrimRange(robot) if p.GetName() == HAND]:
         for instance in [p for p in Usd.PrimRange(hand) if p.IsInstance()]:
             instance.SetInstanceable(False)
         for collider in Usd.PrimRange(hand):
             if collider.HasAPI(UsdPhysics.CollisionAPI):
                 binding = UsdShade.MaterialBindingAPI.Apply(collider)
                 binding.Bind(material, materialPurpose="physics")
-    return robot
+                bound += 1
+    if not bound:
+        raise ValueError(f"no collider on {HAND} under {robot.GetPath()}")
 
 
 ##
