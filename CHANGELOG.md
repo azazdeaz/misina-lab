@@ -24,6 +24,14 @@ Scene document format 11.
 
 ### Added
 
+- **greenhouse-lab**: Stems are deleafed as growers do it, up to a truss.
+  `StemParams.deleafed_to_truss` is the truss a pass strips a stem up to,
+  counted up from the lowest still on it: 3 by default, which leaves the
+  two trusses nearest their picking on bare stem and 18–20 leaves on a
+  stem. `StemParams.days_since_deleafing` is how long ago the crop was
+  deleafed: a stem carries three more leaves a week than the pass left it,
+  its lowest, which the next pass strips; 0 by default. A young crop keeps
+  every leaf until its first truss nears its picking.
 - **greenhouse-lab**: A path's heating pipes are one loop. At the row head
   each turns down through an elbow into the floor, to the mains under the
   main path, and at the far end two more elbows and a pipe across join the
@@ -113,12 +121,11 @@ Scene document format 11.
   model in Kit's viewport, translucent, and follows the ones moved or resized
   while it runs. Kit draws only a PhysX scene's colliders.
 - **greenhouse-lab**: leaves. A compound tomato leaf at every node of a stem
-  from the head down, `leaves_kept` of them: a terminal leaflet, three or four
-  pairs of laterals and small leaflets between them, each leaflet outlined
-  from its veins. Leaves are small and upright at the head and droop further
-  down. The stem below them is stripped, with a stub at each node, so the
-  two trusses nearest their picking always hang on bare stem. Leaves are
-  visual only, with no collider. New: `StemCfg.leaves_kept` and `LeafCfg`.
+  from the head down to where it was stripped: a terminal leaflet, three or
+  four pairs of laterals and small leaflets between them, each leaflet
+  outlined from its veins. Leaves are small and upright at the head and
+  droop further down. The stem below them is stripped, with a stub at each
+  node. Leaves are visual only, with no collider. New: `LeafCfg`.
 - **greenhouse-lab**: `LeafCfg.detail` sets how finely a leaf is meshed, as
   a multiplier: a full-grown leaf is about 1500 triangles at the default 1,
   500 at 0.1 and 4500 at 4. Coarser drops the leaflets' finest teeth first.

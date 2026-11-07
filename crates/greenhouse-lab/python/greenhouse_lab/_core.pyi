@@ -162,8 +162,8 @@ class StemParams:
     the wire is too low for lies along the gutter. In full production the stem
     between `harvest_height` and the head carries `trusses` trusses with three leaves
     to each, so how much a stem grows in a week follows from the wire height rather
-    than being set. Only the top `leaves_kept` leaves are left on; the stem below
-    them is stripped bare.
+    than being set. The crop is deleafed about weekly, so the stem below its leaves
+    is bare.
     """
 
     harvest_height: float
@@ -171,7 +171,7 @@ class StemParams:
     full production, in meters: where a harvesting arm reaches to. A stem's lowest
     hangs up to a week's growth above it, the higher the sooner after its last
     picking, and a stem that grows faster than the rest hangs it up to 5% of its live
-    height lower. The stem below it has been picked and stripped bare.
+    height lower. The stem below it has been picked.
     """
     trusses: int
     """Trusses on a stem in full production, from the lowest still on it up to the head.
@@ -187,10 +187,20 @@ class StemParams:
     its trusses stray from its neighbours' heights only as far as it grows up to 5%
     faster or slower.
     """
-    leaves_kept: int
-    """Leaves on a stem, counted down from the head. Growers strip the ones below, so
-    the stem under them is bare, and the two trusses nearest their picking always
-    hang on bare stem however many are kept.
+    deleafed_to_truss: int
+    """The truss a deleafing pass strips a stem up to, counted up from the lowest still
+    on it: every leaf below it goes. 1 strips the stem below the truss being picked,
+    2 up to the next truss, a week's growth higher, and 3 leaves the two lowest
+    hanging on bare stem. Stripped up to its third, a stem keeps 18–20 leaves at
+    the defaults, the small ones at its head among them, and three fewer for each
+    truss higher; Dutch farms were measured carrying 19–24 in summer, counting
+    every leaf over 5 cm long.
+    """
+    days_since_deleafing: float
+    """Days since the crop was last deleafed; growers deleaf it weekly. Each stem has
+    grown three leaves a week since, so it carries that many more than the pass left
+    it: its lowest, which the next pass strips. A stem planted since has not been
+    deleafed.
     """
     extra_stems: float
     """Share of plants grown on with a third stem, which growers keep to raise the stem
@@ -226,7 +236,8 @@ class StemParams:
         harvest_height: float = 1.2,
         trusses: int = 9,
         development_spread: float = 0.2,
-        leaves_kept: int = 16,
+        deleafed_to_truss: int = 3,
+        days_since_deleafing: float = 0.0,
         extra_stems: float = 0.0,
         turned_to_path: float = 0.8,
         head_diameter: float = 0.01,

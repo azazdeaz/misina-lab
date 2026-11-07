@@ -27,7 +27,7 @@
 //! the head: small and upright there, its leaflets cut narrow and still
 //! folded shut from the bud, full grown and opened out a couple of trusses
 //! down, and drooping more the older it is. The leaves below have been
-//! stripped, so the trusses ripening there hang on bare stem.
+//! stripped.
 //!
 //! Rachis and leaflets are one mesh, quantized like any organ to a budget of
 //! `variations`; which leaflets a leaf carries and how each one is cut are
