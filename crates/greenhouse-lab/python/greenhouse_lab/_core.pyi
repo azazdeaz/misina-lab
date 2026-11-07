@@ -440,7 +440,8 @@ class FruitParams:
     variations: int
     """How many distinct fruit and flower meshes the scene may hold, by size, shape and
     stage. A budget, not a count: the fruit are clustered and this is how many
-    representatives the clustering may keep.
+    representatives the clustering may keep, though a crop in flower keeps one for
+    its flowers and one for its fruit at least.
     """
 
     def __init__(

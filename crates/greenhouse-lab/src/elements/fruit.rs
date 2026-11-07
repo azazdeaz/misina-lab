@@ -514,7 +514,9 @@ pub struct FruitParams {
     pub petal_reflex: f32,
     /// How many distinct fruit and flower meshes the scene may hold, by size,
     /// shape and stage. A budget, not a count: the fruit are clustered and
-    /// this is how many representatives the clustering may keep.
+    /// this is how many representatives the clustering may keep, though a
+    /// crop in flower keeps one for its flowers and one for its fruit at
+    /// least.
     #[reflect(@Slider { min: 1.0, max: 64.0, step: 1.0 }, @Label("Fruit variations"))]
     pub variations: u32,
 }
@@ -1021,9 +1023,12 @@ fn build(
     hung.sort_by_key(|(order, ..)| *order);
 
     let configs: Vec<FruitConfig> = hung.iter().map(|(_, _, config)| *config).collect();
+    // A crop holding both flowers and fruit keeps a mesh for each: they are
+    // further apart than any two of a kind, so the second pick is the other.
+    let kinds = [true, false].map(|flower| configs.iter().any(|c| c.in_flower() == flower));
     let book = farthest_first(
         &configs,
-        params.variations.max(1) as usize,
+        (params.variations as usize).max(kinds.iter().filter(|any| **any).count()),
         0.0,
         &FruitMetric,
     );
@@ -1273,6 +1278,37 @@ mod tests {
                 assert!((placed.translation.z - middle).abs() < 1e-6, "{placed:?}");
             }
         }
+    }
+
+    /// A flower never draws a fruit's mesh, nor a fruit a flower's, even on a
+    /// budget of one.
+    #[test]
+    fn flowers_and_fruit_never_share_a_mesh() {
+        use misina_lab::scene::UsdReference;
+        use misina_lab::testing::named_children;
+
+        let mut params = small();
+        params.fruit.variations = 1;
+        let mut app = grown(params);
+        let world = app.world_mut();
+        let fruit: Vec<(Entity, bool)> = world
+            .query::<(Entity, &FruitConfig)>()
+            .iter(world)
+            .map(|(entity, config)| (entity, config.in_flower()))
+            .collect();
+        let mut drawn: [std::collections::BTreeSet<String>; 2] = Default::default();
+        for (entity, flower) in fruit {
+            let (_, skin) = named_children(world, entity)
+                .into_iter()
+                .find(|(name, _)| name == SKIN_PRIM)
+                .unwrap();
+            let part = world.entity(skin).get::<UsdReference>().unwrap();
+            drawn[flower as usize].insert(part.0.clone());
+        }
+        assert!(
+            drawn.iter().all(|parts| parts.len() == 1) && drawn[0] != drawn[1],
+            "{drawn:?}"
+        );
     }
 
     /// At one ripe truss a stem, the lowest truss has coloured on most stems,
