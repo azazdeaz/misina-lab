@@ -62,8 +62,8 @@ class LayoutParams:
     """
     plant_spacing: float
     """Distance between plants along a gutter, in meters, each in a propagation block on
-    a slab. A slab carries the whole number of plants closest to this, so the real
-    spacing comes out close to it rather than equal to it.
+    a slab. A slab is as long as the whole number of plants that brings it nearest
+    1.2 m, so the plants stand this far apart the whole row along.
     """
 
     def __init__(
