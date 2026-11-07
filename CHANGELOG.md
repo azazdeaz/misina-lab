@@ -24,6 +24,13 @@ Scene document format 11.
 
 ### Added
 
+- **greenhouse-lab**: Leaves change colour with age. A leaf at the head is
+  a lighter, yellower green than a grown one, and from fourteen nodes below
+  the head a leaf may fade toward a senescent leaf's pale yellow-green, each
+  by a draw of its own. New: `LeafCfg.yellowing`, how far the oldest leaves
+  fade, 1 by default and 0 for every leaf green. `LeafCfg.variations` is 40
+  by default, up from 32, which keeps the leaves' shapes about as close to
+  what each leaf drew as they were.
 - **greenhouse-lab**: Stems are deleafed as growers do it, up to a truss.
   `StemParams.deleafed_to_truss` is the truss a pass strips a stem up to,
   counted up from the lowest still on it: 3 by default, which leaves the
