@@ -469,7 +469,9 @@ class FruitParams:
     """How many distinct fruit and flower meshes the scene may hold, by size, shape and
     stage. A budget, not a count: the fruit are clustered and this is how many
     representatives the clustering may keep, though a crop in flower keeps one for
-    its flowers and one for its fruit at least.
+    its flowers and one for its fruit at least. A fruit is drawn at its
+    representative's size, so on a small budget a truss's fruit, packed to touch at
+    their own sizes, are drawn into each other.
     """
 
     def __init__(

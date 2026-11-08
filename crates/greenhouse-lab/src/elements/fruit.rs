@@ -560,7 +560,9 @@ pub struct FruitParams {
     /// shape and stage. A budget, not a count: the fruit are clustered and
     /// this is how many representatives the clustering may keep, though a
     /// crop in flower keeps one for its flowers and one for its fruit at
-    /// least.
+    /// least. A fruit is drawn at its representative's size, so on a small
+    /// budget a truss's fruit, packed to touch at their own sizes, are drawn
+    /// into each other.
     #[reflect(@Slider { min: 1.0, max: 64.0, step: 1.0 }, @Label("Fruit variations"))]
     pub variations: u32,
 }
