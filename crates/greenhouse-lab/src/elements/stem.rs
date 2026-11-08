@@ -53,13 +53,13 @@
 //! A week's growth is set by the crop in full production: the live height
 //! from `harvest_height` to the head shared out between `trusses`, 0.34 m at
 //! the defaults, inside the 25–35 cm a week growers measure. A plant goes in
-//! [`TRANSPLANT`] tall with its first truss flowering at its head. A truss
-//! flowers at the head every week, sets its fruit within the week, and is
-//! picked `trusses` weeks after it flowered, by then that many weeks' growth
-//! down the stem. So a young crop carries green fruit only, and its first
-//! trusses colour about the week its heads reach the wire, the ninth at the
-//! defaults. How far a truss's fruit have grown and how ripe they are follow
-//! from its age.
+//! [`TRANSPLANT`] tall with its first truss at its head. A truss shows at the
+//! head every week, in bud, flowers and sets its fruit over the next week or
+//! so, and is picked `trusses` weeks after it showed, by then that many
+//! weeks' growth down the stem. So a young crop carries flowers and green
+//! fruit only, and its first trusses colour about the week its heads reach
+//! the wire, the ninth at the defaults. Whether a truss is in flower, how far
+//! its fruit have grown and how ripe they are follow from its age.
 //!
 //! No two stems keep in step. Each truss comes a little sooner or later than
 //! the last, so the stems drift apart as the crop ages: each runs ahead of
@@ -144,8 +144,8 @@ const RIDGE_STREAM: u64 = 0x8EBC_6AF0_9C88_C6E3;
 /// internode.
 const NODES_PER_TRUSS: u32 = 3;
 
-/// A plant's stem as it goes in, in meters, its first truss flowering at its
-/// head (est.).
+/// A plant's stem as it goes in, in meters, its first truss at its head
+/// (est.).
 const TRANSPLANT: f32 = 0.4;
 
 /// Weeks after planting an extra stem is taken on from a side shoot, and
@@ -272,10 +272,6 @@ const GROWTH_JITTER: f64 = 0.05;
 /// rather than beside one: its hook hung that far on, and slid with the rest.
 const EXTRA_RUN: f32 = 0.15;
 
-/// Weeks after it flowered, so trusses below the head, that a truss's fruit
-/// reach full size: the trusses nearest the head set their fruit last.
-const GROWING_TRUSSES: f32 = 5.0;
-
 /// How far a hook sits along the wire from where its stem would rise but for
 /// its take-off, and how far a stem bows off the straight line between its
 /// take-off and its head, in meters.
@@ -353,7 +349,7 @@ pub struct StemParams {
     #[reflect(@Slider { min: 0.8, max: 1.8, step: 0.05 })]
     pub harvest_height: f32,
     /// Trusses on a stem in full production, from the lowest still on it up
-    /// to the head. At a truss a week, also the weeks from a truss flowering
+    /// to the head. At a truss a week, also the weeks from a truss showing
     /// at the head to its picking.
     #[reflect(@Slider { min: 6.0, max: 12.0, step: 1.0 })]
     pub trusses: u32,
@@ -751,9 +747,9 @@ fn grow(
         side
     };
 
-    // A truss flowers at the head every week, the transplant's first, and
-    // `t` weeks on hangs `t` weeks' growth below it: hung from then on, its
-    // fruit set within the week, and picked `trusses` weeks on, so a stem in
+    // A truss shows at the head every week, the transplant's first, and `t`
+    // weeks on hangs `t` weeks' growth below it: hung from then on, in flower
+    // over the next week or so, and picked `trusses` weeks on, so a stem in
     // full production carries `trusses` of them whatever the day. The
     // oldest, the lowest, first, each with the yaw it faces while it hangs.
     let flowered: Vec<(f32, Option<f32>)> = (0..)
@@ -1061,7 +1057,7 @@ fn grow(
             let node = Node {
                 stem_radius: girth(d),
                 rank: live.trusses as f32 - t - ripening,
-                growth: (t / GROWING_TRUSSES).min(1.0),
+                age: *t,
                 flexible: rise(d).z < live.flexible_below,
             };
             yaw.map(|yaw| (rise(d), yaw, node))
@@ -1646,7 +1642,7 @@ mod tests {
             let hung = Hung {
                 rank: node.rank,
                 along: 0.0,
-                growth: node.growth,
+                age: node.age,
             };
             ripeness(FruitConfig::new(&FruitParams::default(), 0, 0.06, hung).stage)
         };

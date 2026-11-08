@@ -24,6 +24,35 @@ Scene document format 11.
 
 ### Added
 
+- **greenhouse-lab**: A truss's stalks grow with its flowers. Each pedicel,
+  and the internode of rachis leading to it, is a third of its full length
+  when its flower opens, shorter in bud, and grows to full length over the
+  two and a half weeks after, before its fruit is full size. So a truss in
+  flower is short, its buds crowded at its tip, and the peduncle and rachis
+  thicken as it grows. A ripe truss is as before. New:
+  `TrussCfg.stalks_in_flower`, a stalk's length when its flower opens as a
+  share of its full length, 0.35 by default.
+- **greenhouse-lab**: A truss sags under its fruit's weight. It grows
+  standing out from the stem, its rachis level, and its fruit bend its
+  peduncle and rachis down as they swell: a truss in flower stands out, and
+  one of grown fruit hangs from its bend much as every truss did before.
+  New: `TrussCfg.stiffness`, the Young's modulus they bend against, 130 MPa
+  by default. `TrussCfg.variations` is 24 by default, up from 16, as how far
+  a truss sags is one more way two trusses differ.
+- **misina-lab**: `geometry::bending::sag` finds where a rod held by its
+  first segment settles under the masses on its points, against its
+  flexural rigidity, and how each point turned, so whatever rides the rod
+  turns with it; `bending::rigidity` is a round section's. An organ is drawn
+  in the shape it grew into carrying nothing, then sagged under its load.
+- **greenhouse-lab**: Trusses flower. A truss shows at the head as a
+  cluster of buds, opens its flowers from its base to its tip from about
+  15 cm below the head, and sets them over the week after. A flower is a
+  calyx, five or six yellow petals swept back and the anther cone, on the
+  prim its fruit grows from, and a young fruit's calyx grows on from the
+  flower's. `greenhouse_lab:stage` is `bud` or `flower` until a fruit sets.
+  New: `FruitCfg.petal_length` and `FruitCfg.petal_reflex`.
+  `FruitCfg.variations` is 32 by default, up from 24, so the flowers' meshes
+  leave the fruit as many of their own as they had.
 - **greenhouse-lab**: Leaves change colour with age. A leaf at the head is
   a lighter, yellower green than a grown one, and from fourteen nodes below
   the head a leaf may fade toward a senescent leaf's pale yellow-green, each

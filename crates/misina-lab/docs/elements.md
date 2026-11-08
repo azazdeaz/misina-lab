@@ -58,6 +58,9 @@ stalks leaving it, its rings evenly spaced or placed where its shape needs
 them to stay within a tolerance; `outline` fills a closed ring,
 `shapes` builds outlines in code and folds them, `scatter` spreads
 points over a band of ground, and `mesh` holds the type they all produce.
+`bending` finds where a rod settles under the weight it carries, so a stalk
+is laid out as it grew carrying nothing and then sagged under its load: one
+shape for every stage of its growth, its sag read off what it carries now.
 `palette` turns a hex colour linear, jitters it per mesh and pairs it with a
 `Response`, how a surface answers light. `terrain` is the one element this
 crate ships: the ground, staged first by every generator, and the `Ground`

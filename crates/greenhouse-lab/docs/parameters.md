@@ -87,7 +87,7 @@ Each stem grows a truss a week from planting, up its twine to a hook on the wire
 | Parameter | Type | Default | Slider range | Description |
 |---|---|---|---|---|
 | `harvest_height` | float | `1.2` | 0.8 to 1.8 | Height above the floor of the lowest truss still on a stem once the crop is in full production, in meters: where a harvesting arm reaches to. A stem's lowest hangs up to a week's growth above it, the higher the sooner after its last picking, and a stem that grows faster than the rest hangs it up to 5% of its live height lower. The stem below it has been picked. |
-| `trusses` | int | `9` | 6 to 12 | Trusses on a stem in full production, from the lowest still on it up to the head. At a truss a week, also the weeks from a truss flowering at the head to its picking. |
+| `trusses` | int | `9` | 6 to 12 | Trusses on a stem in full production, from the lowest still on it up to the head. At a truss a week, also the weeks from a truss showing at the head to its picking. |
 | `development_spread` | float | `0.2` | 0 to 0.5 | How far stems drift apart in their development, in weeks: each truss comes a little sooner or later than the last, so a stem `week` weeks old runs up to this times √`week` ahead of the crop or behind it, its trusses hanging that much of a week's growth lower or higher and ripening that much sooner or later. At 0.2, up to 0.8 of a week at week 16; at 0 every stem keeps in step with the crop, and its trusses stray from its neighbours' heights only as far as it grows up to 5% faster or slower. |
 | `deleafed_to_truss` | int | `3` | 1 to 8 | The truss a deleafing pass strips a stem up to, counted up from the lowest still on it: every leaf below it goes. 1 strips the stem below the truss being picked, 2 up to the next truss, a week's growth higher, and 3 leaves the two lowest hanging on bare stem. Stripped up to its third, a stem keeps 18–20 leaves at the defaults, the small ones at its head among them, and three fewer for each truss higher; Dutch farms were measured carrying 19–24 in summer, counting every leaf over 5 cm long. |
 | `days_since_deleafing` | float | `0.0` | 0 to 14 | Days since the crop was last deleafed; growers deleaf it weekly. Each stem has grown three leaves a week since, so it carries that many more than the pass left it: its lowest, which the next pass strips. A stem planted since has not been deleafed. |
@@ -133,20 +133,22 @@ The peduncle numbers default to the means measured on medium trusses in a high-w
 | `peduncle_length` | float | `0.079` | 0.03 to 0.14 | Length of the peduncle from the stem to the first fruit, in meters. |
 | `peduncle_diameter` | float | `0.007` | 0.004 to 0.012 | Diameter of the peduncle, in meters. |
 | `peduncle_angle` | float | `70.0` | 5 to 139 | Angle between the stem and the peduncle where it leaves, in degrees: 90 leaves level, less leaves rising. |
+| `stiffness` | float | `130.0` | 20 to 1000 | How stiff the peduncle and rachis are, as a Young's modulus in MPa. A truss grows standing out from the stem, and its fruit's weight bends it down against this: one in flower barely bends, and one sags further as its fruit swell. Below green wood's, as a stalk under a load for weeks gives way to it more than it would at once. |
 | `pedicel_angle` | float | `45.0` | 0 to 50 | How far under the rachis its pedicels leave it, in degrees below its sides: 0 leaves them level out to the sides, and more hangs the fruit further under it. At 45 the two ranks, down alternate flanks, meet at a right angle, as they do on a tomato truss; past 50, neighbouring fruit hang into each other. |
 | `jointed` | bool | `True` |  | Whether a pedicel has a knuckle, the joint a fruit breaks off at, as most truss varieties do. |
+| `stalks_in_flower` | float | `0.35` | 0.1 to 1 | How long a pedicel, and the internode of rachis leading to it, are when its flower opens, as a share of their length under the grown fruit. A large-fruited truss's stalks grow to about three times their length in flower, and a small-fruited one's barely grow on. |
 | `missing_fruit` | float | `0.05` | 0 to 0.3 | Chance that a fruit is missing from its pedicel. |
-| `variations` | int | `16` | 1 to 64 | How many distinct truss meshes the scene may hold. A budget, not a count: the trusses are clustered and this is how many representatives the clustering may keep. |
+| `variations` | int | `24` | 1 to 64 | How many distinct truss meshes the scene may hold. A budget, not a count: the trusses are clustered and this is how many representatives the clustering may keep. |
 
 ## Fruit
 
 `FruitParams` in Python, `FruitCfg` in Isaac Lab.
 
-The fruit: their shape, how ripe the crop is, and what colour ripe is.
+The fruit and the flowers they set from: their shape, how ripe the crop is, and what colour ripe is.
 
-Every fruit has a stage: set, expanding and mature green while it grows, then breaker, turning, pink, light red and red as it colours from its blossom end up. A truss sets its fruit near the head, and they reach full size five trusses down. A stem colours from its lowest truss up and a truss from its base to its tip, so in full production the lowest `ripe_trusses` trusses on a stem are colouring and the ones above them still green; a young crop's trusses are all green until the first are old enough. A truss is due once its tip fruit is turning. Every stem runs a little ahead of or behind the rest.
+Every fruit has a stage: bud and flower before it sets, set, expanding and mature green while it grows, then breaker, turning, pink, light red and red as it colours from its blossom end up. A truss shows at the head in bud, opens its flowers from its base to its tip from about 15 cm below the head, sets them over the week after, and they reach full size about five trusses further down. A stem colours from its lowest truss up and a truss from its base to its tip, so in full production the lowest `ripe_trusses` trusses on a stem are colouring and the ones above them still green; a young crop's trusses are all green until the first are old enough. A truss is due once its tip fruit is turning. Every stem runs a little ahead of or behind the rest.
 
-Every fruit draws its own lobe count, its five or six sepals and how each curls, and a slight lean, within the ranges the research notes give.
+Every fruit draws its own lobe count, its five or six sepals and how each curls, and a slight lean, within the ranges the research notes give; its flower has a petal between each two sepals.
 
 | Parameter | Type | Default | Slider range | Description |
 |---|---|---|---|---|
@@ -155,4 +157,6 @@ Every fruit draws its own lobe count, its five or six sepals and how each curls,
 | `color` | str | `"red"` | `red`, `orange`, `yellow`, `brown` | The colour a ripe fruit turns: `red`, `orange`, `yellow` or `brown`. |
 | `aspect` | float | `0.9` | 0.5 to 1.8 | Height of a fruit over its width: under 1 is oblate, as round truss tomatoes and beefsteaks are, and over 1 elongated, as plum tomatoes are. Each fruit draws a little either side. |
 | `ribbing` | float | `0.03` | 0 to 0.3 | Depth of the grooves between a fruit's lobes, as a fraction of its radius: 0 is smooth, and a beefsteak's are about 0.15. |
-| `variations` | int | `24` | 1 to 64 | How many distinct fruit meshes the scene may hold, by size, shape and stage. A budget, not a count: the fruit are clustered and this is how many representatives the clustering may keep. |
+| `petal_length` | float | `0.011` | 0.004 to 0.02 | Length of a flower's petals, in meters: an open tomato flower is under 25 mm across, and a cherry tomato's smaller. |
+| `petal_reflex` | float | `125.0` | 20 to 170 | How far an open flower's petals sweep back, in degrees off pointing straight ahead: 90 opens it flat, and a tomato's sweep back past that toward its pedicel. |
+| `variations` | int | `32` | 1 to 64 | How many distinct fruit and flower meshes the scene may hold, by size, shape and stage. A budget, not a count: the fruit are clustered and this is how many representatives the clustering may keep, though a crop in flower keeps one for its flowers and one for its fruit at least. |
