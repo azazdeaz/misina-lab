@@ -334,8 +334,10 @@ class TrussParams:
     hung along it.
 
     The peduncle numbers default to the means measured on medium trusses in a
-    high-wire house, and every truss draws its own about them. A medium truss tomato
-    is about 6 fruit of 60 mm; a cherry truss about 15 of 25 mm, branched.
+    high-wire house, and every truss draws its own about them; the rachis's internode
+    to what those trusses' measured lengths leave for it (est.), and the pedicel to a
+    genebank's measurements. A medium truss tomato is about 6 fruit of 60 mm; a
+    cherry truss about 15 of 25 mm, branched.
     """
 
     fruits: int
@@ -363,11 +365,20 @@ class TrussParams:
     wood's, as a stalk under a load for weeks gives way to it more than it would at
     once.
     """
+    rachis_internode: float
+    """Length of the rachis between two pedicels under grown fruit, in meters: short, a
+    truss's fruit crowd into a bunch, and long, they hang apart down the rachis.
+    """
+    pedicel_length: float
+    """Length of a pedicel under a grown fruit, from the rachis to the fruit's calyx, in
+    meters. A small-fruited truss's are about as long as a large-fruited one's, so
+    its fruit hang further out for their size.
+    """
     pedicel_angle: float
     """How far under the rachis its pedicels leave it, in degrees below its sides: 0
     leaves them level out to the sides, and more hangs the fruit further under it. At
     45 the two ranks, down alternate flanks, meet at a right angle, as they do on a
-    tomato truss; past 50, neighbouring fruit hang into each other.
+    tomato truss.
     """
     jointed: bool
     """Whether a pedicel has a knuckle, the joint a fruit breaks off at, as most truss
@@ -375,9 +386,9 @@ class TrussParams:
     """
     stalks_in_flower: float
     """How long a pedicel, and the internode of rachis leading to it, are when its
-    flower opens, as a share of their length under the grown fruit. A large-fruited
-    truss's stalks grow to about three times their length in flower, and a
-    small-fruited one's barely grow on.
+    flower opens, as a share of their length under the grown fruit: about a third on
+    a large-fruited truss, whose stalks grow to about three times their length in
+    flower, and nearer 1 on a small-fruited one, whose barely grow on.
     """
     missing_fruit: float
     """Chance that a fruit is missing from its pedicel."""
@@ -396,7 +407,9 @@ class TrussParams:
         peduncle_length: float = 0.079,
         peduncle_diameter: float = 0.007,
         peduncle_angle: float = 70.0,
-        stiffness: float = 130.0,
+        stiffness: float = 70.0,
+        rachis_internode: float = 0.014,
+        pedicel_length: float = 0.031,
         pedicel_angle: float = 45.0,
         jointed: bool = True,
         stalks_in_flower: float = 0.35,
