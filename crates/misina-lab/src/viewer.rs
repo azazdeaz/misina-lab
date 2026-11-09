@@ -31,9 +31,9 @@ use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 
-use crate::Generator;
 use crate::scene::z_up_to_y_up;
 use crate::ui::{BlocksCamera, PANEL_WIDTH};
+use crate::{Generator, Params};
 
 /// Where the save key writes the scene document.
 #[cfg(not(target_arch = "wasm32"))]
@@ -138,6 +138,14 @@ pub fn app<G: Generator>() -> App {
     }
 
     app
+}
+
+/// Starts the viewer from `params` rather than the defaults: the scene and
+/// the panel's copy of it both. A generator's `main` calls it between [`app`]
+/// and running the app.
+pub fn start_from<G: Generator>(app: &mut App, params: G::Params) {
+    params.apply(app.world_mut());
+    app.insert_resource(crate::ui::Staged(params));
 }
 
 /// Where the camera starts, in scene coordinates (Z-up, meters): at `eye`,

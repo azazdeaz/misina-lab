@@ -242,6 +242,12 @@ Scene document format 11.
 
 ### Changed
 
+- **vinery-lab**, **greenhouse-lab**: The web playgrounds start on a scene
+  just big enough to hold everything: the vineyard on a 24 by 18 m parcel
+  of three rows, the greenhouse on one 5 m row. The panel grows
+  either back to the defaults the native viewer starts on. New in
+  **misina-lab**: `viewer::start_from`, which starts the viewer from given
+  params rather than the defaults.
 - **misina-lab**: A storyboard that saves a still or records a video opens no
   window and needs no display: the viewer draws the scene and the panel into
   an image of the storyboard's size, so `{PACKAGE}_SHOT` and

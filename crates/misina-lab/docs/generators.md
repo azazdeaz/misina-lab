@@ -84,8 +84,11 @@ The panel commits an edit before `Build`, and the perf marks bracket it.
 The generator's `main` is `viewer::app::<G>()` plus whatever viewer-only
 plugins it wants, run. The camera starts where `viewer::Framing` says, framed
 for a scene about 80 by 50 m unless `main` inserts one of its own. The
-generator's `lib.rs` holds the `Generator` impl and, under its
-`python` feature, the `#[pymodule] fn _core` that calls the `module` function
+scene starts from the default params unless `main` passes others to
+`viewer::start_from`, which sets the panel's copy along with the scene: the
+panel commits its copy on the first frame, so params set any other way
+would be overwritten by the defaults. The generator's `lib.rs` holds the
+`Generator` impl and, under its `python` feature, the `#[pymodule] fn _core` that calls the `module` function
 the macro wrote.
 
 ## The Python module
