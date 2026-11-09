@@ -52,12 +52,15 @@
 //! Peduncle, rachis and pedicels are one mesh, quantized like any organ, to a
 //! budget of `variations`, a truss's sag and the size of its fruit among what
 //! tells two apart. The representative a truss drew decides where its `Cut`
-//! and `Bend` and its fruit go, how far it sags, and how its rachis kinks and
-//! its pedicels lie; which fruit are missing, how big each one is and how it
-//! is turned about its axis are drawn per truss. Each of a representative's
-//! fruit is packed as one ball holding every ball it fills on any truss that
-//! drew it, so none of those trusses' fruit lie in each other, and a truss
-//! of smaller fruit hangs them a little apart.
+//! and `Bend` and its fruit's calyxes go, how far it sags, and how its
+//! rachis kinks and its pedicels lie; which fruit are missing, how big each
+//! one is and how it is turned about its axis are drawn per truss. Each of a
+//! representative's fruit is packed as one ball holding every ball it fills
+//! on any truss that drew it, so none of those trusses' fruit lie in each
+//! other. That leaves a truss of smaller fruit hanging them apart, so each
+//! truss swings its own about their calyxes ([`swing`]), back toward the way
+//! each would hang alone, until they touch, none turned more than [`TILT`]
+//! off its pedicel.
 //!
 //! ```text
 //! Truss_04            Xform, a TrussConfig
@@ -102,7 +105,7 @@ use std::iter::once;
 use bevy::prelude::*;
 use misina_lab::geometry::bending::{rigidity, sag};
 use misina_lab::geometry::mesh::{MeshData, merge_meshes};
-use misina_lab::geometry::packing::{Bob, pack};
+use misina_lab::geometry::packing::{Bob, pack, swing};
 use misina_lab::geometry::par_map;
 use misina_lab::geometry::strand::{Bark, Bulge, Collar, Strand, sides_within, strand_mesh};
 use misina_lab::palette::{COLOR_STREAM, Response, shade, srgb};
@@ -187,6 +190,10 @@ const LEAN: f32 = 0.35;
 const REACH_JITTER: f64 = 0.15;
 const LEAN_JITTER: f64 = 0.3;
 const SWING: f64 = 0.1;
+
+/// How far a truss's own fruit may turn off its pedicel's last run, in
+/// radians, swung toward the others on its representative's pedicels.
+const TILT: f32 = 0.35;
 
 /// The share of a peduncle that runs straight out of the stem before it
 /// bends.
@@ -956,9 +963,12 @@ struct Built<M> {
     /// The peduncle's direction leaving the stem, which `Cut` faces.
     leaves: Vec3,
     bend: Transform,
-    /// Where every fruit hangs, from the truss's base to its tip: its calyx on
-    /// its pedicel's end, +Z back up the pedicel.
-    fruit: Vec<Transform>,
+    /// Every fruit's pedicel as it is packed, from the truss's base to its
+    /// tip, at the ball holding every truss's fruit there; the way each fruit
+    /// would hang alone; and the stems they hang among.
+    fruit: Vec<Bob>,
+    alone: Vec<Vec3>,
+    stems: Vec<(Vec3, Vec3, f32)>,
 }
 
 /// The direction `angle` off +Z toward +X.
@@ -1163,7 +1173,9 @@ fn build_truss(
     let (straight, fork) = (axis.straight, axis.fork);
     let peduncle = axis.points[..axis.lead].to_vec();
     let mut packed = lay(config, &axis, params, balls, &grown, &mut rng);
-    pack(&mut packed, &stems(&axis, &config.node));
+    let alone = packed.iter().map(hanging).collect();
+    let stems = stems(&axis, &config.node);
+    pack(&mut packed, &stems);
 
     let arms = arms(config);
     let count = config.fruits as usize;
@@ -1201,7 +1213,6 @@ fn build_truss(
     // the axis they make, where it leaves it.
     let mut main = None;
     let mut riders = Vec::new();
-    let mut hangs = vec![Transform::IDENTITY; count];
     let mut holds = vec![fork; count];
     for (arm, runs) in axis.rachises.clone().into_iter().enumerate() {
         // A rachis ends in its last fruit, so each one grown has one.
@@ -1247,8 +1258,7 @@ fn build_truss(
         for (i, j) in fruits.into_iter().enumerate() {
             let (at, around) = (along[nodes + i], radii[nodes + i]);
             let thin = packed[j].stalk;
-            // Its calyx, and the point before it on the way in.
-            let (calyx, before) = if i < last {
+            if i < last {
                 let stalk = &stalks[i];
                 bulges.push(Bulge {
                     at: at as f64,
@@ -1272,18 +1282,12 @@ fn build_truss(
                     holds[j],
                     strand(stalk, &[thin; 4], tolerance, swollen, Vec::new()),
                 ));
-                (stalk[3], stalk[2])
             } else {
                 if arm == 0 {
                     holds[j] = axis.length();
                 }
                 bulges.extend(swellings(thin, at, along[along.len() - 1]));
-                (tail[2], tail[1])
-            };
-            hangs[j] = Transform::from_translation(calyx).with_rotation(Quat::from_rotation_arc(
-                Vec3::Z,
-                (before - calyx).normalize(),
-            ));
+            }
         }
         let stem = strand(&points, &radii, tolerance, bulges, collars);
         if arm == 0 {
@@ -1318,8 +1322,22 @@ fn build_truss(
         leaves: heading(axis.angle),
         bend: Transform::from_translation(axis.at(middle))
             .with_rotation(facing(toward.normalize())),
-        fruit: hangs,
+        fruit: packed,
+        alone,
+        stems,
     })
+}
+
+/// The way the fruit on `bob`'s stalk hangs from its calyx: on along the
+/// stalk's last run.
+fn hanging(bob: &Bob) -> Vec3 {
+    (bob.end - bob.joint).normalize_or(Vec3::NEG_Z)
+}
+
+/// Where a fruit hangs off `bob`'s stalk the way `way` heads: its calyx on
+/// the stalk's end, +Z back up from there.
+fn hang(bob: &Bob, way: Vec3) -> Transform {
+    Transform::from_translation(bob.end).with_rotation(Quat::from_rotation_arc(Vec3::Z, -way))
 }
 
 /// The least rotation turning +X onto `direction`: about +Y alone for one in
@@ -1503,23 +1521,55 @@ pub(crate) fn build(
                 leaves: shape.leaves,
                 bend: shape.bend,
                 fruit: shape.fruit,
+                alone: shape.alone,
+                stems: shape.stems,
             },
             surface,
         ));
     }
 
-    let mut fruit_order = 0u64;
-    for (((_, entity, config), drew), fruit) in hung.iter().zip(&book.assignment).zip(drawn) {
-        let (built, surface) = &built[*drew as usize];
-        let fruit: Vec<(usize, Transform, FruitConfig)> = fruit
-            .into_iter()
-            .map(|(j, spin, fruit)| {
-                let hang = built.fruit[j];
-                let placement = hang.with_rotation(hang.rotation * Quat::from_rotation_z(spin));
-                (j, placement, fruit)
+    // Each truss's own fruit on its representative's pedicels, swung from the
+    // way those were packed toward the way each would hang alone, until they
+    // touch; a pedicel bare on this truss is in their way all the same.
+    let placed = par_map(&drawn, |t, fruit| {
+        let built = &built[book.assignment[t] as usize].0;
+        let mut bare = vec![true; built.fruit.len()];
+        let bobs: Vec<Bob> = (fruit.iter())
+            .map(|(j, _, fruit)| {
+                bare[*j] = false;
+                let (radius, inset, drawn) = fruit.ball();
+                Bob {
+                    radius,
+                    inset,
+                    drawn,
+                    ..built.fruit[*j]
+                }
             })
             .collect();
+        let alone: Vec<Vec3> = fruit.iter().map(|(j, ..)| built.alone[*j]).collect();
+        let stems: Vec<(Vec3, Vec3, f32)> = (built.fruit.iter().zip(bare))
+            .filter(|(_, bare)| *bare)
+            .flat_map(|(bob, _)| {
+                [
+                    (bob.node, bob.joint, bob.stalk),
+                    (bob.joint, bob.end, bob.stalk),
+                ]
+            })
+            .chain(built.stems.iter().copied())
+            .collect();
+        let ways = swing(&bobs, &alone, &stems, TILT);
+        (fruit.iter().zip(bobs.iter().zip(ways)))
+            .map(|((j, spin, fruit), (bob, way))| {
+                let hang = hang(bob, way);
+                let placement = hang.with_rotation(hang.rotation * Quat::from_rotation_z(*spin));
+                (*j, placement, *fruit)
+            })
+            .collect::<Vec<_>>()
+    });
 
+    let mut fruit_order = 0u64;
+    for (((_, entity, config), drew), fruit) in hung.iter().zip(&book.assignment).zip(placed) {
+        let (built, surface) = &built[*drew as usize];
         let mut truss = commands.entity(*entity);
         // The layer owns everything below a truss, and a rebuild may hang a
         // different number of fruit than the last one did.
@@ -2046,7 +2096,13 @@ mod tests {
                     let at = |down: f32| hang.transform_point(Vec3::NEG_Z * down);
                     (at(inset - drawn), at(inset + drawn))
                 };
-                for (j, (hang, &ball)) in built.fruit.iter().zip(&balls).enumerate() {
+                // Packed at its own fruit, so hung as packed.
+                let hangs: Vec<Transform> = built
+                    .fruit
+                    .iter()
+                    .map(|bob| hang(bob, hanging(bob)))
+                    .collect();
+                for (j, (hang, &ball)) in hangs.iter().zip(&balls).enumerate() {
                     let radius = ball.0;
                     let runs = &rachises[j % arms];
                     let (i, run) = (j / arms, &runs[j / arms]);
@@ -2064,7 +2120,7 @@ mod tests {
                     let top = hang.rotation * Vec3::Z;
                     assert!(top.z > -0.25, "{order}: fruit {j} faces {top}");
                     let along = spine(hang, ball);
-                    for (k, (other, &by)) in built.fruit.iter().zip(&balls).enumerate().take(j) {
+                    for (k, (other, &by)) in hangs.iter().zip(&balls).enumerate().take(j) {
                         let (near, other_near) = nearest(along, spine(other, by));
                         let apart = near.distance(other_near);
                         let into = (radius + by.0 - apart) / (2.0 * radius.min(by.0));
@@ -2087,7 +2143,7 @@ mod tests {
                     let last = (config.fruits as usize - 1) / arms * arms;
                     let past = rod.stations[rod.stations.len() - 1] - rod.holds[last];
                     let end = Vec3::from(rod.points[rod.points.len() - 1]);
-                    let short = end.distance(built.fruit[last].translation);
+                    let short = end.distance(built.fruit[last].end);
                     assert!(
                         past.abs() < 1e-6 && short < 1e-6,
                         "{order}: the rod runs {past} m on, {short} m off its last fruit"
@@ -2102,9 +2158,11 @@ mod tests {
     /// representative's fruit is packed as one ball holding every ball it
     /// fills on any truss that drew it; flowers, more crowded than their
     /// pedicels can part, lie further into each other, and further still
-    /// among elongated fruit, which take more room.
+    /// among elongated fruit, which take more room. Yet most fruit grown most
+    /// of the way touch another, each truss's own swung together on those
+    /// pedicels.
     #[test]
-    fn no_trusss_own_fruit_lie_in_each_other() {
+    fn a_trusss_own_fruit_touch_but_lie_in_no_other() {
         for (aspect, flowers) in [(FruitParams::default().aspect, 0.3), (1.6, 0.6)] {
             let mut params = small();
             params.fruit.aspect = aspect;
@@ -2114,6 +2172,7 @@ mod tests {
                 .query_filtered::<Entity, With<TrussConfig>>()
                 .iter(world)
                 .collect();
+            let (mut grown, mut touching) = (0, 0);
             for truss in &trusses {
                 // The segment each of its fruit's balls is drawn out along,
                 // wherever under it it hangs.
@@ -2125,17 +2184,22 @@ mod tests {
                         let hang = in_scene(world, at);
                         let on = |down: f32| hang.transform_point(Vec3::NEG_Z * down);
                         let spine = (on(inset - drawn), on(inset + drawn));
-                        balls.push((spine, radius, fruit.in_flower()));
+                        let big = fruit.across() > 0.8 * fruit.diameter;
+                        balls.push((spine, radius, fruit.in_flower(), big));
                     }
                     below.extend(world.entity(at).get::<Children>().into_iter().flatten());
                 }
-                for (i, (a, ra, flower_a)) in balls.iter().enumerate() {
-                    for (b, rb, flower_b) in &balls[..i] {
+                let mut gaps = vec![f32::INFINITY; balls.len()];
+                for (i, (a, ra, flower_a, _)) in balls.iter().enumerate() {
+                    for (k, (b, rb, flower_b, _)) in balls[..i].iter().enumerate() {
                         let (on_a, on_b) = nearest(*a, *b);
-                        let into = (ra + rb - on_a.distance(on_b)) / (2.0 * ra.min(*rb));
+                        let gap = on_a.distance(on_b) - ra - rb;
+                        let into = -gap / (2.0 * ra.min(*rb));
                         let most = if *flower_a || *flower_b {
                             flowers
                         } else {
+                            gaps[i] = gaps[i].min(gap);
+                            gaps[k] = gaps[k].min(gap);
                             0.08
                         };
                         assert!(
@@ -2145,7 +2209,13 @@ mod tests {
                         );
                     }
                 }
+                for (gap, (.., big)) in gaps.iter().zip(&balls) {
+                    grown += *big as usize;
+                    touching += (*big && *gap < 0.001) as usize;
+                }
             }
+            let share = touching as f32 / grown as f32;
+            assert!(share > 0.8, "{aspect}: {touching} of {grown} touch another");
         }
     }
 

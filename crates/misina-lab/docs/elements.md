@@ -64,6 +64,9 @@ shape for every stage of its growth, its sag read off what it carries now.
 `packing` does the same for a cluster of fruit on stalks: each is laid out
 where it would hang alone, then the cluster is packed until no fruit lies in
 another, in a stem or on another's stalk, every stalk keeping its length.
+Stalks packed once and drawn under several clusters' fruit are packed for
+the biggest; `swing` turns each cluster's own fruit about the stalks' ends,
+back toward the way each would hang alone, until they touch.
 `palette` turns a hex colour linear, jitters it per mesh and pairs it with a
 `Response`, how a surface answers light. `terrain` is the one element this
 crate ships: the ground, staged first by every generator, and the `Ground`
