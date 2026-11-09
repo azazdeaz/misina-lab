@@ -102,8 +102,9 @@ last step's `wait` is the closing hold: the video ends when it runs out.
   [the vineyard's](../../../crates/vinery-lab/docs/parameters.md) and
   [the greenhouse's](../../../crates/greenhouse-lab/docs/parameters.md),
   lists every one with its slider's range. A storyboard is checked against
-  the params when it loads, and by `cargo test` (`the_readme_tour_is_valid`,
-  and the greenhouse's `the_shots_are_valid`).
+  the params when it loads, and by `cargo test --workspace`
+  (`the_readme_tour_is_valid`, and the greenhouse's `the_shots_are_valid`,
+  which a bare `cargo test` leaves out).
 - **An edit** is two steps, one right after the other: `show` the field — its
   section opens, the others fold, the panel scrolls to it and its tooltip comes
   up — then `set` it. Any step between them that neither shows nor sets the

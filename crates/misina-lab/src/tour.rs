@@ -14,7 +14,9 @@
 //! smooth on a software renderer as on a GPU. Without `{PACKAGE}_RECORD` the
 //! tour plays on the wall clock instead. `{PACKAGE}_SHOT` saves the frame
 //! once the last step is over, to an image whose extension names its format;
-//! a storyboard with no steps is a still of its opening shot.
+//! a storyboard with no steps is a still of its opening shot. The frame is
+//! taken as the last step's `wait` runs out, so a last step that edits the
+//! scene needs a `wait` that covers its rebuild.
 //!
 //! The tour changes what a person would — the panel's [`Staged`] params, the
 //! orbit camera, the panel's scroll — so the viewer answers as it does to a

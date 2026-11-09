@@ -249,9 +249,17 @@ fn save_scene_on_key(world: &mut World) -> Result<()> {
 /// half a panel — putting whatever the camera looks at in the middle of what
 /// is actually visible. Scale is untouched: only the ratios between
 /// `full_size`, `size` and `offset` matter, and the heights match.
-fn center_view_beside_panel(mut camera: Single<&mut Camera, With<Camera3d>>) {
-    // The window's or the tour's image, known from the camera's first frame.
-    let Some(size) = camera.logical_target_size() else {
+fn center_view_beside_panel(
+    window: Option<Single<&Window>>,
+    mut camera: Single<&mut Camera, With<Camera3d>>,
+) {
+    // The window's size is current here, while the camera's target size is
+    // updated in `PostUpdate`, a frame behind a resize: the target is read
+    // only where there is no window, a tour's image, which never resizes.
+    let Some(size) = window
+        .map(|window| Vec2::new(window.width(), window.height()))
+        .or_else(|| camera.logical_target_size())
+    else {
         return;
     };
     let view = sub_view(size.x, size.y);

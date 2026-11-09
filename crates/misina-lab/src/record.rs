@@ -109,6 +109,11 @@ impl Recorder {
 
     /// Hands one frame to `ffmpeg`, or gives up on the recording.
     fn feed(&mut self, image: &mut Image) {
+        // Captures still in flight when it stopped would start a new ffmpeg,
+        // overwriting the file.
+        if self.stopped {
+            return;
+        }
         if let Err(err) = self.try_feed(image) {
             warn!("recording stopped: {err:#}");
             self.stopped = true;
