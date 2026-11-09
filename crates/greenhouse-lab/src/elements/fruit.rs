@@ -237,6 +237,13 @@ const GROOVE: f32 = 0.15;
 /// flower it opens into.
 const BUD_SIZE: f32 = 0.45;
 
+/// The ball a flower about fills, as its radius and how far below the
+/// origin its middle is, in petal lengths: a closed bud's, about as long as
+/// its petals, and an open flower's, out to the tips of its swept-back
+/// petals (est.).
+const BUD_BALL: (f32, f32) = (0.5, 0.5);
+const FLOWER_BALL: (f32, f32) = (0.85, 0.25);
+
 /// The share of a flower's anthesis it takes to open, and the share at its
 /// end over which it withers: its petals fold back in, shrink and fade.
 const OPENING: f32 = 0.3;
@@ -428,6 +435,37 @@ impl FruitConfig {
     pub fn mass(&self) -> f32 {
         DENSITY * PI / 6.0 * self.across().powi(3) * self.aspect
     }
+
+    /// The ball it about fills, as its radius and how far below the origin,
+    /// where its pedicel ends, the ball's middle is: a fruit's as wide as
+    /// it is, and a flower's from [`BUD_BALL`] to [`FLOWER_BALL`] as far as
+    /// it has opened, and back as it withers.
+    pub fn ball(&self) -> (f32, f32) {
+        if !self.in_flower() {
+            // ponytail: a sphere as wide as the fruit, so an elongated one's
+            // ends reach past it; a capsule if plum trusses show it.
+            let radius = self.across() / 2.0;
+            return (radius, (self.aspect - DIP) * radius);
+        }
+        let (_, opened, wither, size) = self.bloom();
+        let open = opened * (1.0 - wither);
+        let ball = |bud: f32, flower: f32| (bud + (flower - bud) * open) * size;
+        (
+            ball(BUD_BALL.0, FLOWER_BALL.0),
+            ball(BUD_BALL.1, FLOWER_BALL.1),
+        )
+    }
+
+    /// How far a flower is through its bud, through opening and through
+    /// withering, each 0 to 1, and how long its petals have grown, in meters.
+    fn bloom(&self) -> (f32, f32, f32, f32) {
+        let bud = (self.stage - BUD).clamp(0.0, 1.0);
+        let anthesis = (self.stage - FLOWER).clamp(0.0, 1.0);
+        let wither = smooth((anthesis - 1.0 + WITHERING) / WITHERING);
+        let opened = smooth(anthesis / OPENING);
+        let size = (BUD_SIZE + (1.0 - BUD_SIZE) * bud) * self.petal;
+        (bud, opened, wither, size)
+    }
 }
 
 /// Two fruit share a mesh when they are near in size, in shape and in colour,
@@ -522,7 +560,9 @@ pub struct FruitParams {
     /// shape and stage. A budget, not a count: the fruit are clustered and
     /// this is how many representatives the clustering may keep, though a
     /// crop in flower keeps one for its flowers and one for its fruit at
-    /// least.
+    /// least. A fruit is drawn at its representative's size, so on a small
+    /// budget a truss's fruit, packed to touch at their own sizes, are drawn
+    /// into each other.
     #[reflect(@Slider { min: 1.0, max: 64.0, step: 1.0 }, @Label("Fruit variations"))]
     pub variations: u32,
 }
@@ -906,15 +946,10 @@ fn anther_cone(anthers: u32, size: f32) -> MeshData {
 /// Draws, after where the first sepal sits, per sepal and per petal round the
 /// flower: its stray from even spacing, its length and its twist.
 fn flower(config: &FruitConfig, rng: &mut Rng) -> Result<(Vec<MeshData>, Vec<[f32; 3]>)> {
-    // How far through its bud, and through its anthesis, 0 to 1.
-    let bud = (config.stage - BUD).clamp(0.0, 1.0);
-    let anthesis = (config.stage - FLOWER).clamp(0.0, 1.0);
-    let wither = smooth((anthesis - 1.0 + WITHERING) / WITHERING);
-    let opened = smooth(anthesis / OPENING);
+    let (bud, opened, wither, size) = config.bloom();
     let open = opened * (1.0 - wither);
     // The sepals part as the bud swells, and stay spread once open.
     let parted = 0.3 * bud + 0.7 * opened;
-    let size = (BUD_SIZE + (1.0 - BUD_SIZE) * bud) * config.petal;
     let shrunk = 1.0 - 0.3 * wither;
 
     let closed = |s: f32| CLOSED.0 - CLOSED.1 * s;

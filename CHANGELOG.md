@@ -24,19 +24,33 @@ Scene document format 11.
 
 ### Added
 
+- **greenhouse-lab**: A truss's fruit are packed. Each is laid out where it
+  would hang alone, then moved, its pedicel swinging round the rachis and
+  bending at its knuckle, until none lies in another, in the stems or on
+  another's pedicel; each fruit turns its top toward its knuckle, so the
+  last, pushed out past the rachis's end, faces back along it. A flower is
+  packed as far as its petals reach. A truss's stalks are now as long as a
+  measured truss's, whatever the size of its fruit: a ripe medium truss's
+  fruit hang in a bunch off a rachis under 9 cm long, where it was up to
+  22 cm, and a cherry truss's hang apart on pedicels longer than they are
+  wide. New:
+  `TrussCfg.pedicel_length`, 31 mm by default, and
+  `TrussCfg.rachis_internode`, the rachis between two pedicels, 14 mm.
+- **misina-lab**: `geometry::packing::pack` moves a cluster of `Bob`s,
+  balls hung on stalks of two straight runs, apart until none lies in
+  another, in a stem or on another's stalk, every stalk keeping its length.
 - **greenhouse-lab**: A truss's stalks grow with its flowers. Each pedicel,
   and the internode of rachis leading to it, is a third of its full length
   when its flower opens, shorter in bud, and grows to full length over the
   two and a half weeks after, before its fruit is full size. So a truss in
   flower is short, its buds crowded at its tip, and the peduncle and rachis
-  thicken as it grows. A ripe truss is as before. New:
-  `TrussCfg.stalks_in_flower`, a stalk's length when its flower opens as a
-  share of its full length, 0.35 by default.
+  thicken as it grows. New: `TrussCfg.stalks_in_flower`, a stalk's length
+  when its flower opens as a share of its full length, 0.35 by default.
 - **greenhouse-lab**: A truss sags under its fruit's weight. It grows
   standing out from the stem, its rachis level, and its fruit bend its
   peduncle and rachis down as they swell: a truss in flower stands out, and
   one of grown fruit hangs from its bend much as every truss did before.
-  New: `TrussCfg.stiffness`, the Young's modulus they bend against, 130 MPa
+  New: `TrussCfg.stiffness`, the Young's modulus they bend against, 70 MPa
   by default. `TrussCfg.variations` is 24 by default, up from 16, as how far
   a truss sags is one more way two trusses differ.
 - **misina-lab**: `geometry::bending::sag` finds where a rod held by its
@@ -230,9 +244,8 @@ Scene document format 11.
   fruit's calyx, where a stub on the fruit stood between them, and it leans
   the fruit out the way it left, so the fruit's top faces back toward the
   rachis. Each pedicel draws its own reach, swing and lean. Pedicels no longer
-  run through the fruit above them, and the rachis is a little longer between
-  fruit. New: `TrussCfg.pedicel_angle`, how far under the rachis the pedicels
-  leave it; 0 leaves them out to its sides.
+  run through the fruit above them. New: `TrussCfg.pedicel_angle`, how far
+  under the rachis the pedicels leave it; 0 leaves them out to its sides.
 - **greenhouse-lab** (**cfg**): `FruitCfg.jointed` is now `TrussCfg.jointed`:
   the knuckle is on the truss's pedicel, and a fruit has no stub of its own.
 - **misina-lab**: `rods.make_physics_cfg_newton` takes `broad_phase`.
@@ -318,11 +331,9 @@ Scene document format 11.
 - **greenhouse-lab**: Trusses are modelled closer to life. The rachis is a
   chain of internodes that zigzags, kinking away from each pedicel, and
   hangs nearer vertical toward its tip; the peduncle bends over a longer
-  arc. A pedicel is sized to its fruit, arches up and over and comes down
-  onto the fruit vertically, with the knuckle just under its tip, where the
-  fruit hangs a little off vertical. The sepals are half the fruit's
-  diameter long, lift off the shoulders to spread, and are folded and
-  twisted. Every representative truss draws its own kinks.
+  arc. The sepals are half the fruit's diameter long, lift off the
+  shoulders to spread, and are folded and twisted. Every representative
+  truss draws its own kinks.
 - **misina-lab**: A rod carries loads: `Cable.loads` is the mass hanging from
   each point, which the builder adds to the rod's own, and `cable()` takes
   it after the widths, empty for a rod that carries nothing.

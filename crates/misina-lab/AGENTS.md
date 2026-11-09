@@ -34,7 +34,7 @@ package, is in the root `AGENTS.md`.
 | [src/stats.rs](src/stats.rs), [src/colliders.rs](src/colliders.rs), [src/perf.rs](src/perf.rs), [src/record.rs](src/record.rs), [src/tour.rs](src/tour.rs) | scene footer, the collider overlay it switches, rebuild timing, window capture, and the storyboard player a demo video is recorded with |
 | [src/terrain.rs](src/terrain.rs) | the ground: `TerrainParams`, the `Ground` height field, and the one build system every generator stages first |
 | [src/palette.rs](src/palette.rs) | linear colour, the per-mesh jitter, and `Response`, how a surface answers light |
-| [src/geometry/](src/geometry/) | the geometry kernels: `mesh`, `strand`, `outline`, `shapes`, `scatter`, `bending`, and `par_map` |
+| [src/geometry/](src/geometry/) | the geometry kernels: `mesh`, `strand`, `outline`, `shapes`, `scatter`, `bending`, `packing`, and `par_map` |
 | [src/quantize.rs](src/quantize.rs) | k-center clustering: a population of configs down to `variations` meshes |
 | [src/rng.rs](src/rng.rs) | the seeded stream every element draws from |
 | [src/testing.rs](src/testing.rs) | reading a built scene back in tests, in this crate and in a generator's; its `fixture` is the smallest generator there is |

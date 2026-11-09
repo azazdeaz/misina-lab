@@ -273,8 +273,10 @@ class TrussCfg:
     hung along it.
 
     The peduncle numbers default to the means measured on medium trusses in a
-    high-wire house, and every truss draws its own about them. A medium truss tomato
-    is about 6 fruit of 60 mm; a cherry truss about 15 of 25 mm, branched.
+    high-wire house, and every truss draws its own about them; the rachis's internode
+    to what those trusses' measured lengths leave for it (est.), and the pedicel to a
+    genebank's measurements. A medium truss tomato is about 6 fruit of 60 mm; a
+    cherry truss about 15 of 25 mm, branched.
     """
 
     fruits: int = 6
@@ -295,18 +297,27 @@ class TrussCfg:
     """Angle between the stem and the peduncle where it leaves, in degrees: 90 leaves
     level, less leaves rising.
     """
-    stiffness: float = 130.0
+    stiffness: float = 70.0
     """How stiff the peduncle and rachis are, as a Young's modulus in MPa. A truss grows
     standing out from the stem, and its fruit's weight bends it down against this:
     one in flower barely bends, and one sags further as its fruit swell. Below green
     wood's, as a stalk under a load for weeks gives way to it more than it would at
     once.
     """
+    rachis_internode: float = 0.014
+    """Length of the rachis between two pedicels under grown fruit, in meters: short, a
+    truss's fruit crowd into a bunch, and long, they hang apart down the rachis.
+    """
+    pedicel_length: float = 0.031
+    """Length of a pedicel under a grown fruit, from the rachis to the fruit's calyx, in
+    meters. A small-fruited truss's are about as long as a large-fruited one's, so
+    its fruit hang further out for their size.
+    """
     pedicel_angle: float = 45.0
     """How far under the rachis its pedicels leave it, in degrees below its sides: 0
     leaves them level out to the sides, and more hangs the fruit further under it. At
     45 the two ranks, down alternate flanks, meet at a right angle, as they do on a
-    tomato truss; past 50, neighbouring fruit hang into each other.
+    tomato truss.
     """
     jointed: bool = True
     """Whether a pedicel has a knuckle, the joint a fruit breaks off at, as most truss
@@ -314,9 +325,9 @@ class TrussCfg:
     """
     stalks_in_flower: float = 0.35
     """How long a pedicel, and the internode of rachis leading to it, are when its
-    flower opens, as a share of their length under the grown fruit. A large-fruited
-    truss's stalks grow to about three times their length in flower, and a
-    small-fruited one's barely grow on.
+    flower opens, as a share of their length under the grown fruit: about a third on
+    a large-fruited truss, whose stalks grow to about three times their length in
+    flower, and nearer 1 on a small-fruited one, whose barely grow on.
     """
     missing_fruit: float = 0.05
     """Chance that a fruit is missing from its pedicel."""
@@ -379,7 +390,9 @@ class FruitCfg:
     """How many distinct fruit and flower meshes the scene may hold, by size, shape and
     stage. A budget, not a count: the fruit are clustered and this is how many
     representatives the clustering may keep, though a crop in flower keeps one for
-    its flowers and one for its fruit at least.
+    its flowers and one for its fruit at least. A fruit is drawn at its
+    representative's size, so on a small budget a truss's fruit, packed to touch at
+    their own sizes, are drawn into each other.
     """
 
 
