@@ -41,9 +41,11 @@ use crate::Generator;
 /// demo, and half the readback traffic of 60.
 pub const FPS: f64 = 30.0;
 
-/// How many out-of-order frames may wait before the one they are waiting for
-/// is given up on. See [`ready`].
-const REORDER_LIMIT: usize = 8;
+/// How much the frames waiting for a late one may hold before it is given up
+/// on: about 250 frames at 1080p. Readbacks finish on Bevy's async compute
+/// pool, behind whatever else runs there, and while a slide rebuilds the scene
+/// every frame one can land two seconds of video late. See [`ready`].
+const REORDER_BYTES: usize = 2 << 30;
 
 /// Records to the file `{PACKAGE}_RECORD` names, at `{PACKAGE}_RECORD_FPS`.
 pub fn plugin<G: Generator>(app: &mut App) {
@@ -176,8 +178,9 @@ fn encode(mut captured: On<ScreenshotCaptured>, frames: Query<&Frame>, recorder:
     let recorder = recorder.into_inner();
     // Moved out rather than cloned: a frame is several megabytes.
     let image = core::mem::take(&mut captured.image);
+    let limit = REORDER_BYTES / image.data.as_ref().map_or(1, Vec::len).max(1);
     recorder.early.insert(frame.0, image);
-    for mut image in ready(&mut recorder.early, &mut recorder.next) {
+    for mut image in ready(&mut recorder.early, &mut recorder.next, limit) {
         recorder.feed(&mut image);
     }
 }
@@ -185,14 +188,17 @@ fn encode(mut captured: On<ScreenshotCaptured>, frames: Query<&Frame>, recorder:
 /// Takes the frames that can be written now off the reorder buffer.
 ///
 /// Readbacks finish on the task pool, so two captures can land swapped; a
-/// frame waits in `early` until the ones in front of it are in. Past
-/// [`REORDER_LIMIT`] waiting frames the missing one is given up on — a capture
-/// the renderer never completes would otherwise hold every later frame in
-/// memory for the rest of the run.
-fn ready<T>(early: &mut BTreeMap<u64, T>, next: &mut u64) -> Vec<T> {
-    if early.len() > REORDER_LIMIT
+/// frame waits in `early` until the ones in front of it are in. Past `limit`
+/// waiting frames the missing one is given up on — a capture the renderer
+/// never completes would otherwise hold every later frame in memory for the
+/// rest of the run — and dropped if it lands after all, rather than written
+/// where a later frame belongs.
+fn ready<T>(early: &mut BTreeMap<u64, T>, next: &mut u64, limit: usize) -> Vec<T> {
+    early.retain(|frame, _| *frame >= *next);
+    if early.len() > limit
         && let Some(oldest) = early.keys().next()
     {
+        warn!("recording: skipped frames {next}..{oldest}, never captured");
         *next = *oldest;
     }
     let mut frames = Vec::new();
@@ -285,28 +291,44 @@ impl Drop for Encoder {
 mod tests {
     use super::*;
 
-    /// Frames must reach the encoder in order whatever order they land in, and
-    /// one that never lands must not hold up the rest for good.
+    /// Frames must reach the encoder in order whatever order they land in, one
+    /// that never lands must not hold up the rest for good, and one given up
+    /// on that lands after all must not be written in a later one's place.
     #[test]
     fn frames_go_out_in_order_and_a_lost_one_is_given_up_on() {
+        const LIMIT: usize = 8;
         let mut early = BTreeMap::new();
         let mut next = 0;
 
         // 1 landed first, so it waits for 0 and then both go.
         early.insert(1u64, 1u64);
-        assert!(ready(&mut early, &mut next).is_empty());
+        assert!(ready(&mut early, &mut next, LIMIT).is_empty());
         early.insert(0, 0);
-        assert_eq!(ready(&mut early, &mut next), vec![0, 1]);
+        assert_eq!(ready(&mut early, &mut next, LIMIT), vec![0, 1]);
 
-        // 2 never lands. The frames behind it wait...
-        for frame in 3..3 + REORDER_LIMIT as u64 {
+        // 2 is held up. The frames behind it wait...
+        for frame in 3..3 + LIMIT as u64 {
             early.insert(frame, frame);
         }
-        assert!(ready(&mut early, &mut next).is_empty());
+        assert!(ready(&mut early, &mut next, LIMIT).is_empty());
         // ...until one too many has piled up, and then they all go.
-        let last = 3 + REORDER_LIMIT as u64;
+        let last = 3 + LIMIT as u64;
         early.insert(last, last);
-        assert_eq!(ready(&mut early, &mut next), (3..=last).collect::<Vec<_>>());
+        assert_eq!(
+            ready(&mut early, &mut next, LIMIT),
+            (3..=last).collect::<Vec<_>>()
+        );
         assert_eq!(next, last + 1);
+
+        // 2 lands after all, and is dropped: the next pile-up writes the
+        // frames behind the one it waits for, not 2.
+        early.insert(2, 2);
+        for frame in last + 2..last + 3 + LIMIT as u64 {
+            early.insert(frame, frame);
+        }
+        assert_eq!(
+            ready(&mut early, &mut next, LIMIT),
+            (last + 2..last + 3 + LIMIT as u64).collect::<Vec<_>>()
+        );
     }
 }

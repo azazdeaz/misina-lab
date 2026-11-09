@@ -157,7 +157,10 @@ fn footer() -> impl Scene {
             left: px(PANEL_WIDTH),
             right: px(0),
             align_items: AlignItems::Center,
-            column_gap: px(16),
+            // A window too narrow for one row moves whole figures to a
+            // second, rather than breaking each figure over two lines.
+            flex_wrap: FlexWrap::Wrap,
+            column_gap: px(12),
             padding: UiRect::axes(px(12), px(2)),
         }
         BlocksCamera
@@ -223,7 +226,7 @@ fn field(caption: &'static str, tip: &'static str, read: fn(&SceneStats) -> Stri
         Hovered
         Tip(tip)
         TipAbove
-        Children [ @label("") figure ]
+        Children [ @label("") figure TextLayout { linebreak: LineBreak::NoWrap } ]
     }
 }
 

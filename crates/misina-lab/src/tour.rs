@@ -186,7 +186,10 @@ pub struct Step {
     /// Seconds from this step's start to the next one's, `secs` if left out:
     /// shorter overlaps the next step, longer holds the shot.
     pub wait: Option<f32>,
-    /// Where the camera goes. Parts left out stay as they are.
+    /// Where the camera goes. Parts left out stay as they are. A move that
+    /// starts while the one before is still under way blends out of it
+    /// without stopping, so overlapping two moves rounds the corner between
+    /// them.
     pub camera: Option<Pose>,
     /// Parameters by `fragment.field`, as Python names them. A number slides
     /// there over `secs`, the scene rebuilt at every frame of the slide; a
@@ -286,7 +289,7 @@ struct Playhead {
     phase: Phase,
     /// When the first step started, on `Time<Real>`'s clock.
     zero: f64,
-    camera: Option<Tween<(Orbit, Orbit)>>,
+    camera: Option<Tween<Move>>,
     /// The control the panel is scrolling to, its scroll area, and where the
     /// scroll started.
     scroll: Option<Tween<(Entity, Entity, f32)>>,
@@ -333,6 +336,28 @@ impl<T> Tween<T> {
 
     fn done(&self, now: f64) -> bool {
         now - self.began >= self.secs as f64
+    }
+}
+
+/// A camera move.
+struct Move {
+    from: Orbit,
+    to: Orbit,
+    /// The move still under way when this one started. This one eases out
+    /// of it rather than from `from`, so the camera keeps its speed instead
+    /// of stopping dead and starting again.
+    under: Option<Box<Tween<Move>>>,
+}
+
+impl Tween<Move> {
+    /// Where the camera is at `now`.
+    fn at(&self, now: f64) -> Orbit {
+        let from = self
+            .what
+            .under
+            .as_ref()
+            .map_or(self.what.from, |under| under.at(now));
+        from.lerp(self.what.to, self.progress(now))
     }
 }
 
@@ -517,10 +542,15 @@ fn begin<P: Params>(world: &mut World, at: &mut Playhead, step: &Step, now: f64)
     if let Some(pose) = step.camera {
         let (camera, projection) = camera(world);
         let from = Orbit::of(&camera, &projection);
+        let under = at.camera.take().filter(|tween| !tween.done(now));
         at.camera = Some(Tween {
             began,
             secs,
-            what: (from, from.with(pose, world.get_resource::<Ground>())),
+            what: Move {
+                from,
+                to: from.with(pose, world.get_resource::<Ground>()),
+                under: under.map(Box::new),
+            },
         });
     }
     for (path, value) in &step.set {
@@ -606,10 +636,8 @@ fn begin<P: Params>(world: &mut World, at: &mut Playhead, step: &Step, now: f64)
 /// Moves everything under way to where it is at `now`.
 fn animate<P: Params>(world: &mut World, at: &mut Playhead, now: f64) {
     if let Some(tween) = &at.camera {
-        let (from, to) = tween.what;
         let (mut camera, mut projection) = camera(world);
-        from.lerp(to, tween.progress(now))
-            .place(&mut camera, &mut projection);
+        tween.at(now).place(&mut camera, &mut projection);
     }
     // Not on the frame the scroll began: a section it unfolded is laid out
     // at the end of that frame, so its controls have no place yet.
@@ -723,6 +751,36 @@ mod tests {
             let err = format!("{:#}", tour(set).unwrap_err());
             assert!(err.contains("step 2") && err.contains(error), "{err}");
         }
+    }
+
+    /// A move that takes over from one under way keeps the camera's speed
+    /// rather than starting again from rest.
+    #[test]
+    fn a_move_taking_over_mid_way_keeps_the_speed() {
+        let at_x = |x: f32| Orbit {
+            focus: Vec3::X * x,
+            yaw: 0.0,
+            pitch: 0.0,
+            radius: 1.0,
+            fov: 1.0,
+        };
+        let move_ = |began, from, to, under| Tween {
+            began,
+            secs: 2.0,
+            what: Move {
+                from,
+                to: at_x(to),
+                under,
+            },
+        };
+        // Halfway through 10 m in 2 s, eased, the camera is doing 7.5 m/s...
+        let first = move_(0.0, at_x(0.0), 10.0, None);
+        let from = first.at(1.0);
+        // ...and turning back to -10 m, it still is at first.
+        let second = move_(1.0, from, -10.0, Some(Box::new(first)));
+        let dt = 1e-3;
+        let speed = (second.at(1.0 + dt).focus.x - from.focus.x) / dt as f32;
+        assert!((speed - 7.5).abs() < 0.1, "{speed} m/s");
     }
 
     /// What the `P` key prints is a step's `camera`, and sets the pose it was

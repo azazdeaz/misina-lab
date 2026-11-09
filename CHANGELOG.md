@@ -280,6 +280,12 @@ Scene document format 11.
 - **misina-lab**: A storyboard's slide rebuilds the scene at every frame of
   it, where it reached the scene 150 ms after the slider stopped, as a drag
   does: a recorded video shows the scene following the slider.
+- **misina-lab**: A storyboard's camera move that starts while another is
+  still under way blends out of it and keeps the camera's speed, where it
+  stopped the camera dead and started it again from rest.
+- **misina-lab**: The viewer's footer keeps each figure on one line: a window
+  too narrow for them all moves whole figures to a second row, where each
+  figure broke over two lines as its number grew.
 - **misina-lab**: The viewer's `{PACKAGE}_RECORD` video is near-lossless, at
   CRF 10 where it was 20, as the Isaac Sim films' are: a video encoded from
   it for upload loses detail only then. A file is about three times bigger.
@@ -395,6 +401,12 @@ Scene document format 11.
 
 ### Fixed
 
+- **misina-lab**: A `{PACKAGE}_RECORD` video keeps every frame in its place.
+  A frame whose readback landed more than 8 frames late, as one does while a
+  slide rebuilds the scene, was skipped, and written once it landed in the
+  place of a frame up to two seconds later: the camera jumped back for a
+  frame. Frames now wait for a late one up to 2 GiB, about 250 frames at
+  1080p, and one skipped is never written, and logged.
 - **greenhouse-lab** (**cfg**): `LayoutCfg.plant_spacing` is how far apart
   the plants stand, exactly. A slab is cut to the whole number of plants
   that brings it nearest 1.2 m, where every slab was 1.2 m and took the
