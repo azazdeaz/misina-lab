@@ -1,0 +1,69 @@
+{
+  "size": [1920, 1080],
+  "scale": 1.875,
+  "warmup": 5,
+  "start": {
+    "note": "The bare rows at planting, from beside the row heads, the panel on its Scene section.",
+    "set": {"scene.week": 0},
+    "camera": {"focus": [0.6, -0.55, 1.5], "yaw": -60, "pitch": 28, "radius": 14.4}
+  },
+  "steps": [
+    {"note": "A slow orbit under the season edits, out to where the grown house fills the frame.",
+     "camera": {"focus": [2.45, -2.25, 1.5], "yaw": -48, "pitch": 26, "radius": 17.5}, "secs": 16, "wait": 1},
+
+    {"show": "scene.week", "secs": 0.6, "wait": 0.8},
+    {"note": "The crop grows up its twines to the wires and is lowered along the gutters.",
+     "set": {"scene.week": 40}, "secs": 5, "wait": 5.6},
+
+    {"show": "scene.seed", "secs": 0.6, "wait": 0.8},
+    {"note": "The close-ups below are framed on leaves and trusses this seed grows.",
+     "set": {"scene.seed": 3}, "secs": 1.4, "wait": 1.9},
+
+    {"show": "scene.week", "secs": 0.6, "wait": 0.8},
+    {"set": {"scene.week": 20}, "secs": 2.5, "wait": 3},
+
+    {"note": "Back as the rows multiply, keeping the whole house in the frame.",
+     "camera": {"focus": [3.3, -4.35, 1.5], "yaw": -40, "pitch": 30, "radius": 21.4}, "secs": 9, "wait": 0},
+    {"show": "layout.rows", "secs": 0.6, "wait": 0.8},
+    {"set": {"layout.rows": 9}, "secs": 1.4, "wait": 1.9},
+    {"show": "layout.pitch", "secs": 0.6, "wait": 0.8},
+    {"set": {"layout.pitch": 1.8}, "secs": 1.4, "wait": 2.6},
+
+    {"note": "Down to the outer row's crop wall from outside the house, low enough that the canopy's lower edge is mid-frame: with 9 rows 1.8 m apart, Row_00's gutter is at y = -7.2 and the floor ends at -9.",
+     "camera": {"focus": [10, -7.5, 2.6], "yaw": -25, "pitch": 6, "radius": 4.5}, "secs": 4.5, "wait": 3.8},
+    {"show": "stem.deleafed_to_truss", "secs": 0.6, "wait": 0.8},
+    {"note": "Deleafing: each stem is stripped up to its sixth truss, where it was up to its third.",
+     "set": {"stem.deleafed_to_truss": 6}, "secs": 1.4, "wait": 1.9},
+    {"show": "stem.harvest_height", "secs": 0.6, "wait": 0.8},
+    {"set": {"stem.harvest_height": 1.6}, "secs": 1.4, "wait": 1.9},
+    {"show": "fruit.ripe_trusses", "secs": 0.6, "wait": 0.8},
+    {"set": {"fruit.ripe_trusses": 2.5}, "secs": 1.4, "wait": 2.2},
+
+    {"note": "In on Row_00/Plant_036/Stem_1/Leaf_01, its blade reaching along the row about 3.5 m up, with the crop wall behind it. The camera is at y = -8, on the path side of the leaves, which reach out to about -7.9 here.",
+     "camera": {"focus": [10.55, -7.52, 3.48], "yaw": -15, "pitch": 30, "radius": 0.55, "fov": 40}, "secs": 4, "wait": 4.3},
+    {"toggle": {"Wireframe": true}, "wait": 1.2},
+    {"show": "leaf.detail", "secs": 0.6, "wait": 0.8},
+    {"set": {"leaf.detail": 3}, "secs": 1.4, "wait": 1.9},
+    {"show": "leaf.lobing", "secs": 0.6, "wait": 0.8},
+    {"note": "Entire leaflets, as on a potato-leaf cultivar.",
+     "set": {"leaf.lobing": 0.2}, "secs": 1.4, "wait": 1.9},
+    {"show": "leaf.curl", "secs": 0.6, "wait": 0.8},
+    {"set": {"leaf.curl": 2}, "secs": 1.4, "wait": 2.2},
+
+    {"note": "Down the crop wall to the trusses in the harvest band, the camera a little further out, at y = -8.35. Shaded on the way: wireframe on the whole house behind turns the frame white.",
+     "camera": {"focus": [10, -7.75, 1.9], "yaw": 0, "pitch": 5, "radius": 0.6, "fov": 45},
+     "toggle": {"Wireframe": false}, "secs": 4, "wait": 4.2},
+    {"show": "truss.fruits", "secs": 0.6, "wait": 0.8},
+    {"set": {"truss.fruits": 12}, "secs": 1.4, "wait": 1.9},
+    {"show": "fruit.aspect", "secs": 0.6, "wait": 0.8},
+    {"note": "Plum tomatoes.",
+     "set": {"fruit.aspect": 1.5}, "secs": 1.4, "wait": 1.9},
+    {"show": "fruit.ribbing", "secs": 0.6, "wait": 0.8},
+    {"set": {"fruit.ribbing": 0.2}, "secs": 1.4, "wait": 1.9},
+    {"show": "fruit.color", "secs": 0.6, "wait": 0.8},
+    {"set": {"fruit.color": "yellow"}, "wait": 1.8},
+
+    {"note": "Up and back out of the house to the whole of it, centred beside the panel. The camera starts on the path side of the outer row's leaves and backs away faster than the focus moves in, so it stays clear of them while the yaw turns.",
+     "camera": {"focus": [7.95, -4.37, 1.5], "yaw": -25, "pitch": 30, "radius": 28}, "secs": 5.5, "wait": 7}
+  ]
+}

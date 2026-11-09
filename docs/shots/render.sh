@@ -8,9 +8,8 @@
 # Renders every shot, into an emptied folder, when none is named. A shot is
 # rendered by what its folder is named after: an example with a shot.py, in
 # Isaac Sim, or else a crate's viewer, which plays the shot as a storyboard.
-# Needs cargo, uv and ffmpeg, a display for the viewer, whose window is never
-# shown, and an RTX GPU for Isaac Sim, and for butom_capture's, BUTOM: see its
-# shot.py.
+# Needs cargo, uv and ffmpeg, an RTX GPU for Isaac Sim, and for
+# butom_capture's, BUTOM: see its shot.py.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)

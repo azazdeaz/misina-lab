@@ -11,7 +11,10 @@
 //! [`scene::z_up_to_y_up`](crate::scene)), so the camera below works in Bevy's
 //! ordinary Y-up world.
 
+use std::time::Duration;
+
 use bevy::anti_alias::taa::TemporalAntiAliasing;
+use bevy::app::ScheduleRunnerPlugin;
 use bevy::camera::{Exposure, SubCameraView};
 #[cfg(not(target_arch = "wasm32"))]
 use bevy::input::common_conditions::input_just_pressed;
@@ -24,6 +27,8 @@ use bevy::pbr::wireframe::WireframePlugin;
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::ui::Pressed;
+use bevy::window::ExitCondition;
+use bevy::winit::WinitPlugin;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 
 use crate::Generator;
@@ -44,8 +49,20 @@ pub fn app<G: Generator>() -> App {
     // material.
     app.insert_resource(GlobalAmbientLight::NONE);
     app.init_resource::<Framing>();
-    app.add_plugins((
-        DefaultPlugins.set(WindowPlugin {
+    #[cfg(not(target_arch = "wasm32"))]
+    let offscreen = crate::tour::offscreen::<G>();
+    #[cfg(target_arch = "wasm32")]
+    let offscreen = false;
+    let mut plugins = DefaultPlugins.set(if offscreen {
+        // The tour draws into an image instead, and with no window to close,
+        // it is the tour that quits.
+        WindowPlugin {
+            primary_window: None,
+            exit_condition: ExitCondition::DontExit,
+            ..default()
+        }
+    } else {
+        WindowPlugin {
             primary_window: Some(Window {
                 // The web build draws into this canvas and tracks its size.
                 // Both fields are ignored off the web.
@@ -54,7 +71,16 @@ pub fn app<G: Generator>() -> App {
                 ..default()
             }),
             ..default()
-        }),
+        }
+    });
+    if offscreen {
+        // Winit's event loop, which drives a windowed app's frames, needs a
+        // display; this loop drives them back to back without one.
+        plugins = plugins.disable::<WinitPlugin>();
+        app.add_plugins(ScheduleRunnerPlugin::run_loop(Duration::ZERO));
+    }
+    app.add_plugins((
+        plugins,
         PanOrbitCameraPlugin,
         crate::scene::plugin::<G>,
         G::plugin,
@@ -97,7 +123,7 @@ pub fn app<G: Generator>() -> App {
         app.add_plugins(crate::perf::plugin);
     }
 
-    // Off by default: records the window to the video file it names. See
+    // Off by default: records the camera's frames to the video file it names. See
     // [`crate::record`].
     #[cfg(not(target_arch = "wasm32"))]
     if G::env("RECORD").is_some() {
@@ -214,20 +240,21 @@ fn save_scene_on_key(world: &mut World) -> Result<()> {
     Ok(())
 }
 
-/// Centres the scene in the strip of window the params panel leaves free.
+/// Centres the scene in the strip of the frame the params panel leaves free.
 ///
-/// The camera keeps rendering the whole window: shrinking its `viewport` would
+/// The camera keeps rendering the whole frame: shrinking its `viewport` would
 /// shrink the panel with it, since Bevy lays UI out inside the viewport of the
 /// camera it targets. The sub view instead widens the frustum by the panel's
 /// width and shows only the left part of it, which slides the image right by
 /// half a panel — putting whatever the camera looks at in the middle of what
 /// is actually visible. Scale is untouched: only the ratios between
 /// `full_size`, `size` and `offset` matter, and the heights match.
-fn center_view_beside_panel(
-    window: Single<&Window>,
-    mut camera: Single<&mut Camera, With<Camera3d>>,
-) {
-    let view = sub_view(window.width(), window.height());
+fn center_view_beside_panel(mut camera: Single<&mut Camera, With<Camera3d>>) {
+    // The window's or the tour's image, known from the camera's first frame.
+    let Some(size) = camera.logical_target_size() else {
+        return;
+    };
+    let view = sub_view(size.x, size.y);
     // Only on a real change — every write marks `Camera` changed, which
     // re-extracts it into the render world.
     if camera.sub_camera_view != Some(view) {

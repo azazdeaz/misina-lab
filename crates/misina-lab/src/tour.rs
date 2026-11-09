@@ -10,21 +10,24 @@
 //! The variable is `{PACKAGE}_TOUR`, naming a JSON file in [`Tour`]'s shape.
 //! While recording, the clock advances one video frame per rendered frame, so
 //! the video does not depend on how fast the machine draws: a rebuild that
-//! stalls the window for a second costs one frame, and a camera move is as
+//! stalls the viewer for a second costs one frame, and a camera move is as
 //! smooth on a software renderer as on a GPU. Without `{PACKAGE}_RECORD` the
-//! tour plays on the wall clock instead. `{PACKAGE}_SHOT` saves the window
+//! tour plays on the wall clock instead. `{PACKAGE}_SHOT` saves the frame
 //! once the last step is over, to an image whose extension names its format;
 //! a storyboard with no steps is a still of its opening shot.
 //!
 //! The tour changes what a person would — the panel's [`Staged`] params, the
 //! orbit camera, the panel's scroll — so the viewer answers as it does to a
-//! person, the settle before an edit reaches the scene included. It sizes the
-//! window to the video, keeps it off the screen, since what it saves is read
-//! off the window's own image, takes the pointer away from it, and quits the
-//! app after the last step, which finishes the file. Played with neither
-//! variable set, as a preview, it shows the window and hands it back to the
-//! pointer instead, still at the storyboard's size: that is how a shot is
-//! framed by hand, with [`print_camera`] on the viewer's `P` key.
+//! person, with one exception: a slider it slides reaches the scene on every
+//! frame, where a person's drag reaches it once the slider settles, so the
+//! scene is seen following the slider. A recording or a still opens no
+//! window and needs no display: the camera draws the scene and the panel
+//! into an image of the storyboard's size, which is what is saved, and the
+//! app quits after the last step, which finishes the file. Played with
+//! neither variable set, as a preview, the tour opens the window at the
+//! storyboard's size, keeps the pointer off it while it plays, and hands it
+//! back after the last step: that is how a shot is framed by hand, with
+//! [`print_camera`] on the viewer's `P` key.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -33,13 +36,15 @@ use std::time::{Duration, Instant};
 // Named over the prelude's `ContextExt`, Bevy's own `context`, which would
 // make every call ambiguous.
 use anyhow::{Context as ContextExt, bail, ensure};
+use bevy::camera::{ImageRenderTarget, RenderTarget};
 use bevy::clipboard::Clipboard;
 use bevy::picking::PickingSettings;
 use bevy::prelude::*;
 use bevy::reflect::NamedField;
+use bevy::render::render_resource::TextureFormat;
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::time::TimeUpdateStrategy;
-use bevy::ui::{Checked, ComputedNode, ScrollPosition, UiGlobalTransform};
+use bevy::ui::{Checked, ComputedNode, IsDefaultUiCamera, ScrollPosition, UiGlobalTransform};
 use bevy::ui_widgets::{Checkbox, ScrollArea, SliderPrecision, SliderValue, ValueChange};
 use bevy::window::{CursorOptions, PrimaryWindow, WindowResolution};
 use bevy_panorbit_camera::PanOrbitCamera;
@@ -61,28 +66,48 @@ pub fn plugin<G: Generator>(app: &mut App) {
         .unwrap_or_else(|err| panic!("{}: {err:#}", path.display()));
 
     let world = app.world_mut();
-    let (mut window, mut cursor) = world
-        .query_filtered::<(&mut Window, &mut CursorOptions), With<PrimaryWindow>>()
-        .single_mut(world)
-        .expect("the viewer opens one window");
-    window.resolution =
-        WindowResolution::new(tour.size[0], tour.size[1]).with_scale_factor_override(tour.scale);
-    // The recorder stops at a resize, since ffmpeg takes one frame size.
-    window.resizable = false;
-    // A still or a recording is read off the window's own image, which is
-    // drawn whether or not the window is on screen: it opens hidden. A
-    // preview, which is for looking at, opens shown.
-    let recording = G::env("RECORD").is_some();
-    window.visible = !recording && G::env("SHOT").is_none();
-    // A hover would float a tooltip into the shot, and a drag would turn the
-    // camera: the pointer is cut off from the window, and from picking too in
-    // case the window system lets it through anyway.
-    cursor.hit_test = false;
-    app.insert_resource(PickingSettings {
-        is_input_enabled: false,
-        ..default()
-    });
+    if offscreen::<G>() {
+        // The viewer opens no window: the camera draws into this image, and
+        // the panel with it.
+        let image = Image::new_target_texture(
+            tour.size[0],
+            tour.size[1],
+            TextureFormat::Rgba8UnormSrgb,
+            None,
+        );
+        let target = RenderTarget::Image(ImageRenderTarget {
+            handle: world.resource_mut::<Assets<Image>>().add(image),
+            scale_factor: tour.scale,
+        });
+        app.add_observer(
+            move |add: On<Add<PanOrbitCamera>>, mut commands: Commands| {
+                // The panel draws on the camera targeting the window unless one
+                // is marked.
+                commands
+                    .entity(add.entity)
+                    .insert((target.clone(), IsDefaultUiCamera));
+            },
+        );
+    } else {
+        let (mut window, mut cursor) = world
+            .query_filtered::<(&mut Window, &mut CursorOptions), With<PrimaryWindow>>()
+            .single_mut(world)
+            .expect("the viewer opens one window");
+        window.resolution = WindowResolution::new(tour.size[0], tour.size[1])
+            .with_scale_factor_override(tour.scale);
+        // Kept at the size the storyboard's shots are framed for.
+        window.resizable = false;
+        // A hover would float a tooltip into the preview, and a drag would
+        // turn the camera: the pointer is cut off from the window, and from
+        // picking too in case the window system lets it through anyway.
+        cursor.hit_test = false;
+        app.insert_resource(PickingSettings {
+            is_input_enabled: false,
+            ..default()
+        });
+    }
 
+    let recording = G::env("RECORD").is_some();
     if recording {
         // A nanosecond over the period: the recorder captures once a whole
         // period has passed by its f64 sums, which a step of exactly one
@@ -101,23 +126,29 @@ pub fn plugin<G: Generator>(app: &mut App) {
         .add_systems(Update, play::<G::Params>);
 }
 
+/// Whether the storyboard plays for a recording or a still rather than a
+/// preview: nobody watches those, so the viewer opens no window for them.
+pub fn offscreen<G: Generator>() -> bool {
+    G::env("TOUR").is_some() && (G::env("RECORD").is_some() || G::env("SHOT").is_some())
+}
+
 /// What the tour does after its last step.
 #[derive(Resource)]
 enum Finish {
     /// Quits, which finishes the recording.
     Quit,
-    /// Saves the window to this image, then quits.
+    /// Saves the frame to this image, then quits.
     Shoot(PathBuf),
     /// Hands the window back to the pointer and carries on: a preview.
     Stay,
 }
 
-/// A storyboard: the window it is shot in, the opening shot, and the steps
+/// A storyboard: the frame it is shot in, the opening shot, and the steps
 /// that follow it.
 #[derive(Resource, Deserialize, Debug)]
 #[serde(default, deny_unknown_fields)]
 pub struct Tour {
-    /// The window's size in physical pixels, which is the video's.
+    /// The frame's size in physical pixels, which is the video's.
     pub size: [u32; 2],
     /// Physical pixels per logical one. Above 1 enlarges the panel, which
     /// keeps its text legible in a video played smaller than it was recorded.
@@ -156,7 +187,8 @@ pub struct Step {
     /// Where the camera goes. Parts left out stay as they are.
     pub camera: Option<Pose>,
     /// Parameters by `fragment.field`, as Python names them. A number slides
-    /// there over `secs`; a flag or a name switches when the step starts.
+    /// there over `secs`, the scene rebuilt at every frame of the slide; a
+    /// flag or a name switches when the step starts.
     /// The value has to be one the panel offers.
     pub set: BTreeMap<String, Value>,
     /// A panel field, `fragment.field`, to bring into view: its section
@@ -424,9 +456,12 @@ fn play<P: Params>(world: &mut World, mut at: Local<Playhead>) {
                         }
                         finish => {
                             if let Some(Finish::Shoot(path)) = finish {
-                                world
-                                    .spawn(Screenshot::primary_window())
-                                    .observe(save_to_disk(path));
+                                let target = world
+                                    .query_filtered::<&RenderTarget, With<PanOrbitCamera>>()
+                                    .single(world)
+                                    .expect("the viewer has one orbit camera")
+                                    .clone();
+                                world.spawn(Screenshot(target)).observe(save_to_disk(path));
                             }
                             world.insert_resource(record::Hold);
                             Phase::Ending
@@ -602,6 +637,7 @@ fn animate<P: Params>(world: &mut World, at: &mut Playhead, now: f64) {
                 .insert(ScrollPosition(Vec2::new(0.0, y)));
         }
     }
+    let sliding = !at.sliding.is_empty();
     at.sliding.retain(|tween| {
         let (path, from, to) = &tween.what;
         // Rounded as a drag rounds it, and shown on the slider as a drag
@@ -617,6 +653,14 @@ fn animate<P: Params>(world: &mut World, at: &mut Playhead, now: f64) {
         world.entity_mut(slider).insert(SliderValue(value));
         !tween.done(now)
     });
+    // Handed to the scene every frame, past the settle the panel waits for,
+    // so the video shows the scene following the slider. `apply` rebuilds
+    // only what the slide changed, and a whole-number field only when it
+    // steps.
+    if sliding {
+        let staged = world.resource::<Staged<P>>().0.clone();
+        staged.apply(world);
+    }
 }
 
 /// How far `area` is scrolled as laid out, in logical pixels.
@@ -658,7 +702,7 @@ mod tests {
     use crate::testing::fixture::BoxesParams;
 
     /// A storyboard may name only parameters there are, set to values their
-    /// controls offer; anything else fails before the window opens, saying
+    /// controls offer; anything else fails before the viewer opens, saying
     /// which step.
     #[test]
     fn a_storyboard_is_checked_against_the_params() {

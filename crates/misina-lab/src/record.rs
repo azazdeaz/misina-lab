@@ -1,5 +1,5 @@
-//! Records the viewer window into a video file, one captured frame per video
-//! frame.
+//! Records what the viewer's camera draws into a video file, one captured
+//! frame per video frame.
 //!
 //! What it is for: recording a demo of the params panel. Committing a slider
 //! rebuilds the scene and stalls the window for tens to hundreds of
@@ -13,7 +13,7 @@
 //!
 //! The variable is `{PACKAGE}_RECORD`, so that is `boxlab`'s. It covers the
 //! whole run: recording starts with the app and the file is finished when the
-//! window closes. `{PACKAGE}_RECORD_FPS` sets the rate (default [`FPS`]);
+//! app exits. `{PACKAGE}_RECORD_FPS` sets the rate (default [`FPS`]);
 //! frames between two due ones are not captured, so everything but a stall
 //! plays back at the speed it happened.
 //!
@@ -30,6 +30,7 @@ use std::process::{Child, Command, Stdio};
 // Named over the prelude's `ContextExt`, Bevy's own `context`, which would
 // make every call ambiguous.
 use anyhow::{Context as ContextExt, bail, ensure};
+use bevy::camera::RenderTarget;
 use bevy::prelude::*;
 use bevy::render::render_resource::TextureFormat;
 use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured};
@@ -131,7 +132,7 @@ impl Recorder {
         let encoder = self.encoder.as_mut().expect("started just above");
         ensure!(
             encoder.size == size,
-            "the window resized to {size} mid-recording, and ffmpeg takes \
+            "the frame resized to {size} mid-recording, and ffmpeg takes \
              the {} it was started with",
             encoder.size,
         );
@@ -139,8 +140,14 @@ impl Recorder {
     }
 }
 
-/// Spawns one screenshot of the window whenever the next frame is due.
-fn capture(mut commands: Commands, time: Res<Time<Real>>, mut recorder: ResMut<Recorder>) {
+/// Spawns one screenshot of what the camera draws into, the window or a
+/// [`tour`](crate::tour)'s image, whenever the next frame is due.
+fn capture(
+    mut commands: Commands,
+    time: Res<Time<Real>>,
+    mut recorder: ResMut<Recorder>,
+    target: Single<&RenderTarget, With<Camera3d>>,
+) {
     if recorder.stopped {
         return;
     }
@@ -151,7 +158,7 @@ fn capture(mut commands: Commands, time: Res<Time<Real>>, mut recorder: ResMut<R
     // A period from now rather than from when the frame was due: a rebuild
     // that ran long must not be followed by a burst of catch-up captures.
     recorder.due = now + 1.0 / recorder.fps;
-    commands.spawn((Screenshot::primary_window(), Frame(recorder.spawned)));
+    commands.spawn((Screenshot((*target).clone()), Frame(recorder.spawned)));
     recorder.spawned += 1;
 }
 
@@ -205,7 +212,7 @@ impl Encoder {
     /// header, so `ffmpeg` has to be told the size and channel order up front,
     /// and a capture is what knows them.
     fn spawn(path: &Path, fps: f64, size: UVec2, format: TextureFormat) -> anyhow::Result<Self> {
-        // The bytes are the swapchain's, already gamma-encoded for the
+        // The bytes are an sRGB target's, already gamma-encoded for the
         // display, so the pixel format only has to name the channel order.
         let pixel_format = match format {
             TextureFormat::Bgra8UnormSrgb | TextureFormat::Bgra8Unorm => "bgra",
@@ -222,7 +229,9 @@ impl Encoder {
             .args(["-framerate", &fps.to_string(), "-i", "-"])
             // yuv420p is what plays everywhere, and it needs even dimensions.
             .args(["-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2"])
-            .args(["-c:v", "libx264", "-preset", "veryfast", "-crf", "20"])
+            // Near-lossless: a video made from this for upload is encoded
+            // again, and loses detail only then.
+            .args(["-c:v", "libx264", "-preset", "fast", "-crf", "10"])
             .args(["-pix_fmt", "yuv420p"])
             // Keeps a truncated file playable, for the run that is killed
             // rather than closed: a plain mp4 is only readable once its index
