@@ -1036,7 +1036,7 @@ fn calyx(knee: Vec3, out: Vec3, distal: f32, rng: &mut Rng) -> Vec3 {
 /// [`FruitConfig::ball`] has it at the size its truss gives it, before its
 /// own jitter: the least a representative's fruit are packed at, so that a
 /// pedicel no truss drawing it hangs a fruit on is packed all the same.
-fn balls(config: &TrussConfig, fruit: &FruitParams) -> Vec<(f32, f32)> {
+fn balls(config: &TrussConfig, fruit: &FruitParams) -> Vec<(f32, f32, f32)> {
     let last = (config.fruits - 1).max(1) as f32;
     (0..config.fruits)
         .map(|j| {
@@ -1052,13 +1052,19 @@ fn balls(config: &TrussConfig, fruit: &FruitParams) -> Vec<(f32, f32)> {
         .collect()
 }
 
-/// The least ball holding two that hang on one line, each as its radius and
-/// how far down the line its middle is: from whichever reaches further up
-/// the line to whichever reaches further down it.
-fn holding(a: (f32, f32), b: (f32, f32)) -> (f32, f32) {
-    let up = (a.1 - a.0).min(b.1 - b.0);
-    let down = (a.1 + a.0).max(b.1 + b.0);
-    ((down - up) / 2.0, (down + up) / 2.0)
+/// The ball holding two that hang on one line, each as its radius, how far
+/// down the line its middle is and how far either way of that it is drawn
+/// out: as wide as the wider, drawn out as little as holds both. It holds a
+/// ball as narrow as itself if its straight part spans that one's, and a
+/// narrower one if it comes within the difference of that one's ends.
+fn holding(a: (f32, f32, f32), b: (f32, f32, f32)) -> (f32, f32, f32) {
+    let radius = a.0.max(b.0);
+    let reach = |(r, middle, drawn): (f32, f32, f32)| {
+        (middle - drawn + radius - r, middle + drawn - radius + r)
+    };
+    let ((a_up, a_down), (b_up, b_down)) = (reach(a), reach(b));
+    let (up, down) = (a_up.min(b_up), a_down.max(b_down));
+    (radius, (up + down) / 2.0, (down - up) / 2.0)
 }
 
 /// Where each of a truss's fruit, from its base to its tip, would hang
@@ -1073,7 +1079,7 @@ fn lay(
     config: &TrussConfig,
     axis: &Axis,
     params: &TrussParams,
-    balls: &[(f32, f32)],
+    balls: &[(f32, f32, f32)],
     grown: &[f32],
     rng: &mut Rng,
 ) -> Vec<Bob> {
@@ -1099,6 +1105,7 @@ fn lay(
                 end: calyx,
                 radius: balls[j].0,
                 inset: balls[j].1,
+                drawn: balls[j].2,
                 stalk: pedicel_radius(config.fruit_diameter, grown[j]),
             });
         }
@@ -1145,7 +1152,7 @@ fn build_truss(
     config: &TrussConfig,
     loads: &[f32],
     params: &TrussParams,
-    balls: &[(f32, f32)],
+    balls: &[(f32, f32, f32)],
     tolerance: f64,
     whole: bool,
     bent: bool,
@@ -1438,7 +1445,7 @@ pub(crate) fn build(
         let drew = &book.representatives[book.assignment[t] as usize];
         hang_fruit(*order, config, drew.config.fruits as usize)
     });
-    let mut held: Vec<Vec<(f32, f32)>> = (book.representatives.iter())
+    let mut held: Vec<Vec<(f32, f32, f32)>> = (book.representatives.iter())
         .map(|laden| balls(&laden.config, &fruit_params))
         .collect();
     for (fruit, drew) in drawn.iter().zip(&book.assignment) {
@@ -1591,6 +1598,7 @@ pub(crate) fn build(
 mod tests {
     use std::collections::BTreeMap;
 
+    use misina_lab::geometry::packing::nearest;
     use misina_lab::scene::{CABLE, Cable, STEM, segment_name};
     use misina_lab::testing::{named_children, prim_path};
 
@@ -1993,7 +2001,7 @@ mod tests {
     /// no fruit lies more than a little in another, no stalk runs through
     /// one, and none turns its top, toward its knuckle, far past sideways:
     /// full grown, and still growing on a truss that sags less; on a simple
-    /// truss and a branched cherry truss.
+    /// truss, a branched cherry truss and a simple truss of elongated fruit.
     #[test]
     fn a_truss_hangs_its_fruit_under_its_rachis_and_ends_in_the_last() {
         let cherry = TrussParams {
@@ -2002,7 +2010,16 @@ mod tests {
             branched: true,
             ..TrussParams::default()
         };
-        for params in [TrussParams::default(), cherry] {
+        let plum = FruitParams {
+            aspect: 1.6,
+            ..FruitParams::default()
+        };
+        let cases = [
+            (TrussParams::default(), FruitParams::default()),
+            (cherry, FruitParams::default()),
+            (TrussParams::default(), plum),
+        ];
+        for (params, fruit) in cases {
             for (order, (age, share)) in (0..100).zip([(8.0, 1.0), (3.5, 0.2)].into_iter().cycle())
             {
                 let node = Node {
@@ -2011,10 +2028,7 @@ mod tests {
                     ..NODE
                 };
                 let config = TrussConfig::new(&params, 0, order, node);
-                let (loads, balls) = (
-                    laden(&config, share),
-                    balls(&config, &FruitParams::default()),
-                );
+                let (loads, balls) = (laden(&config, share), balls(&config, &fruit));
                 let built =
                     build_truss(&config, &loads, &params, &balls, TOLERANCE, true, order < 3)
                         .unwrap();
@@ -2027,7 +2041,13 @@ mod tests {
                     .and_then(|a| a.as_float3())
                     .unwrap();
                 let arms = rachises.len();
-                for (j, (hang, (radius, inset))) in built.fruit.iter().zip(&balls).enumerate() {
+                // The segment a fruit hung at `hang` is drawn out along.
+                let spine = |hang: &Transform, (_, inset, drawn): (f32, f32, f32)| {
+                    let at = |down: f32| hang.transform_point(Vec3::NEG_Z * down);
+                    (at(inset - drawn), at(inset + drawn))
+                };
+                for (j, (hang, &ball)) in built.fruit.iter().zip(&balls).enumerate() {
+                    let radius = ball.0;
                     let runs = &rachises[j % arms];
                     let (i, run) = (j / arms, &runs[j / arms]);
                     let off = hang.translation - run.from;
@@ -2043,19 +2063,19 @@ mod tests {
                     );
                     let top = hang.rotation * Vec3::Z;
                     assert!(top.z > -0.25, "{order}: fruit {j} faces {top}");
-                    let middle = hang.transform_point(-Vec3::Z * *inset);
-                    for (k, (other, (by, sunk))) in
-                        built.fruit.iter().zip(&balls).enumerate().take(j)
-                    {
-                        let apart = middle.distance(other.transform_point(-Vec3::Z * *sunk));
-                        let into = (radius + by - apart) / (2.0 * radius.min(*by));
+                    let along = spine(hang, ball);
+                    for (k, (other, &by)) in built.fruit.iter().zip(&balls).enumerate().take(j) {
+                        let (near, other_near) = nearest(along, spine(other, by));
+                        let apart = near.distance(other_near);
+                        let into = (radius + by.0 - apart) / (2.0 * radius.min(by.0));
                         assert!(into < 0.08, "{order}: fruit {j} lies {into} into {k}");
                     }
                     // No stem inside its body, but its own pedicel coming in
                     // at its top.
                     let thin = pedicel_radius(config.fruit_diameter, grown[j]);
                     let inside = |p: &[f32; 3]| {
-                        let local = hang.rotation.inverse() * (Vec3::from(*p) - middle);
+                        let p = Vec3::from(*p);
+                        let local = hang.rotation.inverse() * (p - nearest(along, (p, p)).0);
                         let (across, up) = (local.truncate().length(), local.z);
                         let entering =
                             across < (0.35 * radius).max(2.5 * thin) && up > 0.4 * radius;
@@ -2078,57 +2098,74 @@ mod tests {
     }
 
     /// However many trusses share a mesh, none's own fruit lie more than a
-    /// little in each other, as each of a representative's fruit is packed
-    /// as one ball holding every ball it fills on any truss that drew it;
-    /// flowers, more crowded than their pedicels can part, lie further into
-    /// each other.
+    /// little in each other, round or elongated, as each of a
+    /// representative's fruit is packed as one ball holding every ball it
+    /// fills on any truss that drew it; flowers, more crowded than their
+    /// pedicels can part, lie further into each other, and further still
+    /// among elongated fruit, which take more room.
     #[test]
     fn no_trusss_own_fruit_lie_in_each_other() {
-        let mut app = grown(small());
-        let world = app.world_mut();
-        let trusses: Vec<Entity> = world
-            .query_filtered::<Entity, With<TrussConfig>>()
-            .iter(world)
-            .collect();
-        for truss in &trusses {
-            // The ball each of its fruit fills, wherever under it it hangs.
-            let mut balls = Vec::new();
-            let mut below = vec![*truss];
-            while let Some(at) = below.pop() {
-                if let Some(fruit) = world.entity(at).get::<FruitConfig>() {
-                    let (radius, inset) = fruit.ball();
-                    let middle = in_scene(world, at).transform_point(Vec3::NEG_Z * inset);
-                    balls.push((middle, radius, fruit.in_flower()));
+        for (aspect, flowers) in [(FruitParams::default().aspect, 0.3), (1.6, 0.6)] {
+            let mut params = small();
+            params.fruit.aspect = aspect;
+            let mut app = grown(params);
+            let world = app.world_mut();
+            let trusses: Vec<Entity> = world
+                .query_filtered::<Entity, With<TrussConfig>>()
+                .iter(world)
+                .collect();
+            for truss in &trusses {
+                // The segment each of its fruit's balls is drawn out along,
+                // wherever under it it hangs.
+                let mut balls = Vec::new();
+                let mut below = vec![*truss];
+                while let Some(at) = below.pop() {
+                    if let Some(fruit) = world.entity(at).get::<FruitConfig>() {
+                        let (radius, inset, drawn) = fruit.ball();
+                        let hang = in_scene(world, at);
+                        let on = |down: f32| hang.transform_point(Vec3::NEG_Z * down);
+                        let spine = (on(inset - drawn), on(inset + drawn));
+                        balls.push((spine, radius, fruit.in_flower()));
+                    }
+                    below.extend(world.entity(at).get::<Children>().into_iter().flatten());
                 }
-                below.extend(world.entity(at).get::<Children>().into_iter().flatten());
-            }
-            for (i, (a, ra, flower_a)) in balls.iter().enumerate() {
-                for (b, rb, flower_b) in &balls[..i] {
-                    let into = (ra + rb - a.distance(*b)) / (2.0 * ra.min(*rb));
-                    let most = if *flower_a || *flower_b { 0.3 } else { 0.08 };
-                    assert!(
-                        into < most,
-                        "{}: two lie {into} into each other",
-                        prim_path(world, *truss)
-                    );
+                for (i, (a, ra, flower_a)) in balls.iter().enumerate() {
+                    for (b, rb, flower_b) in &balls[..i] {
+                        let (on_a, on_b) = nearest(*a, *b);
+                        let into = (ra + rb - on_a.distance(on_b)) / (2.0 * ra.min(*rb));
+                        let most = if *flower_a || *flower_b {
+                            flowers
+                        } else {
+                            0.08
+                        };
+                        assert!(
+                            into < most,
+                            "{aspect}, {}: two lie {into} into each other",
+                            prim_path(world, *truss)
+                        );
+                    }
                 }
             }
         }
     }
 
     /// The ball holding two that hang on one line holds both, wherever along
-    /// the line each is, and is no bigger than it needs be: an open flower's
-    /// holds a bud's of its size, so the ball holding the two is the open
-    /// flower's.
+    /// the line each is and however far drawn out, and is no bigger than it
+    /// needs be: an open flower's holds a bud's of its size, so the ball
+    /// holding the two is the open flower's.
     #[test]
     fn a_held_ball_holds_both() {
-        let holds = |(radius, inset): (f32, f32), ball: (f32, f32)| {
-            (inset - ball.1).abs() + ball.0 < radius + 1e-6
+        // As wide, and its straight part within the difference of the
+        // other's ends.
+        let holds = |(radius, middle, drawn): (f32, f32, f32), (r, m, d): (f32, f32, f32)| {
+            let room = radius - r + 1e-6;
+            room > 0.0 && middle - drawn - room <= m - d && m + d <= middle + drawn + room
         };
-        let (bud, open) = ((0.5, 0.5), (0.85, 0.25));
-        let fruit = [(0.03, 0.024), (0.028, 0.027)];
-        let apart = [(0.01, 0.0), (0.01, 0.05)];
-        for [a, b] in [[bud, open], fruit, apart] {
+        let (bud, open) = ((0.5, 0.5, 0.0), (0.85, 0.25, 0.0));
+        let fruit = [(0.03, 0.024, 0.0), (0.028, 0.027, 0.0)];
+        let apart = [(0.01, 0.0, 0.0), (0.01, 0.05, 0.0)];
+        let elongated = [(0.02, 0.03, 0.012), (0.022, 0.025, 0.004)];
+        for [a, b] in [[bud, open], fruit, apart, elongated] {
             let held = holding(a, b);
             assert!(
                 holds(held, a) && holds(held, b),
@@ -2137,7 +2174,7 @@ mod tests {
         }
         let held = holding(bud, open);
         assert!(
-            (held.0 - open.0).abs() < 1e-6 && (held.1 - open.1).abs() < 1e-6,
+            (held.0 - open.0).abs() < 1e-6 && (held.1 - open.1).abs() < 1e-6 && held.2.abs() < 1e-6,
             "{held:?}"
         );
     }

@@ -436,16 +436,17 @@ impl FruitConfig {
         DENSITY * PI / 6.0 * self.across().powi(3) * self.aspect
     }
 
-    /// The ball it about fills, as its radius and how far below the origin,
-    /// where its pedicel ends, the ball's middle is: a fruit's as wide as
-    /// it is, and a flower's from [`BUD_BALL`] to [`FLOWER_BALL`] as far as
-    /// it has opened, and back as it withers.
-    pub fn ball(&self) -> (f32, f32) {
+    /// The ball it about fills, as its radius, how far below the origin,
+    /// where its pedicel ends, the ball's middle is, and how far either way
+    /// of that along its axis it is drawn out into a capsule: a fruit's as
+    /// wide as it is, drawn out to its length if it is elongated, and a
+    /// flower's from [`BUD_BALL`] to [`FLOWER_BALL`] as far as it has opened,
+    /// and back as it withers, never drawn out.
+    pub fn ball(&self) -> (f32, f32, f32) {
         if !self.in_flower() {
-            // ponytail: a sphere as wide as the fruit, so an elongated one's
-            // ends reach past it; a capsule if plum trusses show it.
             let radius = self.across() / 2.0;
-            return (radius, (self.aspect - DIP) * radius);
+            let drawn = (self.aspect - 1.0).max(0.0) * radius;
+            return (radius, (self.aspect - DIP) * radius, drawn);
         }
         let (_, opened, wither, size) = self.bloom();
         let open = opened * (1.0 - wither);
@@ -453,6 +454,7 @@ impl FruitConfig {
         (
             ball(BUD_BALL.0, FLOWER_BALL.0),
             ball(BUD_BALL.1, FLOWER_BALL.1),
+            0.0,
         )
     }
 
