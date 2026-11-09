@@ -16,6 +16,8 @@ glass and columns, is left to an HDR or a Gaussian splat. It is one of
 ![The parameter editor](https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/greenhouse-lab/editor.webp)
 *The viewer and its parameter panel, down a path between two rows*
 
+https://github.com/user-attachments/assets/e87ad804-8cd8-48a5-b82d-7fee235805e6
+
 > 🌐 Try the parameter editor in your browser:
 > [azazdeaz.github.io/misina-lab/playground/greenhouse](https://azazdeaz.github.io/misina-lab/playground/greenhouse/),
 > a bit slower, and it needs WebGPU.
