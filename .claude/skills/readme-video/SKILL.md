@@ -20,8 +20,9 @@ storyboard named after the generator's crate:
   `docs/video/greenhouse-lab.json`: the bare rows grown from planting through
   a season, a new seed, more rows further apart, the outer row's crop wall
   stripped higher and picked higher, one leaf in wireframe at a finer mesh
-  and other shapes, a truss given more fruit, plum-shaped, ribbed and
-  yellow, and a pull back to the whole house.
+  and other shapes, the open flowers at the next plant's head swinging their
+  petals forward, a truss given more fruit, hung apart down a longer rachis,
+  plum-shaped and yellow, and a pull back to the whole house.
 
 Each is one command away:
 
@@ -80,7 +81,7 @@ A video is right when:
   plan takes 10. `docs/video/encode.sh`, which the Isaac Sim demos' videos go
   through too, encodes at a constant quality, so the size follows the length
   and how busy the picture is: at 1080p the vineyard's 70 s are about 39 MB,
-  the greenhouse's 68 s about 59.
+  the greenhouse's 76 s about 67.
   A video over the limit is cut shorter, not encoded worse.
 
 ## Change what it shows
@@ -140,6 +141,9 @@ last step's `wait` is the closing hold: the video ends when it runs out.
   beyond the floor's edge on −y is clear of the crop at any height, and looks
   at the outer wall with the rest of the house behind it. A `layout` edit
   moves the outer row, so frame close-ups for the layout they are shot in.
+  A small organ, such as a flower, is framed from outside the leaves' reach
+  on a long lens, a small `fov`. Between two close-ups at different heights,
+  back out past the leaves first: one move between them dips into the wall.
 - **Keep the camera out of the plants.** Beside a vineyard row it has to be
   above the canopy, about 2 m. To get down into an alley, line up over it
   first, then change only `pitch` and `radius`, which keeps the camera in the
