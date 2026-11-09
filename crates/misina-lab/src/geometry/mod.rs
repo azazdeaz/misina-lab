@@ -8,9 +8,15 @@
 //! - [`shapes`] — outlines built in code, in the frame a ring is placed in.
 //! - [`scatter`] — points spread over a band of ground, for everything placed
 //!   within a zone rather than along a line.
+//! - [`bending`] — where a rod settles under the weight it carries, for a
+//!   stalk drawn bent by its load.
+//! - [`packing`] — where a cluster of fruit settles on its stalks, packed
+//!   until none lies in another.
 
+pub mod bending;
 pub mod mesh;
 pub mod outline;
+pub mod packing;
 pub mod scatter;
 pub mod shapes;
 pub mod strand;

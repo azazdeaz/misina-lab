@@ -141,7 +141,7 @@ class StemCfg:
     """
     trusses: int = 9
     """Trusses on a stem in full production, from the lowest still on it up to the head.
-    At a truss a week, also the weeks from a truss flowering at the head to its
+    At a truss a week, also the weeks from a truss showing at the head to its
     picking.
     """
     development_spread: float = 0.2
@@ -273,8 +273,10 @@ class TrussCfg:
     hung along it.
 
     The peduncle numbers default to the means measured on medium trusses in a
-    high-wire house, and every truss draws its own about them. A medium truss tomato
-    is about 6 fruit of 60 mm; a cherry truss about 15 of 25 mm, branched.
+    high-wire house, and every truss draws its own about them; the rachis's internode
+    to what those trusses' measured lengths leave for it (est.), and the pedicel to a
+    genebank's measurements. A medium truss tomato is about 6 fruit of 60 mm; a
+    cherry truss about 15 of 25 mm, branched.
     """
 
     fruits: int = 6
@@ -295,19 +297,41 @@ class TrussCfg:
     """Angle between the stem and the peduncle where it leaves, in degrees: 90 leaves
     level, less leaves rising.
     """
+    stiffness: float = 70.0
+    """How stiff the peduncle and rachis are, as a Young's modulus in MPa. A truss grows
+    standing out from the stem, and its fruit's weight bends it down against this:
+    one in flower barely bends, and one sags further as its fruit swell. Below green
+    wood's, as a stalk under a load for weeks gives way to it more than it would at
+    once.
+    """
+    rachis_internode: float = 0.014
+    """Length of the rachis between two pedicels under grown fruit, in meters: short, a
+    truss's fruit crowd into a bunch, and long, they hang apart down the rachis.
+    """
+    pedicel_length: float = 0.031
+    """Length of a pedicel under a grown fruit, from the rachis to the fruit's calyx, in
+    meters. A small-fruited truss's are about as long as a large-fruited one's, so
+    its fruit hang further out for their size.
+    """
     pedicel_angle: float = 45.0
     """How far under the rachis its pedicels leave it, in degrees below its sides: 0
     leaves them level out to the sides, and more hangs the fruit further under it. At
     45 the two ranks, down alternate flanks, meet at a right angle, as they do on a
-    tomato truss; past 50, neighbouring fruit hang into each other.
+    tomato truss.
     """
     jointed: bool = True
     """Whether a pedicel has a knuckle, the joint a fruit breaks off at, as most truss
     varieties do.
     """
+    stalks_in_flower: float = 0.35
+    """How long a pedicel, and the internode of rachis leading to it, are when its
+    flower opens, as a share of their length under the grown fruit: about a third on
+    a large-fruited truss, whose stalks grow to about three times their length in
+    flower, and nearer 1 on a small-fruited one, whose barely grow on.
+    """
     missing_fruit: float = 0.05
     """Chance that a fruit is missing from its pedicel."""
-    variations: int = 16
+    variations: int = 24
     """How many distinct truss meshes the scene may hold. A budget, not a count: the
     trusses are clustered and this is how many representatives the clustering may
     keep.
@@ -316,19 +340,23 @@ class TrussCfg:
 
 @configclass
 class FruitCfg:
-    """The fruit: their shape, how ripe the crop is, and what colour ripe is.
+    """The fruit and the flowers they set from: their shape, how ripe the crop is, and
+    what colour ripe is.
 
-    Every fruit has a stage: set, expanding and mature green while it grows, then
-    breaker, turning, pink, light red and red as it colours from its blossom end up.
-    A truss sets its fruit near the head, and they reach full size five trusses down.
-    A stem colours from its lowest truss up and a truss from its base to its tip, so
-    in full production the lowest `ripe_trusses` trusses on a stem are colouring and
-    the ones above them still green; a young crop's trusses are all green until the
-    first are old enough. A truss is due once its tip fruit is turning. Every stem
-    runs a little ahead of or behind the rest.
+    Every fruit has a stage: bud and flower before it sets, set, expanding and mature
+    green while it grows, then breaker, turning, pink, light red and red as it
+    colours from its blossom end up. A truss shows at the head in bud, opens its
+    flowers from its base to its tip from about 15 cm below the head, sets them over
+    the week after, and they reach full size about five trusses further down. A stem
+    colours from its lowest truss up and a truss from its base to its tip, so in full
+    production the lowest `ripe_trusses` trusses on a stem are colouring and the ones
+    above them still green; a young crop's trusses are all green until the first are
+    old enough. A truss is due once its tip fruit is turning. Every stem runs a
+    little ahead of or behind the rest.
 
     Every fruit draws its own lobe count, its five or six sepals and how each curls,
-    and a slight lean, within the ranges the research notes give.
+    and a slight lean, within the ranges the research notes give; its flower has a
+    petal between each two sepals.
     """
 
     ripe_trusses: float = 1.0
@@ -350,10 +378,21 @@ class FruitCfg:
     """Depth of the grooves between a fruit's lobes, as a fraction of its radius: 0 is
     smooth, and a beefsteak's are about 0.15.
     """
-    variations: int = 24
-    """How many distinct fruit meshes the scene may hold, by size, shape and stage. A
-    budget, not a count: the fruit are clustered and this is how many representatives
-    the clustering may keep.
+    petal_length: float = 0.011
+    """Length of a flower's petals, in meters: an open tomato flower is under 25 mm
+    across, and a cherry tomato's smaller.
+    """
+    petal_reflex: float = 125.0
+    """How far an open flower's petals sweep back, in degrees off pointing straight
+    ahead: 90 opens it flat, and a tomato's sweep back past that toward its pedicel.
+    """
+    variations: int = 32
+    """How many distinct fruit and flower meshes the scene may hold, by size, shape and
+    stage. A budget, not a count: the fruit are clustered and this is how many
+    representatives the clustering may keep, though a crop in flower keeps one for
+    its flowers and one for its fruit at least. A fruit is drawn at its
+    representative's size, so on a small budget a truss's fruit, packed to touch at
+    their own sizes, are drawn into each other.
     """
 
 
