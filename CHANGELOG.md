@@ -29,7 +29,8 @@ Scene document format 11.
   bending at its knuckle, until none lies in another, in the stems or on
   another's pedicel; each fruit turns its top toward its knuckle, so the
   last, pushed out past the rachis's end, faces back along it. A flower is
-  packed as far as its petals reach. A truss's stalks are now as long as a
+  packed as far as its petals reach, and an elongated fruit as far as its
+  ends, as a capsule. A truss's stalks are now as long as a
   measured truss's, whatever the size of its fruit: a ripe medium truss's
   fruit hang in a bunch off a rachis under 9 cm long, where it was up to
   22 cm, and a cherry truss's hang apart on pedicels longer than they are
@@ -37,8 +38,10 @@ Scene document format 11.
   `TrussCfg.pedicel_length`, 31 mm by default, and
   `TrussCfg.rachis_internode`, the rachis between two pedicels, 14 mm.
 - **misina-lab**: `geometry::packing::pack` moves a cluster of `Bob`s,
-  balls hung on stalks of two straight runs, apart until none lies in
+  balls hung on stalks of two straight runs, each drawn out into a capsule
+  the way it hangs as far as its `drawn` says, apart until none lies in
   another, in a stem or on another's stalk, every stalk keeping its length.
+  `packing::nearest` finds the points of two segments nearest each other.
 - **greenhouse-lab**: A truss's stalks grow with its flowers. Each pedicel,
   and the internode of rachis leading to it, is a third of its full length
   when its flower opens, shorter in bud, and grows to full length over the

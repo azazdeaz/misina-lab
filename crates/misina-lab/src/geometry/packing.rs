@@ -4,7 +4,8 @@
 //!
 //! A fruit here is a ball on a stalk of two straight runs, from its node to
 //! a joint and on to the stalk's end, where the ball hangs from it the way
-//! that run heads. Laid out where each would hang alone, a crowded cluster's
+//! that run heads, drawn out that way into a capsule if the fruit is
+//! elongated. Laid out where each would hang alone, a crowded cluster's
 //! fruit run into each other; [`pack`] moves them apart from there, the
 //! joints swinging about their nodes and the balls about their joints, every
 //! run keeping its length. Each fruit ends up touching its neighbours
@@ -31,6 +32,9 @@ pub struct Bob {
     /// The ball's radius, and how far past the stalk's end its middle is.
     pub radius: f32,
     pub inset: f32,
+    /// How far the ball is drawn out either way from its middle, the way it
+    /// hangs, into a capsule: 0 for a ball.
+    pub drawn: f32,
     /// The stalk's radius, which every other ball keeps clear of.
     pub stalk: f32,
 }
@@ -39,6 +43,13 @@ impl Bob {
     /// Where the ball's middle is.
     fn middle(&self) -> Vec3 {
         self.end + (self.end - self.joint).normalize_or(Vec3::NEG_Z) * self.inset
+    }
+
+    /// The segment the ball is drawn out along, from its top to its bottom.
+    #[cfg(test)]
+    fn spine(&self) -> (Vec3, Vec3) {
+        let along = (self.end - self.joint).normalize_or(Vec3::NEG_Z) * self.drawn;
+        (self.middle() - along, self.middle() + along)
     }
 }
 
@@ -73,9 +84,16 @@ pub fn pack(bobs: &mut [Bob], stems: &[(Vec3, Vec3, f32)]) {
             joints[i] = joints[i].lerp(bob.joint, SPRING * fade);
             middles[i] = middles[i].lerp(joints[i] + hangs[i], HANG * fade);
         }
+        // How far each ball's spine runs either way of its middle, the way it
+        // hangs as the pushes start.
+        let along: Vec<Vec3> = (laid.iter().enumerate())
+            .map(|(i, bob)| (middles[i] - joints[i]).normalize_or(Vec3::NEG_Z) * bob.drawn)
+            .collect();
+        let spines = |i: usize, middle: Vec3| (middle - along[i], middle + along[i]);
         for i in 0..laid.len() {
             for k in i + 1..laid.len() {
-                let off = middles[k] - middles[i];
+                let (on_i, on_k) = nearest(spines(i, middles[i]), spines(k, middles[k]));
+                let off = on_k - on_i;
                 let apart = laid[i].radius + laid[k].radius;
                 if off.length_squared() < apart * apart {
                     let push = off.normalize_or(Vec3::Z) * (apart - off.length()) / 2.0;
@@ -95,10 +113,10 @@ pub fn pack(bobs: &mut [Bob], stems: &[(Vec3, Vec3, f32)]) {
                 .filter(|(k, _)| *k != i)
                 .flat_map(|(_, runs)| *runs);
             for (a, b, radius) in stems.iter().copied().chain(others) {
-                let near = closest(a, b, *middle);
-                let clear = laid[i].radius + radius;
-                if near.distance_squared(*middle) < clear * clear {
-                    *middle = near + (*middle - near).normalize_or(Vec3::NEG_Z) * clear;
+                let (near, on) = nearest((a, b), spines(i, *middle));
+                let (off, clear) = (on - near, laid[i].radius + radius);
+                if off.length_squared() < clear * clear {
+                    *middle += off.normalize_or(Vec3::NEG_Z) * clear - off;
                 }
             }
         }
@@ -123,7 +141,26 @@ pub fn pack(bobs: &mut [Bob], stems: &[(Vec3, Vec3, f32)]) {
 /// The point of the segment from `a` to `b` nearest `p`.
 fn closest(a: Vec3, b: Vec3, p: Vec3) -> Vec3 {
     let ab = b - a;
-    a + ab * ((p - a).dot(ab) / ab.length_squared().max(f32::EPSILON)).clamp(0.0, 1.0)
+    a + ab * ((p - a).dot(ab) / ab.length_squared().max(f32::MIN_POSITIVE)).clamp(0.0, 1.0)
+}
+
+/// The points of the segments `a` and `b` nearest each other, either of
+/// which may be a point.
+///
+/// Where along `a` the lines through the two come nearest, held to `a`, or
+/// its start if they run parallel; the point of `b` nearest that, and the
+/// point of `a` nearest that one in turn.
+pub fn nearest(a: (Vec3, Vec3), b: (Vec3, Vec3)) -> (Vec3, Vec3) {
+    let (da, db, off) = (a.1 - a.0, b.1 - b.0, a.0 - b.0);
+    let (aa, bb, ab) = (da.length_squared(), db.length_squared(), da.dot(db));
+    let det = aa * bb - ab * ab;
+    let s = if det > 1e-6 * aa * bb {
+        ((ab * db.dot(off) - bb * da.dot(off)) / det).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let on_b = closest(b.0, b.1, a.0 + da * s);
+    (closest(a.0, a.1, on_b), on_b)
 }
 
 #[cfg(test)]
@@ -153,6 +190,7 @@ mod tests {
                     end: joint + Vec3::NEG_Z * 0.008,
                     radius: 0.015,
                     inset: 0.011,
+                    drawn: 0.0,
                     stalk: 0.001,
                 }
             })
@@ -162,8 +200,9 @@ mod tests {
         (bobs, vec![level, plumb])
     }
 
-    /// A ball laid out on the stalk of another, its middle 2 mm off it and
-    /// clear of the other's ball.
+    /// A ball drawn out 4 mm either way, laid out across the stalk of
+    /// another: its middle 2 mm off the stalk, the segment it is drawn out
+    /// along through it, and clear of the other's ball.
     fn pierced() -> Scene {
         let under = Bob {
             node: Vec3::ZERO,
@@ -171,6 +210,7 @@ mod tests {
             end: Vec3::NEG_Z * 0.04,
             radius: 0.005,
             inset: 0.004,
+            drawn: 0.0,
             stalk: 0.002,
         };
         let across = Bob {
@@ -179,38 +219,65 @@ mod tests {
             end: Vec3::new(0.0055, 0.0, -0.0181),
             radius: 0.006,
             inset: 0.004,
+            drawn: 0.004,
             stalk: 0.002,
         };
         (vec![under, across], Vec::new())
     }
 
+    /// Two balls 12 mm across, drawn out 10 mm either way, laid out leaning
+    /// into each other off nodes 40 mm apart: their middles lie clear of
+    /// each other, and their bottoms 2 mm apart.
+    fn leaning() -> Scene {
+        let bobs = [-1.0, 1.0]
+            .map(|side: f32| {
+                let joint = Vec3::new(-0.02 * side, 0.0, -0.01);
+                Bob {
+                    node: Vec3::new(-0.02 * side, 0.0, 0.0),
+                    joint,
+                    end: joint + Vec3::new(0.006 * side, 0.0, -0.008),
+                    radius: 0.006,
+                    inset: 0.012,
+                    drawn: 0.01,
+                    stalk: 0.001,
+                }
+            })
+            .to_vec();
+        (bobs, Vec::new())
+    }
+
     /// Packed, no ball lies more than a millimeter into another, a stem or
     /// another's stalk, and every stalk keeps its runs' lengths: a crowded
-    /// cluster among two stems, and a ball laid out across another's stalk.
-    /// A ball with room stays as it was laid out.
+    /// cluster among two stems, a drawn-out ball laid out across another's
+    /// stalk, and two drawn out and leaning into each other. A ball with
+    /// room stays as it was laid out.
     #[test]
     fn packing_parts_crowded_balls_on_stalks_their_length() {
         const SLACK: f32 = 0.001;
-        for (scene, (laid, stems)) in [crowded(), pierced()].into_iter().enumerate() {
+        let apart = |a, b| {
+            let (on_a, on_b) = nearest(a, b);
+            on_a.distance(on_b)
+        };
+        for (scene, (laid, stems)) in [crowded(), pierced(), leaning()].into_iter().enumerate() {
             let mut bobs = laid.clone();
             pack(&mut bobs, &stems);
             for (i, (bob, was)) in bobs.iter().zip(&laid).enumerate() {
-                let middle = bob.middle();
+                let spine = bob.spine();
                 for (a, b, radius) in &stems {
-                    let near = closest(*a, *b, middle).distance(middle);
+                    let near = apart((*a, *b), spine);
                     assert!(
                         near > bob.radius + radius - SLACK,
                         "scene {scene}, {i}: {near} m off a stem"
                     );
                 }
                 for (k, other) in bobs.iter().enumerate().filter(|(k, _)| *k != i) {
-                    let apart = middle.distance(other.middle());
+                    let near = apart(spine, other.spine());
                     assert!(
-                        apart > bob.radius + other.radius - SLACK,
-                        "scene {scene}, {i}, {k}: {apart} m apart"
+                        near > bob.radius + other.radius - SLACK,
+                        "scene {scene}, {i}, {k}: {near} m apart"
                     );
-                    for (a, b) in [(other.node, other.joint), (other.joint, other.end)] {
-                        let near = closest(a, b, middle).distance(middle);
+                    for run in [(other.node, other.joint), (other.joint, other.end)] {
+                        let near = apart(run, spine);
                         assert!(
                             near > bob.radius + other.stalk - SLACK,
                             "scene {scene}, {i}: {near} m off {k}'s stalk"
@@ -230,5 +297,22 @@ mod tests {
         let mut packed = [lone];
         pack(&mut packed, &[]);
         assert!(packed[0].end.distance(lone.end) < 1e-6, "{packed:?}");
+    }
+
+    /// The segment from the origin 4 m along X comes nearest a skew segment
+    /// a meter above it where the two cross, and nearest a point a meter off
+    /// it beside that point.
+    #[test]
+    fn two_segments_come_nearest_where_their_common_perpendicular_runs() {
+        let x = (Vec3::ZERO, Vec3::X * 4.0);
+        let skew = (Vec3::new(0.0, 1.0, 1.0), Vec3::new(2.0, -1.0, 1.0));
+        let point = (Vec3::new(1.0, 1.0, 0.0), Vec3::new(1.0, 1.0, 0.0));
+        for (other, there) in [(skew, Vec3::new(1.0, 0.0, 1.0)), (point, point.0)] {
+            let (on_x, on_other) = nearest(x, other);
+            assert!(
+                on_x.distance(Vec3::X) < 1e-6 && on_other.distance(there) < 1e-6,
+                "{on_x}, {on_other}"
+            );
+        }
     }
 }
