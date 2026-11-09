@@ -21,8 +21,8 @@ storyboard named after the generator's crate:
   a season, a new seed, more rows further apart, the outer row's crop wall
   stripped higher and picked higher, one leaf in wireframe at a finer mesh
   and other shapes, the open flowers at the next plant's head swinging their
-  petals forward, a truss given more fruit, hung apart down a longer rachis,
-  plum-shaped and yellow, and a pull back to the whole house.
+  petals forward, a truss given more and smaller fruit, hung apart down a
+  longer rachis, plum-shaped and yellow, and a pull back to the whole house.
 
 Each is one command away:
 
@@ -81,7 +81,7 @@ A video is right when:
   plan takes 10. `docs/video/encode.sh`, which the Isaac Sim demos' videos go
   through too, encodes at a constant quality, so the size follows the length
   and how busy the picture is: at 1080p the vineyard's 70 s are about 39 MB,
-  the greenhouse's 76 s about 67.
+  the greenhouse's 78 s about 74.
   A video over the limit is cut shorter, not encoded worse.
 
 ## Change what it shows
@@ -94,7 +94,10 @@ give it the same share of the frame),
 [crates/misina-lab/src/tour.rs](../../../crates/misina-lab/src/tour.rs); read
 those first. In short: everything in a step starts together and takes `secs`,
 and the next step starts `wait` later, `secs` if left out — so `"wait": 0` runs
-two steps at once, which is how the camera keeps moving under panel edits. The
+two steps at once, which is how the camera keeps moving under panel edits. A
+camera move that starts while another is still under way blends out of it
+without stopping, so overlapping two moves rounds the corner between them; one
+that starts after the last has ended starts from rest. The
 last step's `wait` is the closing hold: the video ends when it runs out.
 `note` is a comment.
 
@@ -144,6 +147,9 @@ last step's `wait` is the closing hold: the video ends when it runs out.
   A small organ, such as a flower, is framed from outside the leaves' reach
   on a long lens, a small `fov`. Between two close-ups at different heights,
   back out past the leaves first: one move between them dips into the wall.
+  A truss longer than a week's growth up the stem hangs into the truss
+  below, as 12 fruit of 6 cm down a long rachis do: more fruit want smaller
+  ones or a shorter rachis.
 - **Keep the camera out of the plants.** Beside a vineyard row it has to be
   above the canopy, about 2 m. To get down into an alley, line up over it
   first, then change only `pitch` and `radius`, which keeps the camera in the
