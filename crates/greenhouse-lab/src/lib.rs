@@ -64,12 +64,14 @@ mod tests {
         );
     }
 
-    /// The docs' pictures of the viewer are storyboards, which a parameter's
-    /// rename would otherwise leave to the next render to find.
+    /// The docs' pictures and the README video of the viewer are storyboards,
+    /// which a parameter's rename would otherwise leave to the next render to
+    /// find.
     #[test]
     fn the_shots_are_valid() {
-        for shot in std::fs::read_dir(root().join("../../docs/shots/greenhouse-lab")).unwrap() {
-            let shot = shot.unwrap().path();
+        let shots = std::fs::read_dir(root().join("../../docs/shots/greenhouse-lab")).unwrap();
+        let video = root().join("../../docs/video/greenhouse-lab.json");
+        for shot in shots.map(|shot| shot.unwrap().path()).chain([video]) {
             misina_lab::tour::load::<elements::GreenhouseParams>(&shot)
                 .unwrap_or_else(|err| panic!("{}: {err:#}", shot.display()));
         }

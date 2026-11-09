@@ -72,7 +72,7 @@ mod tests {
     /// a rename would otherwise leave to the next recording to find.
     #[test]
     fn the_readme_tour_is_valid() {
-        let tour = root().join("../../docs/video/tour.json");
+        let tour = root().join("../../docs/video/vinery-lab.json");
         misina_lab::tour::load::<elements::VineyardParams>(&tour).unwrap();
     }
 

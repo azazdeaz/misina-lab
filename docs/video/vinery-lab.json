@@ -1,0 +1,65 @@
+{
+  "size": [1920, 1080],
+  "scale": 1.875,
+  "warmup": 5,
+  "start": {
+    "note": "Over the whole parcel just after budbreak, the shoots a hand long, the panel on its Scene section.",
+    "set": {"shoot.length": 0.1},
+    "camera": {"focus": [0, 0, 0], "yaw": 10, "pitch": 30, "radius": 56}
+  },
+  "steps": [
+    {"note": "A slow orbit under the season and layout edits.",
+     "camera": {"yaw": 40, "radius": 48}, "secs": 18, "wait": 1},
+
+    {"show": "shoot.length", "secs": 0.6, "wait": 0.8},
+    {"note": "The season's shoots grow up through the catch wires.",
+     "set": {"shoot.length": 0.75}, "secs": 4, "wait": 4.6},
+
+    {"show": "terrain.max_inclination", "secs": 0.6, "wait": 0.8},
+    {"set": {"terrain.max_inclination": 32}, "secs": 2.5, "wait": 3},
+
+    {"show": "parcel.orientation", "secs": 0.6, "wait": 0.8},
+    {"set": {"parcel.orientation": 25}, "secs": 2.5, "wait": 3},
+
+    {"show": "parcel.row_spacing", "secs": 0.6, "wait": 0.8},
+    {"set": {"parcel.row_spacing": 1.8}, "secs": 2, "wait": 2.8},
+
+    {"note": "Down to the outer row from outside it, uphill. With the rows at 25 degrees and 1.8 m apart, Row_000 is the outermost, 12 m long in the parcel's corner around (28.6, -16.5); yaw 25 looks square across it, and nothing is planted on the camera's side.",
+     "camera": {"focus": [28.57, -16.47, 0.8], "yaw": 15, "pitch": 14, "radius": 5.5}, "secs": 5, "wait": 5.3},
+    {"show": "vine.trunk_height", "secs": 0.6, "wait": 0.8},
+    {"note": "Trained low, as in a cool climate: the posts come down with the heads.",
+     "set": {"vine.trunk_height": 0.5, "parcel.trellis_height": 1.3}, "secs": 2, "wait": 2.6},
+    {"show": "shoot.stray", "secs": 0.6, "wait": 0.8},
+    {"note": "Stray shoots lean out of the canopy toward the camera, up to 0.9 m out of the row.",
+     "set": {"shoot.stray": 0.15}, "secs": 1.6, "wait": 2.2},
+
+    {"note": "In on Row_000/Vine_004/Shoot_04_0/Leaf_02, a blade on the row's outer face 0.7 m up, facing out and up; the camera is about 0.4 m outside it, where the canopy reaches 0.3 m out.",
+     "camera": {"focus": [27.84, -17.05, 0.7], "yaw": 5, "pitch": 45, "radius": 0.55, "fov": 40}, "secs": 4.5, "wait": 4.8},
+    {"toggle": {"Wireframe": true}, "wait": 1.2},
+    {"show": "leaf.detail", "secs": 0.6, "wait": 0.8},
+    {"set": {"leaf.detail": 400}, "secs": 2, "wait": 2.6},
+    {"show": "leaf.lobing", "secs": 0.6, "wait": 0.8},
+    {"note": "Cut deep into five lobes.",
+     "set": {"leaf.lobing": 1}, "secs": 2, "wait": 2.6},
+    {"show": "leaf.fold", "secs": 0.6, "wait": 0.8},
+    {"set": {"leaf.fold": 0.6}, "secs": 2, "wait": 2.8},
+
+    {"note": "Down and back to the trunk of Row_000/Vine_004, shaded on the way.",
+     "camera": {"focus": [28.03, -16.72, 0.3], "yaw": 20, "pitch": 18, "radius": 1.5, "fov": 45},
+     "toggle": {"Wireframe": false}, "secs": 4, "wait": 4.3},
+    {"show": "vine.trunk_radius", "secs": 0.6, "wait": 0.8},
+    {"note": "An old vine: a thicker trunk, its bark ridged deeper.",
+     "set": {"vine.trunk_radius": 0.06, "vine.roughness": 0.3}, "secs": 2, "wait": 2.6},
+    {"show": "vine.arms", "secs": 0.6, "wait": 0.8},
+    {"note": "One cordon to a vine, reaching the whole way to the next.",
+     "set": {"vine.arms": 1}, "secs": 1, "wait": 2.4},
+    {"show": "shoot.dormant", "secs": 0.6, "wait": 0.8},
+    {"note": "Winter: the canopy drops to last season's bare canes.",
+     "set": {"shoot.dormant": true}, "wait": 2.6},
+
+    {"note": "Up and back from the row first, on its outer side, so the move over the parcel starts above every canopy.",
+     "camera": {"pitch": 45, "radius": 10}, "secs": 2.5, "wait": 2.5},
+    {"note": "Out to the whole winter vineyard, centred beside the panel.",
+     "camera": {"focus": [0, 0, 0], "yaw": 20, "pitch": 30, "radius": 58}, "secs": 6, "wait": 7.5}
+  ]
+}

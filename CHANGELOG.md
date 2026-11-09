@@ -198,7 +198,7 @@ Scene document format 11.
   `camera`, and copies it: a view found by hand, ready to paste into a
   storyboard.
 - **misina-lab**: A storyboard's camera takes `fov`, the vertical field of
-  view. `{PACKAGE}_SHOT` saves the window to an image once a storyboard is
+  view. `{PACKAGE}_SHOT` saves the frame to an image once a storyboard is
   over, so a storyboard with no steps is a still of its opening shot.
 - **misina-lab**: `misina_lab.isaaclab.shots` renders a still of a generated
   scene in Isaac Sim from a shot file, its camera a storyboard's, or opens
@@ -235,9 +235,11 @@ Scene document format 11.
 
 ### Changed
 
-- **misina-lab**: A storyboard that saves a still or records a video plays in
-  a window that is never shown, so `{PACKAGE}_SHOT` and `{PACKAGE}_RECORD`
-  open nothing on the desktop. A preview still opens its window.
+- **misina-lab**: A storyboard that saves a still or records a video opens no
+  window and needs no display: the viewer draws the scene and the panel into
+  an image of the storyboard's size, so `{PACKAGE}_SHOT` and
+  `{PACKAGE}_RECORD` run on a machine with no desktop. A preview still opens
+  its window.
 - **greenhouse-lab**: A truss's rachis ends in its last fruit: its last
   internode is that fruit's pedicel out to the knuckle, where the rachis ran
   on past the fruit to a stump. Every other pedicel leaves the rachis's
@@ -275,6 +277,18 @@ Scene document format 11.
   leaves its edges clean where they were ragged and flickering. The pruning
   video's close-ups are filmed at f/96, as at f/48 the blades frayed against
   the blurred background.
+- **misina-lab**: A storyboard's slide rebuilds the scene at every frame of
+  it, where it reached the scene 150 ms after the slider stopped, as a drag
+  does: a recorded video shows the scene following the slider.
+- **misina-lab**: A storyboard's camera move that starts while another is
+  still under way blends out of it and keeps the camera's speed, where it
+  stopped the camera dead and started it again from rest.
+- **misina-lab**: The viewer's footer keeps each figure on one line: a window
+  too narrow for them all moves whole figures to a second row, where each
+  figure broke over two lines as its number grew.
+- **misina-lab**: The viewer's `{PACKAGE}_RECORD` video is near-lossless, at
+  CRF 10 where it was 20, as the Isaac Sim films' are: a video encoded from
+  it for upload loses detail only then. A file is about three times bigger.
 - **misina-lab**: The viewer's **Copy Isaac Lab cfg** button spans the
   panel's width and is taller than a control row.
 - **greenhouse-lab**: Lowered stems lie in a loose bundle along each side
@@ -387,6 +401,12 @@ Scene document format 11.
 
 ### Fixed
 
+- **misina-lab**: A `{PACKAGE}_RECORD` video keeps every frame in its place.
+  A frame whose readback landed more than 8 frames late, as one does while a
+  slide rebuilds the scene, was skipped, and written once it landed in the
+  place of a frame up to two seconds later: the camera jumped back for a
+  frame. Frames now wait for a late one up to 2 GiB, about 250 frames at
+  1080p, and one skipped is never written, and logged.
 - **greenhouse-lab** (**cfg**): `LayoutCfg.plant_spacing` is how far apart
   the plants stand, exactly. A slab is cut to the whole number of plants
   that brings it nearest 1.2 m, where every slab was 1.2 m and took the

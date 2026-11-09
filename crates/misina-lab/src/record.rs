@@ -1,5 +1,5 @@
-//! Records the viewer window into a video file, one captured frame per video
-//! frame.
+//! Records what the viewer's camera draws into a video file, one captured
+//! frame per video frame.
 //!
 //! What it is for: recording a demo of the params panel. Committing a slider
 //! rebuilds the scene and stalls the window for tens to hundreds of
@@ -13,7 +13,7 @@
 //!
 //! The variable is `{PACKAGE}_RECORD`, so that is `boxlab`'s. It covers the
 //! whole run: recording starts with the app and the file is finished when the
-//! window closes. `{PACKAGE}_RECORD_FPS` sets the rate (default [`FPS`]);
+//! app exits. `{PACKAGE}_RECORD_FPS` sets the rate (default [`FPS`]);
 //! frames between two due ones are not captured, so everything but a stall
 //! plays back at the speed it happened.
 //!
@@ -30,6 +30,7 @@ use std::process::{Child, Command, Stdio};
 // Named over the prelude's `ContextExt`, Bevy's own `context`, which would
 // make every call ambiguous.
 use anyhow::{Context as ContextExt, bail, ensure};
+use bevy::camera::RenderTarget;
 use bevy::prelude::*;
 use bevy::render::render_resource::TextureFormat;
 use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured};
@@ -40,9 +41,11 @@ use crate::Generator;
 /// demo, and half the readback traffic of 60.
 pub const FPS: f64 = 30.0;
 
-/// How many out-of-order frames may wait before the one they are waiting for
-/// is given up on. See [`ready`].
-const REORDER_LIMIT: usize = 8;
+/// How much the frames waiting for a late one may hold before it is given up
+/// on: about 250 frames at 1080p. Readbacks finish on Bevy's async compute
+/// pool, behind whatever else runs there, and while a slide rebuilds the scene
+/// every frame one can land two seconds of video late. See [`ready`].
+const REORDER_BYTES: usize = 2 << 30;
 
 /// Records to the file `{PACKAGE}_RECORD` names, at `{PACKAGE}_RECORD_FPS`.
 pub fn plugin<G: Generator>(app: &mut App) {
@@ -108,6 +111,11 @@ impl Recorder {
 
     /// Hands one frame to `ffmpeg`, or gives up on the recording.
     fn feed(&mut self, image: &mut Image) {
+        // Captures still in flight when it stopped would start a new ffmpeg,
+        // overwriting the file.
+        if self.stopped {
+            return;
+        }
         if let Err(err) = self.try_feed(image) {
             warn!("recording stopped: {err:#}");
             self.stopped = true;
@@ -131,7 +139,7 @@ impl Recorder {
         let encoder = self.encoder.as_mut().expect("started just above");
         ensure!(
             encoder.size == size,
-            "the window resized to {size} mid-recording, and ffmpeg takes \
+            "the frame resized to {size} mid-recording, and ffmpeg takes \
              the {} it was started with",
             encoder.size,
         );
@@ -139,8 +147,14 @@ impl Recorder {
     }
 }
 
-/// Spawns one screenshot of the window whenever the next frame is due.
-fn capture(mut commands: Commands, time: Res<Time<Real>>, mut recorder: ResMut<Recorder>) {
+/// Spawns one screenshot of what the camera draws into, the window or a
+/// [`tour`](crate::tour)'s image, whenever the next frame is due.
+fn capture(
+    mut commands: Commands,
+    time: Res<Time<Real>>,
+    mut recorder: ResMut<Recorder>,
+    target: Single<&RenderTarget, With<Camera3d>>,
+) {
     if recorder.stopped {
         return;
     }
@@ -151,7 +165,7 @@ fn capture(mut commands: Commands, time: Res<Time<Real>>, mut recorder: ResMut<R
     // A period from now rather than from when the frame was due: a rebuild
     // that ran long must not be followed by a burst of catch-up captures.
     recorder.due = now + 1.0 / recorder.fps;
-    commands.spawn((Screenshot::primary_window(), Frame(recorder.spawned)));
+    commands.spawn((Screenshot((*target).clone()), Frame(recorder.spawned)));
     recorder.spawned += 1;
 }
 
@@ -164,8 +178,9 @@ fn encode(mut captured: On<ScreenshotCaptured>, frames: Query<&Frame>, recorder:
     let recorder = recorder.into_inner();
     // Moved out rather than cloned: a frame is several megabytes.
     let image = core::mem::take(&mut captured.image);
+    let limit = REORDER_BYTES / image.data.as_ref().map_or(1, Vec::len).max(1);
     recorder.early.insert(frame.0, image);
-    for mut image in ready(&mut recorder.early, &mut recorder.next) {
+    for mut image in ready(&mut recorder.early, &mut recorder.next, limit) {
         recorder.feed(&mut image);
     }
 }
@@ -173,14 +188,17 @@ fn encode(mut captured: On<ScreenshotCaptured>, frames: Query<&Frame>, recorder:
 /// Takes the frames that can be written now off the reorder buffer.
 ///
 /// Readbacks finish on the task pool, so two captures can land swapped; a
-/// frame waits in `early` until the ones in front of it are in. Past
-/// [`REORDER_LIMIT`] waiting frames the missing one is given up on — a capture
-/// the renderer never completes would otherwise hold every later frame in
-/// memory for the rest of the run.
-fn ready<T>(early: &mut BTreeMap<u64, T>, next: &mut u64) -> Vec<T> {
-    if early.len() > REORDER_LIMIT
+/// frame waits in `early` until the ones in front of it are in. Past `limit`
+/// waiting frames the missing one is given up on — a capture the renderer
+/// never completes would otherwise hold every later frame in memory for the
+/// rest of the run — and dropped if it lands after all, rather than written
+/// where a later frame belongs.
+fn ready<T>(early: &mut BTreeMap<u64, T>, next: &mut u64, limit: usize) -> Vec<T> {
+    early.retain(|frame, _| *frame >= *next);
+    if early.len() > limit
         && let Some(oldest) = early.keys().next()
     {
+        warn!("recording: skipped frames {next}..{oldest}, never captured");
         *next = *oldest;
     }
     let mut frames = Vec::new();
@@ -205,7 +223,7 @@ impl Encoder {
     /// header, so `ffmpeg` has to be told the size and channel order up front,
     /// and a capture is what knows them.
     fn spawn(path: &Path, fps: f64, size: UVec2, format: TextureFormat) -> anyhow::Result<Self> {
-        // The bytes are the swapchain's, already gamma-encoded for the
+        // The bytes are an sRGB target's, already gamma-encoded for the
         // display, so the pixel format only has to name the channel order.
         let pixel_format = match format {
             TextureFormat::Bgra8UnormSrgb | TextureFormat::Bgra8Unorm => "bgra",
@@ -222,7 +240,9 @@ impl Encoder {
             .args(["-framerate", &fps.to_string(), "-i", "-"])
             // yuv420p is what plays everywhere, and it needs even dimensions.
             .args(["-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2"])
-            .args(["-c:v", "libx264", "-preset", "veryfast", "-crf", "20"])
+            // Near-lossless: a video made from this for upload is encoded
+            // again, and loses detail only then.
+            .args(["-c:v", "libx264", "-preset", "fast", "-crf", "10"])
             .args(["-pix_fmt", "yuv420p"])
             // Keeps a truncated file playable, for the run that is killed
             // rather than closed: a plain mp4 is only readable once its index
@@ -271,28 +291,44 @@ impl Drop for Encoder {
 mod tests {
     use super::*;
 
-    /// Frames must reach the encoder in order whatever order they land in, and
-    /// one that never lands must not hold up the rest for good.
+    /// Frames must reach the encoder in order whatever order they land in, one
+    /// that never lands must not hold up the rest for good, and one given up
+    /// on that lands after all must not be written in a later one's place.
     #[test]
     fn frames_go_out_in_order_and_a_lost_one_is_given_up_on() {
+        const LIMIT: usize = 8;
         let mut early = BTreeMap::new();
         let mut next = 0;
 
         // 1 landed first, so it waits for 0 and then both go.
         early.insert(1u64, 1u64);
-        assert!(ready(&mut early, &mut next).is_empty());
+        assert!(ready(&mut early, &mut next, LIMIT).is_empty());
         early.insert(0, 0);
-        assert_eq!(ready(&mut early, &mut next), vec![0, 1]);
+        assert_eq!(ready(&mut early, &mut next, LIMIT), vec![0, 1]);
 
-        // 2 never lands. The frames behind it wait...
-        for frame in 3..3 + REORDER_LIMIT as u64 {
+        // 2 is held up. The frames behind it wait...
+        for frame in 3..3 + LIMIT as u64 {
             early.insert(frame, frame);
         }
-        assert!(ready(&mut early, &mut next).is_empty());
+        assert!(ready(&mut early, &mut next, LIMIT).is_empty());
         // ...until one too many has piled up, and then they all go.
-        let last = 3 + REORDER_LIMIT as u64;
+        let last = 3 + LIMIT as u64;
         early.insert(last, last);
-        assert_eq!(ready(&mut early, &mut next), (3..=last).collect::<Vec<_>>());
+        assert_eq!(
+            ready(&mut early, &mut next, LIMIT),
+            (3..=last).collect::<Vec<_>>()
+        );
         assert_eq!(next, last + 1);
+
+        // 2 lands after all, and is dropped: the next pile-up writes the
+        // frames behind the one it waits for, not 2.
+        early.insert(2, 2);
+        for frame in last + 2..last + 3 + LIMIT as u64 {
+            early.insert(frame, frame);
+        }
+        assert_eq!(
+            ready(&mut early, &mut next, LIMIT),
+            (last + 2..last + 3 + LIMIT as u64).collect::<Vec<_>>()
+        );
     }
 }
