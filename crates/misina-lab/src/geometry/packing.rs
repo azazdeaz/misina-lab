@@ -10,6 +10,11 @@
 //! joints swinging about their nodes and the balls about their joints, every
 //! run keeping its length. Each fruit ends up touching its neighbours
 //! rather than in them, turned to face its own stalk.
+//!
+//! Stalks packed for bigger fruit than they carry, as when one cluster's
+//! stalks are drawn under several clusters' fruit, hang those apart.
+//! [`swing`] swings each about its stalk's end, the stalks held, back toward
+//! the way it would hang alone until it touches its neighbours.
 
 use bevy::math::Vec3;
 
@@ -89,37 +94,15 @@ pub fn pack(bobs: &mut [Bob], stems: &[(Vec3, Vec3, f32)]) {
         let along: Vec<Vec3> = (laid.iter().enumerate())
             .map(|(i, bob)| (middles[i] - joints[i]).normalize_or(Vec3::NEG_Z) * bob.drawn)
             .collect();
-        let spines = |i: usize, middle: Vec3| (middle - along[i], middle + along[i]);
-        for i in 0..laid.len() {
-            for k in i + 1..laid.len() {
-                let (on_i, on_k) = nearest(spines(i, middles[i]), spines(k, middles[k]));
-                let off = on_k - on_i;
-                let apart = laid[i].radius + laid[k].radius;
-                if off.length_squared() < apart * apart {
-                    let push = off.normalize_or(Vec3::Z) * (apart - off.length()) / 2.0;
-                    middles[i] -= push;
-                    middles[k] += push;
-                }
-            }
-        }
-        let stalks: Vec<[(Vec3, Vec3, f32); 2]> = (laid.iter().enumerate())
-            .map(|(i, bob)| {
-                let (joint, end) = (joints[i], end(i, joints[i], middles[i]));
-                [(bob.node, joint, bob.stalk), (joint, end, bob.stalk)]
-            })
-            .collect();
-        for (i, middle) in middles.iter_mut().enumerate() {
-            let others = (stalks.iter().enumerate())
-                .filter(|(k, _)| *k != i)
-                .flat_map(|(_, runs)| *runs);
-            for (a, b, radius) in stems.iter().copied().chain(others) {
-                let (near, on) = nearest((a, b), spines(i, *middle));
-                let (off, clear) = (on - near, laid[i].radius + radius);
-                if off.length_squared() < clear * clear {
-                    *middle += off.normalize_or(Vec3::NEG_Z) * clear - off;
-                }
-            }
-        }
+        let stalks = |middles: &[Vec3]| {
+            (laid.iter().enumerate())
+                .map(|(i, bob)| {
+                    let (joint, end) = (joints[i], end(i, joints[i], middles[i]));
+                    [(bob.node, joint, bob.stalk), (joint, end, bob.stalk)]
+                })
+                .collect()
+        };
+        part(&laid, &mut middles, &along, stalks, stems);
         for (i, bob) in laid.iter().enumerate() {
             let (joint, middle) = (&mut joints[i], &mut middles[i]);
             // Each run back to its length: the joint gives way half as far
@@ -135,6 +118,86 @@ pub fn pack(bobs: &mut [Bob], stems: &[(Vec3, Vec3, f32)]) {
     for (i, bob) in bobs.iter_mut().enumerate() {
         bob.joint = joints[i];
         bob.end = end(i, joints[i], middles[i]);
+    }
+}
+
+/// Swings each of `bobs`' balls about its stalk's end, every stalk held where
+/// it is, from hanging the way its stalk's last run heads toward hanging
+/// `toward`, as far as it stays clear of the others, of `stems` and of the
+/// other stalks, and no further than `most` radians off that run. Returns
+/// the way each then hangs.
+///
+/// Stalks packed for balls bigger than the ones they carry leave those apart;
+/// swung, each hangs as near the way it would alone as there is room for, so
+/// crowded ones touch. Pulls and pushes run as [`pack`]'s do.
+pub fn swing(bobs: &[Bob], toward: &[Vec3], stems: &[(Vec3, Vec3, f32)], most: f32) -> Vec<Vec3> {
+    let heads: Vec<Vec3> = (bobs.iter())
+        .map(|bob| (bob.end - bob.joint).normalize_or(Vec3::NEG_Z))
+        .collect();
+    let stalks: Vec<[(Vec3, Vec3, f32); 2]> = (bobs.iter())
+        .map(|bob| {
+            [
+                (bob.node, bob.joint, bob.stalk),
+                (bob.joint, bob.end, bob.stalk),
+            ]
+        })
+        .collect();
+    let mut middles: Vec<Vec3> = bobs.iter().map(Bob::middle).collect();
+    for round in 0..ROUNDS {
+        let fade = 1.0 - round as f32 / (ROUNDS - 1) as f32;
+        for (i, bob) in bobs.iter().enumerate() {
+            middles[i] = middles[i].lerp(bob.end + toward[i] * bob.inset, HANG * fade);
+        }
+        let along: Vec<Vec3> = (bobs.iter().enumerate())
+            .map(|(i, bob)| (middles[i] - bob.end).normalize_or(heads[i]) * bob.drawn)
+            .collect();
+        part(bobs, &mut middles, &along, |_| stalks.clone(), stems);
+        for (i, bob) in bobs.iter().enumerate() {
+            let way = (middles[i] - bob.end).normalize_or(heads[i]);
+            middles[i] = bob.end + heads[i].rotate_towards(way, most) * bob.inset;
+        }
+    }
+    (bobs.iter().enumerate())
+        .map(|(i, bob)| (middles[i] - bob.end).normalize_or(heads[i]))
+        .collect()
+}
+
+/// Pushes apart every two of `bobs`' balls that overlap, each at its middle
+/// in `middles` and drawn out either way along `along`, then each off `stems`
+/// and off every other one's stalk, as `stalks` lays them by the balls'
+/// middles.
+fn part(
+    bobs: &[Bob],
+    middles: &mut [Vec3],
+    along: &[Vec3],
+    stalks: impl Fn(&[Vec3]) -> Vec<[(Vec3, Vec3, f32); 2]>,
+    stems: &[(Vec3, Vec3, f32)],
+) {
+    let spines = |i: usize, middle: Vec3| (middle - along[i], middle + along[i]);
+    for i in 0..bobs.len() {
+        for k in i + 1..bobs.len() {
+            let (on_i, on_k) = nearest(spines(i, middles[i]), spines(k, middles[k]));
+            let off = on_k - on_i;
+            let apart = bobs[i].radius + bobs[k].radius;
+            if off.length_squared() < apart * apart {
+                let push = off.normalize_or(Vec3::Z) * (apart - off.length()) / 2.0;
+                middles[i] -= push;
+                middles[k] += push;
+            }
+        }
+    }
+    let stalks = stalks(middles);
+    for (i, middle) in middles.iter_mut().enumerate() {
+        let others = (stalks.iter().enumerate())
+            .filter(|(k, _)| *k != i)
+            .flat_map(|(_, runs)| *runs);
+        for (a, b, radius) in stems.iter().copied().chain(others) {
+            let (near, on) = nearest((a, b), spines(i, *middle));
+            let (off, clear) = (on - near, bobs[i].radius + radius);
+            if off.length_squared() < clear * clear {
+                *middle += off.normalize_or(Vec3::NEG_Z) * clear - off;
+            }
+        }
     }
 }
 
@@ -297,6 +360,80 @@ mod tests {
         let mut packed = [lone];
         pack(&mut packed, &[]);
         assert!(packed[0].end.distance(lone.end) < 1e-6, "{packed:?}");
+    }
+
+    /// On stalks packed for balls a fifth bigger, a cluster's own balls,
+    /// swung back toward the way each was laid out, lie no further into
+    /// another, a stem or another's stalk than packing leaves them, and turn
+    /// no further off their stalks than they may: the crowded cluster's, which
+    /// then each come within a millimeter of another unless held to a turn
+    /// too slight for that, and the drawn-out ball laid out across another's
+    /// stalk.
+    #[test]
+    fn swung_balls_touch_on_stalks_packed_for_bigger_ones() {
+        const SLACK: f32 = 0.001;
+        let apart = |a, b| {
+            let (on_a, on_b) = nearest(a, b);
+            on_a.distance(on_b)
+        };
+        let way = |bob: &Bob| (bob.end - bob.joint).normalize();
+        for (scene, (laid, stems)) in [crowded(), pierced()].into_iter().enumerate() {
+            let mut packed: Vec<Bob> = (laid.iter())
+                .map(|bob| Bob {
+                    radius: bob.radius * 1.2,
+                    inset: bob.inset * 1.2,
+                    drawn: bob.drawn * 1.2,
+                    ..*bob
+                })
+                .collect();
+            pack(&mut packed, &stems);
+            let own: Vec<Bob> = (packed.iter().zip(&laid))
+                .map(|(packed, bob)| Bob {
+                    radius: bob.radius,
+                    inset: bob.inset,
+                    drawn: bob.drawn,
+                    ..*packed
+                })
+                .collect();
+            let alone: Vec<Vec3> = laid.iter().map(way).collect();
+            for most in [0.05, 0.5] {
+                let ways = swing(&own, &alone, &stems, most);
+                let spines: Vec<(Vec3, Vec3)> = (own.iter().zip(&ways))
+                    .map(|(bob, w)| {
+                        let middle = bob.end + *w * bob.inset;
+                        (middle - *w * bob.drawn, middle + *w * bob.drawn)
+                    })
+                    .collect();
+                for (i, bob) in own.iter().enumerate() {
+                    let turned = way(bob).angle_between(ways[i]);
+                    assert!(
+                        turned < most + 1e-4,
+                        "{scene}, {most}, {i}: turned {turned}"
+                    );
+                    for (a, b, radius) in &stems {
+                        let near = apart((*a, *b), spines[i]);
+                        let clear = near > bob.radius + radius - SLACK;
+                        assert!(clear, "{scene}, {most}, {i}: {near} m off a stem");
+                    }
+                    let mut gap = f32::INFINITY;
+                    for (k, other) in own.iter().enumerate().filter(|(k, _)| *k != i) {
+                        let near = apart(spines[i], spines[k]) - bob.radius - other.radius;
+                        assert!(
+                            near > -SLACK,
+                            "{scene}, {most}, {i}, {k}: {near} m into each other"
+                        );
+                        gap = gap.min(near);
+                        for run in [(other.node, other.joint), (other.joint, other.end)] {
+                            let near = apart(run, spines[i]);
+                            let clear = near > bob.radius + other.stalk - SLACK;
+                            assert!(clear, "{scene}, {most}, {i}: {near} m off {k}'s stalk");
+                        }
+                    }
+                    let touch = scene > 0 || most < 0.5 || gap < SLACK;
+                    assert!(touch, "{most}, {i}: {gap} m from the nearest");
+                }
+            }
+        }
     }
 
     /// The segment from the origin 4 m along X comes nearest a skew segment
