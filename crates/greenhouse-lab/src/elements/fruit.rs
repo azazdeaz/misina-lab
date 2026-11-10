@@ -1,4 +1,5 @@
-//! Fruit — the tomatoes, each its own prim, hung from a pedicel's tip.
+//! Fruit — the tomatoes, each its own prim, hung from a pedicel's tip, and
+//! the flowers they set from.
 //!
 //! A fruit is built round its own axis and hangs below its origin, where the
 //! truss's pedicel ends in the calyx. The body hangs from the calyx by its
@@ -18,12 +19,32 @@
 //! it and a `Collision` capsule round the body: a sphere on a round fruit,
 //! a capsule standing on an elongated one. The calyx stands clear of it.
 //!
-//! A fruit's `stage` runs from fruit set through expanding and mature green,
-//! over which it grows to full size, to the USDA colour classes breaker,
-//! turning, pink, light red and red, which are defined by how much of the
-//! surface has coloured: up to 10%, 30%, 60%, 90% and the rest. The colour
-//! climbs from the blossom end, so the shoulders turn last. The calyx is the
-//! size the flower left it, so a young fruit's sepals are large next to it.
+//! Before it sets, a fruit is a flower, nodding below the same origin: a
+//! calyx of narrow sepals, a petal between each two of them, and the anther
+//! cone in the middle. A bud is closed, its petals meeting over the cone;
+//! an open flower's petals sweep back past level, `petal_reflex` off
+//! pointing straight ahead, and close up again as it withers:
+//!
+//! ```text
+//!         ┃          the pedicel
+//!    ╭─╮  ┃  ╭─╮     petals swept back
+//!     ╲ ╲─┸─╱ ╱      sepals between them
+//!        ▕ ▏
+//!         ▼          the anther cone round the style
+//! ```
+//!
+//! A truss shows at the head as a cluster of buds. Its first flower opens
+//! [`OPENS`] later, about where growers measure the top flowering truss
+//! below the head, the rest open toward its tip over [`FLOWERING`], and
+//! each stays open for [`ANTHESIS`] before it sets.
+//!
+//! A fruit's `stage` runs from bud and flower through fruit set, expanding
+//! and mature green, over which it grows to full size, to the USDA colour
+//! classes breaker, turning, pink, light red and red, which are defined by
+//! how much of the surface has coloured: up to 10%, 30%, 60%, 90% and the
+//! rest. The colour climbs from the blossom end, so the shoulders turn last.
+//! The calyx grows on from the flower's as the fruit grows, so a young
+//! fruit's sepals are long next to it.
 //!
 //! A stem ripens from the bottom up, about a truss a week, and a truss from
 //! its base to its tip. A fruit's ripening is read off how far its truss
@@ -36,7 +57,7 @@
 //!
 //! Over 0 the fruit is colouring, 1 is fully red, and the truss above the
 //! front is mature green. Further up, toward the head, the fruit are still
-//! growing.
+//! growing, and the youngest trusses are in flower.
 //!
 //! Colour is baked per mesh, one per point, so fruit are quantized on their
 //! stage as well as their shape, and every fruit keeps its own prim with its
@@ -67,9 +88,12 @@ pub const SKIN_PRIM: &str = "Skin";
 /// Salt splitting a fruit's mesh draws off the stream its config draws from.
 const CALYX_STREAM: u64 = 0xC2B2_AE3D_27D4_EB4F;
 
-/// The stages, as `stage` counts them: a fruit at 4.5 is half way through
-/// turning, and one at 8 is fully red.
-pub const STAGES: [&str; 8] = [
+/// The stages, as `stage` counts them up from [`BUD`]: a flower at -0.5 is
+/// half way through its anthesis, a fruit at 4.5 half way through turning,
+/// and one at 8 is fully red.
+pub const STAGES: [&str; 10] = [
+    "bud",
+    "flower",
     "set",
     "expanding",
     "mature_green",
@@ -79,9 +103,23 @@ pub const STAGES: [&str; 8] = [
     "light_red",
     "red",
 ];
+const BUD: f32 = -2.0;
+const FLOWER: f32 = -1.0;
+const SET: f32 = 0.0;
 const MATURE_GREEN: f32 = 2.0;
 const BREAKER: f32 = 3.0;
 const RIPE: f32 = 8.0;
+
+/// Weeks from a truss showing at the head to its first flower opening: 15 cm
+/// of stem below the head at a week's growth of 0.34 m, where growers find
+/// the top flowering truss (est.). Then the weeks its flowers take to open
+/// from its base to its tip (est.), how long each stays open before it sets,
+/// about the two days a flower lasts and a day to wither, and the weeks from
+/// set to full size, at mature green (est.).
+const OPENS: f32 = 0.45;
+const FLOWERING: f32 = 1.0;
+const ANTHESIS: f32 = 0.4;
+const GROWING: f32 = 5.0;
 
 /// The share of the surface coloured at the start of each stage from breaker
 /// on, and at the end of red: the bounds of the USDA classes.
@@ -173,6 +211,79 @@ const SKIN: Response = Response {
     reflectance: 0.55,
 };
 
+/// A flower's petal: its width as a fraction of its length, where along it
+/// it is widest, and how steeply its edges cup toward its inner face, as a
+/// slope.
+const PETAL_WIDTH: f32 = 0.3;
+const PETAL_PEAK: f64 = 0.3;
+const CUP: f32 = 0.3;
+
+/// A flower's sepal's length, in petal lengths. The calyx grows on from it
+/// to [`SEPAL`] as the fruit grows.
+const FLOWER_SEPAL: f32 = 0.8;
+
+/// The ring round the axis the petals and sepals leave the flower from, in
+/// petal lengths; the sepals leave it a little higher, behind the petals.
+const RING: f32 = 0.16;
+const SEPAL_RISE: f32 = 0.04;
+
+/// The anther cone round the style: its length, and its radius where it
+/// leaves the flower, in petal lengths. Grooved between its five or six
+/// anthers by this share of its radius.
+const CONE: (f32, f32) = (0.75, 0.12);
+const GROOVE: f32 = 0.15;
+
+/// How large a bud is when its truss shows at the head, as a fraction of the
+/// flower it opens into.
+const BUD_SIZE: f32 = 0.45;
+
+/// The ball a flower about fills, as its radius and how far below the
+/// origin its middle is, in petal lengths: a closed bud's, about as long as
+/// its petals, and an open flower's, out to the tips of its swept-back
+/// petals (est.).
+const BUD_BALL: (f32, f32) = (0.5, 0.5);
+const FLOWER_BALL: (f32, f32) = (0.85, 0.25);
+
+/// The share of a flower's anthesis it takes to open, and the share at its
+/// end over which it withers: its petals fold back in, shrink and fade.
+const OPENING: f32 = 0.3;
+const WITHERING: f32 = 0.35;
+
+/// Where a petal bends back, as shares of its length: straight out of the
+/// short tube the petals are joined in, then round to `petal_reflex` over
+/// this stretch.
+const REFLEX: (f32, f32) = (0.12, 0.45);
+
+/// How far a petal or a sepal turns toward the axis over its length in a
+/// bud, in radians, from heading this far out of it where it leaves; and how
+/// far an open flower's sepals spread off its axis, and curl on out, in
+/// radians.
+const CLOSED: (f32, f32) = (0.25, 0.8);
+const SPREAD: (f32, f32) = (0.9, 0.4);
+
+/// How far a petal's or a sepal's length varies and it strays from even
+/// spacing, as fractions, and how far it twists about its midrib, in
+/// radians, at most either way.
+const PETAL_JITTER: f64 = 0.1;
+const PETAL_STRAY: f64 = 0.15;
+const PETAL_TWIST: f64 = 0.4;
+
+/// Control points along a petal's or a flower's sepal's midrib.
+const MIDRIB_POINTS: usize = 12;
+
+/// The petals, opening from a bud's green-yellow and withering to tan, and
+/// the anther cone.
+const PETAL_COLOR: u32 = 0xF5D52A;
+const BUD_COLOR: u32 = 0xB5BE3C;
+const WITHERED: u32 = 0xB49A50;
+const ANTHER_COLOR: u32 = 0xD9AE1C;
+
+/// The petals' matte, thin sheets.
+const PETALS: Response = Response {
+    roughness: 0.6,
+    reflectance: 0.35,
+};
+
 /// The colour a fruit ripens to.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Ripe {
@@ -205,7 +316,7 @@ impl Ripe {
 
 /// The name of the stage a fruit at `stage` is in.
 pub fn stage_name(stage: f32) -> &'static str {
-    STAGES[(stage.max(0.0) as usize).min(STAGES.len() - 1)]
+    STAGES[((stage - BUD).max(0.0) as usize).min(STAGES.len() - 1)]
 }
 
 /// The share of a fruit's surface that has coloured at `stage`, 0 to 1.
@@ -225,8 +336,16 @@ pub struct Hung {
     pub rank: f32,
     /// How far along its truss toward the tip it hangs, 0 to 1.
     pub along: f32,
-    /// How far its truss's fruit have come toward full size, 0 to 1.
-    pub growth: f32,
+    /// Weeks since its truss showed at the head, a truss a week.
+    pub age: f32,
+}
+
+impl Hung {
+    /// Weeks since its flower opened, under 0 while it is a bud: a truss
+    /// opens its flowers from its base to its tip.
+    pub fn opened(&self) -> f32 {
+        self.age - OPENS - FLOWERING * self.along
+    }
 }
 
 /// One fruit's shape and stage, as the truss that holds it specified.
@@ -235,14 +354,20 @@ pub struct FruitConfig {
     /// Across when full grown, in meters. The size it is now follows from its
     /// stage, and the calyx's from this.
     pub diameter: f32,
-    /// How far it has come, 0 just set to 8 fully red; see [`STAGES`].
+    /// How far it has come, -2 a bud just showing, -1 a flower opening, 0
+    /// just set and 8 fully red; see [`STAGES`].
     pub stage: f32,
     /// Height over width.
     pub aspect: f32,
     /// Depth of the grooves between its lobes, as a fraction of its radius.
     pub ribbing: f32,
     pub lobes: u32,
+    /// Sepals round its calyx, and petals round its flower.
     pub sepals: u32,
+    /// Its flower's petal length, in meters, and how far back they sweep
+    /// once open, in radians off pointing straight ahead.
+    pub petal: f32,
+    pub reflex: f32,
     /// The stream its calyx and its lean are drawn from.
     pub seed: u64,
     pub hung: Hung,
@@ -260,13 +385,20 @@ impl FruitConfig {
         let lobes = LOBES.0 + (rng.unit() * (LOBES.1 - LOBES.0 + 1) as f64) as u32;
         let sepals = if rng.unit() < 0.5 { 5 } else { 6 };
 
+        let opened = hung.opened();
         let ripening = params.ripe_trusses - hung.rank - params.spread * hung.along;
-        let stage = if ripening >= 0.0 {
+        let stage = if opened < 0.0 {
+            // A bud from when its truss shows, at the tip latest.
+            (FLOWER + opened / (OPENS + FLOWERING)).max(BUD)
+        } else if opened < ANTHESIS {
+            FLOWER + opened / ANTHESIS
+        } else if ripening >= 0.0 {
             BREAKER + (RIPE - BREAKER) * ripening.min(1.0)
         } else {
             // Growing toward mature green, then through it in the truss above
             // the front.
-            (MATURE_GREEN * hung.growth.clamp(0.0, 1.0) + (1.0 + ripening).max(0.0)).min(BREAKER)
+            let growth = ((opened - ANTHESIS) / GROWING).min(1.0);
+            (MATURE_GREEN * growth + (1.0 + ripening).max(0.0)).min(BREAKER)
         };
         Self {
             diameter,
@@ -275,15 +407,27 @@ impl FruitConfig {
             ribbing: params.ribbing.clamp(0.0, 0.5),
             lobes,
             sepals,
+            petal: params.petal_length.max(0.002),
+            reflex: params.petal_reflex.clamp(0.0, 180.0).to_radians(),
             seed,
             hung,
         }
     }
 
-    /// Across now, in meters: it grows from set to mature green.
+    /// Whether it is still a flower, or a bud.
+    pub fn in_flower(&self) -> bool {
+        self.stage < SET
+    }
+
+    /// How far it has grown from set to mature green, eased, 0 to 1.
+    fn grown(&self) -> f32 {
+        smooth(self.stage / MATURE_GREEN)
+    }
+
+    /// Across now, in meters: it grows from set to mature green, and a flower
+    /// is a fruit just set across.
     pub fn across(&self) -> f32 {
-        let t = (self.stage / MATURE_GREEN).clamp(0.0, 1.0);
-        self.diameter * (SET_SIZE + (1.0 - SET_SIZE) * t * t * (3.0 - 2.0 * t))
+        self.diameter * (SET_SIZE + (1.0 - SET_SIZE) * self.grown())
     }
 
     /// Its mass now, in kilograms: a spheroid `across` wide and `aspect` as
@@ -291,37 +435,85 @@ impl FruitConfig {
     pub fn mass(&self) -> f32 {
         DENSITY * PI / 6.0 * self.across().powi(3) * self.aspect
     }
+
+    /// The ball it about fills, as its radius, how far below the origin,
+    /// where its pedicel ends, the ball's middle is, and how far either way
+    /// of that along its axis it is drawn out into a capsule: a fruit's as
+    /// wide as it is, drawn out to its length if it is elongated, and a
+    /// flower's from [`BUD_BALL`] to [`FLOWER_BALL`] as far as it has opened,
+    /// and back as it withers, never drawn out.
+    pub fn ball(&self) -> (f32, f32, f32) {
+        if !self.in_flower() {
+            let radius = self.across() / 2.0;
+            let drawn = (self.aspect - 1.0).max(0.0) * radius;
+            return (radius, (self.aspect - DIP) * radius, drawn);
+        }
+        let (_, opened, wither, size) = self.bloom();
+        let open = opened * (1.0 - wither);
+        let ball = |bud: f32, flower: f32| (bud + (flower - bud) * open) * size;
+        (
+            ball(BUD_BALL.0, FLOWER_BALL.0),
+            ball(BUD_BALL.1, FLOWER_BALL.1),
+            0.0,
+        )
+    }
+
+    /// How far a flower is through its bud, through opening and through
+    /// withering, each 0 to 1, and how long its petals have grown, in meters.
+    fn bloom(&self) -> (f32, f32, f32, f32) {
+        let bud = (self.stage - BUD).clamp(0.0, 1.0);
+        let anthesis = (self.stage - FLOWER).clamp(0.0, 1.0);
+        let wither = smooth((anthesis - 1.0 + WITHERING) / WITHERING);
+        let opened = smooth(anthesis / OPENING);
+        let size = (BUD_SIZE + (1.0 - BUD_SIZE) * bud) * self.petal;
+        (bud, opened, wither, size)
+    }
 }
 
-/// Two fruit share a mesh when they are near in size, in shape and in colour.
+/// Two fruit share a mesh when they are near in size, in shape and in colour,
+/// and two flowers when they are near in how far they have opened.
 pub struct FruitMetric;
 
 impl Metric<FruitConfig> for FruitMetric {
     fn distance(&self, a: &FruitConfig, b: &FruitConfig) -> f32 {
+        // A flower and a fruit are different shapes, not near sizes of one.
+        if a.in_flower() != b.in_flower() {
+            return 1.0;
+        }
+        let norm = |terms: &[f32]| terms.iter().map(|d| d * d).sum::<f32>().sqrt();
+        if a.in_flower() {
+            // A stage of a flower's opening swings its petals' tips by about
+            // twice their length.
+            let petal = a.petal.max(b.petal);
+            return norm(&[
+                (a.stage - b.stage) * 2.0 * petal,
+                a.petal - b.petal,
+                (a.reflex - b.reflex) * petal,
+            ]);
+        }
         let (across_a, across_b) = (a.across(), b.across());
         let radius = across_a.max(across_b) / 2.0;
-        [
+        norm(&[
             across_a - across_b,
-            // The calyx is sized off the full-grown fruit.
+            // The calyx grows toward a size set by the full-grown fruit.
             (a.diameter - b.diameter) * SEPAL,
             // Each moves the surface by its difference times the radius.
             (a.aspect - b.aspect) * radius,
             (a.ribbing - b.ribbing) * radius,
             (a.stage - b.stage) * STAGE_WEIGHT,
-        ]
-        .iter()
-        .map(|d| d * d)
-        .sum::<f32>()
-        .sqrt()
+        ])
     }
 }
 
-/// The fruit: their shape, how ripe the crop is, and what colour ripe is.
+/// The fruit and the flowers they set from: their shape, how ripe the crop
+/// is, and what colour ripe is.
 ///
-/// Every fruit has a stage: set, expanding and mature green while it grows,
-/// then breaker, turning, pink, light red and red as it colours from its
-/// blossom end up. A truss sets its fruit near the head, and they reach full
-/// size five trusses down. A stem colours from its lowest truss up and a
+/// Every fruit has a stage: bud and flower before it sets, set, expanding
+/// and mature green while it grows, then breaker, turning, pink, light red
+/// and red as it colours from its blossom end up. A truss shows at the head
+/// in bud, opens its flowers from its base to its tip from about 15 cm below
+/// the head, sets them over the week after, and they reach full size about
+/// five trusses further down. A stem colours from its lowest truss up and a
 /// truss from its base to its tip, so in full production the lowest
 /// `ripe_trusses` trusses on a stem are colouring and the ones above them
 /// still green; a young crop's trusses are all green until the first are
@@ -329,7 +521,8 @@ impl Metric<FruitConfig> for FruitMetric {
 /// a little ahead of or behind the rest.
 ///
 /// Every fruit draws its own lobe count, its five or six sepals and how each
-/// curls, and a slight lean, within the ranges the research notes give.
+/// curls, and a slight lean, within the ranges the research notes give; its
+/// flower has a petal between each two sepals.
 #[derive(Resource, Reflect, Clone, Debug, PartialEq)]
 #[cfg_attr(
     feature = "python",
@@ -356,9 +549,22 @@ pub struct FruitParams {
     /// radius: 0 is smooth, and a beefsteak's are about 0.15.
     #[reflect(@Slider { min: 0.0, max: 0.3, step: 0.01 })]
     pub ribbing: f32,
-    /// How many distinct fruit meshes the scene may hold, by size, shape and
-    /// stage. A budget, not a count: the fruit are clustered and this is how
-    /// many representatives the clustering may keep.
+    /// Length of a flower's petals, in meters: an open tomato flower is under
+    /// 25 mm across, and a cherry tomato's smaller.
+    #[reflect(@Slider { min: 0.004, max: 0.02, step: 0.0005 })]
+    pub petal_length: f32,
+    /// How far an open flower's petals sweep back, in degrees off pointing
+    /// straight ahead: 90 opens it flat, and a tomato's sweep back past that
+    /// toward its pedicel.
+    #[reflect(@Slider { min: 20.0, max: 170.0, step: 1.0 })]
+    pub petal_reflex: f32,
+    /// How many distinct fruit and flower meshes the scene may hold, by size,
+    /// shape and stage. A budget, not a count: the fruit are clustered and
+    /// this is how many representatives the clustering may keep, though a
+    /// crop in flower keeps one for its flowers and one for its fruit at
+    /// least. A fruit is drawn at its representative's size, so on a small
+    /// budget a truss's fruit, packed to touch at their own sizes, are drawn
+    /// into each other.
     #[reflect(@Slider { min: 1.0, max: 64.0, step: 1.0 }, @Label("Fruit variations"))]
     pub variations: u32,
 }
@@ -371,7 +577,9 @@ impl Default for FruitParams {
             color: Ripe::default().name().into(),
             aspect: 0.9,
             ribbing: 0.03,
-            variations: 24,
+            petal_length: 0.011,
+            petal_reflex: 125.0,
+            variations: 32,
         }
     }
 }
@@ -611,7 +819,8 @@ impl Path {
 /// curl and its twist.
 fn calyx(config: &FruitConfig, body: &Body, rng: &mut Rng) -> Result<Vec<MeshData>> {
     let first = rng.unit() as f32 * TAU;
-    let length = SEPAL * config.diameter;
+    let flower = FLOWER_SEPAL * config.petal;
+    let length = flower + (SEPAL * config.diameter - flower) * config.grown();
     let sectors = body.sectors.len();
     (0..config.sepals)
         .map(|i| {
@@ -668,11 +877,141 @@ fn calyx(config: &FruitConfig, body: &Body, rng: &mut Rng) -> Result<Vec<MeshDat
         .collect()
 }
 
+/// A midrib `length` long from `from`, leaving down the flower's axis, -Z,
+/// turned toward `out` by `angle` of how far along it is, 0 to 1.
+fn midrib(from: Vec3, out: Vec3, length: f32, angle: impl Fn(f32) -> f32) -> Vec<Vec3> {
+    let step = length / MIDRIB_POINTS as f32;
+    let mut points = vec![from];
+    for k in 0..MIDRIB_POINTS {
+        let a = angle((k as f32 + 0.5) / MIDRIB_POINTS as f32);
+        points.push(points[k] + (out * a.sin() - Vec3::Z * a.cos()) * step);
+    }
+    points
+}
+
+/// A [`leaf`] outline `long` by `wide`, widest at `peak`, laid along a
+/// midrib bent in the plane across `side`: its edges cupped `cup` toward the
+/// face that looks back at the axis, and the whole twisted `twist` about the
+/// midrib over its length.
+fn sheet(
+    midrib: Vec<Vec3>,
+    side: Vec3,
+    (long, wide, peak): (f32, f32, f64),
+    cup: f32,
+    twist: f32,
+) -> Result<MeshData> {
+    let path = Path::new(midrib, side);
+    let outline = leaf(long as f64, wide as f64, peak);
+    let mut sheet = outline_mesh(&outline, outline.area())?;
+    for point in &mut sheet.points {
+        let (x, y) = (point[0], point[1]);
+        let (at, along, normal) = path.at(x);
+        let across = side * y - normal * (cup * y.abs());
+        *point = (at + Quat::from_axis_angle(along, twist * x / long) * across).to_array();
+    }
+    Ok(sheet)
+}
+
+/// The anther cone round the style, `size` a full petal's length: from inside
+/// the ring the petals leave down to its point, grooved between its
+/// `anthers`.
+fn anther_cone(anthers: u32, size: f32) -> MeshData {
+    let sectors = 2 * anthers;
+    let (length, radius) = CONE;
+    let ring = |z: f32, r: f32| -> Vec<Vec3> {
+        (0..sectors)
+            .map(|i| {
+                let phi = TAU * i as f32 / sectors as f32;
+                let r = r * if i % 2 == 1 { 1.0 - GROOVE } else { 1.0 };
+                Vec3::new(r * phi.cos(), r * phi.sin(), z) * size
+            })
+            .collect()
+    };
+    lathe(
+        Vec3::ZERO,
+        &[
+            ring(-0.02, radius),
+            ring(-0.3 * length, 0.9 * radius),
+            ring(-0.7 * length, 0.5 * radius),
+        ],
+        Vec3::new(0.0, 0.0, -length * size),
+    )
+}
+
+/// One flower in its own frame, nodding below the origin where its pedicel
+/// ends, with a colour per point: the calyx, a petal between each two sepals,
+/// and the anther cone. A bud grows to the flower's size, closed, its petals
+/// folded in over the cone and its sepals round them; it opens, its petals
+/// sweeping back to `reflex` as its sepals spread, and withers, the petals
+/// folding back in and fading.
+///
+/// Draws, after where the first sepal sits, per sepal and per petal round the
+/// flower: its stray from even spacing, its length and its twist.
+fn flower(config: &FruitConfig, rng: &mut Rng) -> Result<(Vec<MeshData>, Vec<[f32; 3]>)> {
+    let (bud, opened, wither, size) = config.bloom();
+    let open = opened * (1.0 - wither);
+    // The sepals part as the bud swells, and stay spread once open.
+    let parted = 0.3 * bud + 0.7 * opened;
+    let shrunk = 1.0 - 0.3 * wither;
+
+    let closed = |s: f32| CLOSED.0 - CLOSED.1 * s;
+    let swept = |s: f32| {
+        CLOSED.0 + (config.reflex - CLOSED.0) * smooth((s - REFLEX.0) / (REFLEX.1 - REFLEX.0))
+    };
+    let spread = |s: f32| SPREAD.0 + SPREAD.1 * s;
+    let petal_color = mix(
+        mix(srgb(BUD_COLOR), srgb(PETAL_COLOR), bud),
+        srgb(WITHERED),
+        wither,
+    );
+
+    let (mut pieces, mut colors) = (Vec::new(), Vec::new());
+    let mut paint = |piece: MeshData, color: [f32; 3]| {
+        colors.extend(std::iter::repeat_n(color, piece.points.len()));
+        pieces.push(piece);
+    };
+    let even = TAU / config.sepals as f32;
+    let first = rng.unit() as f32 * TAU;
+    for i in 0..2 * config.sepals {
+        let stray = rng.range(-PETAL_STRAY, PETAL_STRAY) as f32;
+        let jitter = rng.range(1.0 - PETAL_JITTER, 1.0 + PETAL_JITTER) as f32;
+        let twist = rng.range(-PETAL_TWIST, PETAL_TWIST) as f32;
+        let bearing = first + (i as f32 / 2.0 + stray) * even;
+        let out = Vec3::new(bearing.cos(), bearing.sin(), 0.0);
+        let side = Vec3::new(-bearing.sin(), bearing.cos(), 0.0);
+        let from = out * RING * size;
+        if i % 2 == 1 {
+            let long = size * jitter * shrunk;
+            let midrib = midrib(from, out, long, |s| {
+                closed(s) + (swept(s) - closed(s)) * open
+            });
+            // Folded at its edges while closed, as a bud's petals are.
+            let cup = CUP + 0.6 * (1.0 - open);
+            let shape = (long, long * PETAL_WIDTH * shrunk, PETAL_PEAK);
+            paint(sheet(midrib, side, shape, cup, twist)?, petal_color);
+        } else {
+            let long = FLOWER_SEPAL * size * jitter;
+            // Round the petals while closed.
+            let hug = |s: f32| closed(s) + 0.15;
+            let from = from + Vec3::Z * SEPAL_RISE * size;
+            let midrib = midrib(from, out, long, |s| hug(s) + (spread(s) - hug(s)) * parted);
+            let shape = (long, long * SEPAL_WIDTH, SEPAL_PEAK);
+            paint(sheet(midrib, side, shape, KEEL, twist)?, srgb(SEPAL_COLOR));
+        }
+    }
+    let anthers = mix(srgb(ANTHER_COLOR), srgb(WITHERED), wither);
+    paint(anther_cone(config.sepals, size), anthers);
+    Ok((pieces, colors))
+}
+
 /// One fruit in its own frame, hanging below the origin, with a colour per
-/// point.
-fn fruit_mesh(config: &FruitConfig, ripe: [f32; 3]) -> Result<Mesh> {
-    let mut rng = Rng::new(config.seed ^ CALYX_STREAM);
-    let body = Body::new(config, &mut rng);
+/// point: its body and its calyx.
+fn fruit(
+    config: &FruitConfig,
+    ripe: [f32; 3],
+    rng: &mut Rng,
+) -> Result<(Vec<MeshData>, Vec<[f32; 3]>)> {
+    let body = Body::new(config, rng);
     let skin_mesh = body.mesh();
     let (low, high) = skin_mesh
         .points
@@ -686,13 +1025,24 @@ fn fruit_mesh(config: &FruitConfig, ripe: [f32; 3]) -> Result<Mesh> {
         .map(|p| skin(config.stage, (p[2] - low) / (high - low).max(1e-6), ripe))
         .collect();
 
-    let sepals = calyx(config, &body, &mut rng)?;
+    let sepals = calyx(config, &body, rng)?;
     for sepal in &sepals {
         colors.extend(std::iter::repeat_n(srgb(SEPAL_COLOR), sepal.points.len()));
     }
     let mut pieces = vec![skin_mesh];
     pieces.extend(sepals);
+    Ok((pieces, colors))
+}
 
+/// One fruit, or the flower it sets from, in its own frame below the origin,
+/// with a colour per point.
+fn fruit_mesh(config: &FruitConfig, ripe: [f32; 3]) -> Result<Mesh> {
+    let mut rng = Rng::new(config.seed ^ CALYX_STREAM);
+    let (pieces, colors) = if config.in_flower() {
+        flower(config, &mut rng)?
+    } else {
+        fruit(config, ripe, &mut rng)?
+    };
     let rgba: Vec<[f32; 4]> = colors.iter().map(|[r, g, b]| [*r, *g, *b, 1.0]).collect();
     Ok(merge_meshes(&pieces)
         .to_mesh()
@@ -716,22 +1066,26 @@ fn build(
     hung.sort_by_key(|(order, ..)| *order);
 
     let configs: Vec<FruitConfig> = hung.iter().map(|(_, _, config)| *config).collect();
+    // A crop holding both flowers and fruit keeps a mesh for each: they are
+    // further apart than any two of a kind, so the second pick is the other.
+    let kinds = [true, false].map(|flower| configs.iter().any(|c| c.in_flower() == flower));
     let book = farthest_first(
         &configs,
-        params.variations.max(1) as usize,
+        (params.variations as usize).max(kinds.iter().filter(|any| **any).count()),
         0.0,
         &FruitMetric,
     );
     let ripe = srgb(params.ripe().hex());
     let meshes = par_map(&book.representatives, |_, config| fruit_mesh(config, ripe));
-    // The points carry the colour, and the sepals are sheets seen from both
-    // sides.
-    let surface = Surface {
-        double_sided: true,
-        ..SKIN.surface([1.0; 3])
-    };
     let mut geometry = Vec::with_capacity(meshes.len());
-    for (index, mesh) in meshes.into_iter().enumerate() {
+    for (index, (config, mesh)) in book.representatives.iter().zip(meshes).enumerate() {
+        let response = if config.in_flower() { PETALS } else { SKIN };
+        // The points carry the colour, and the sepals and petals are sheets
+        // seen from both sides.
+        let surface = Surface {
+            double_sided: true,
+            ..response.surface([1.0; 3])
+        };
         geometry.push(library.part(PART, index, mesh?, surface));
     }
 
@@ -780,7 +1134,7 @@ mod tests {
                 Hung {
                     rank: 0.0,
                     along: 0.0,
-                    growth: 1.0,
+                    age: 8.0,
                 },
             )
         }
@@ -861,6 +1215,49 @@ mod tests {
         }
     }
 
+    /// A bud is closed, its petals within a little of the axis, and swells;
+    /// open, its petals reach out and sweep back above where they leave; and
+    /// they fold back in as it withers. Its petals and sepals alternate round
+    /// it, and every stage of it stays light.
+    #[test]
+    fn a_bud_opens_its_petals_back_and_withers_before_it_sets() {
+        let petal = FruitParams::default().petal_length;
+        // How far its petals reach off its axis, and how high they rise.
+        let reach = |stage: f32| {
+            let config = config(stage, |_| {});
+            let (pieces, _) = flower(&config, &mut Rng::new(config.seed ^ CALYX_STREAM)).unwrap();
+            assert_eq!(pieces.len(), 2 * config.sepals as usize + 1);
+            let triangles = fruit_mesh(&config, [1.0; 3])
+                .unwrap()
+                .indices()
+                .unwrap()
+                .len()
+                / 3;
+            assert!(triangles < 800, "{stage}: {triangles} triangles");
+            let petals = pieces
+                .iter()
+                .skip(1)
+                .step_by(2)
+                .take(config.sepals as usize);
+            petals
+                .flat_map(|piece| &piece.points)
+                .fold((0.0f32, f32::MIN), |(r, z), p| {
+                    (r.max(p[0].hypot(p[1])), z.max(p[2]))
+                })
+        };
+        let (bud, swelling, open, withered) = (reach(BUD), reach(-1.1), reach(-0.6), reach(-0.01));
+        assert!(
+            bud.0 < swelling.0 && swelling.0 < 0.3 * petal,
+            "{bud:?} {swelling:?}"
+        );
+        assert!(open.0 > 0.6 * petal && open.1 > 0.1 * petal, "{open:?}");
+        assert!(
+            withered.0 < 0.8 * open.0 && withered.1 < 0.0,
+            "{withered:?}"
+        );
+        assert_eq!([-1.5, -0.5, 0.0].map(stage_name), ["bud", "flower", "set"]);
+    }
+
     /// Colour starts at the blossom end: at pink the bottom of a fruit is
     /// redder than its shoulders, at mature green neither has turned, and at
     /// the end of red both have.
@@ -926,10 +1323,42 @@ mod tests {
         }
     }
 
+    /// A flower never draws a fruit's mesh, nor a fruit a flower's, even on a
+    /// budget of one.
+    #[test]
+    fn flowers_and_fruit_never_share_a_mesh() {
+        use misina_lab::scene::UsdReference;
+        use misina_lab::testing::named_children;
+
+        let mut params = small();
+        params.fruit.variations = 1;
+        let mut app = grown(params);
+        let world = app.world_mut();
+        let fruit: Vec<(Entity, bool)> = world
+            .query::<(Entity, &FruitConfig)>()
+            .iter(world)
+            .map(|(entity, config)| (entity, config.in_flower()))
+            .collect();
+        let mut drawn: [std::collections::BTreeSet<String>; 2] = Default::default();
+        for (entity, flower) in fruit {
+            let (_, skin) = named_children(world, entity)
+                .into_iter()
+                .find(|(name, _)| name == SKIN_PRIM)
+                .unwrap();
+            let part = world.entity(skin).get::<UsdReference>().unwrap();
+            drawn[flower as usize].insert(part.0.clone());
+        }
+        assert!(
+            drawn.iter().all(|parts| parts.len() == 1) && drawn[0] != drawn[1],
+            "{drawn:?}"
+        );
+    }
+
     /// At one ripe truss a stem, the lowest truss has coloured on most stems,
     /// one just picked hanging its next still breaking, and every stem's third
     /// is still green; every truss is ripest at its base, and each fruit says
-    /// so on its prim.
+    /// so on its prim. At the head, every stem's youngest truss is still in bud
+    /// at its tip, and the crop is in flower.
     #[test]
     fn a_stem_ripens_from_the_bottom_and_a_truss_from_its_base() {
         let mut app = grown(small());
@@ -953,6 +1382,21 @@ mod tests {
                 assert!(stages.iter().all(|s| *s < BREAKER), "{truss}: {stages:?}");
             }
         }
+        let mut youngest = BTreeMap::new();
+        for (truss, stages) in &trusses {
+            youngest.insert(truss.rsplit_once('/').unwrap().0, stages.last().unwrap());
+        }
+        assert!(
+            youngest.values().all(|tip| stage_name(**tip) == "bud"),
+            "{youngest:?}"
+        );
+        assert!(
+            trusses
+                .values()
+                .flatten()
+                .any(|s| stage_name(*s) == "flower")
+        );
+
         let lowest: Vec<&Vec<f32>> = trusses
             .iter()
             .filter(|(truss, _)| truss.ends_with("Truss_00"))

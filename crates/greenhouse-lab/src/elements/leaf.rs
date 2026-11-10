@@ -26,8 +26,9 @@
 //! A stem hangs a leaf at each of its top nodes, `rank` counting down from
 //! the head: small and upright there, its leaflets cut narrow and still
 //! folded shut from the bud, full grown and opened out a couple of trusses
-//! down, and drooping more the older it is. The leaves below have been
-//! stripped, so the trusses ripening there hang on bare stem.
+//! down, and drooping more the older it is. A young leaf is a lighter,
+//! yellower green than a grown one, and the oldest fade toward yellow, each
+//! by a draw of its own. The leaves below have been stripped.
 //!
 //! Rachis and leaflets are one mesh, quantized like any organ to a budget of
 //! `variations`; which leaflets a leaf carries and how each one is cut are
@@ -47,7 +48,7 @@ use misina_lab::geometry::outline::{creased_mesh, spacing};
 use misina_lab::geometry::par_map;
 use misina_lab::geometry::shapes::Ruffle;
 use misina_lab::geometry::strand::{Bark, Bulge, Strand, strand_mesh};
-use misina_lab::palette::{COLOR_STREAM, Response, shade, srgb};
+use misina_lab::palette::{COLOR_STREAM, Response, mix, shade, srgb};
 use misina_lab::params::{Label, Slider};
 use misina_lab::quantize::{Metric, farthest_first};
 use misina_lab::rng::{Rng, salt};
@@ -204,8 +205,17 @@ pub const TOLERANCE: f64 = 0.0006;
 const MIN_LENGTH: f32 = 0.02;
 const MIN_DETAIL: f32 = 0.01;
 
-/// A tomato leaf's green, matte from its hairs.
+/// A grown tomato leaf's green, matte from its hairs.
 const COLOR: u32 = 0x41672A;
+/// A leaf just unfolded at the head: lighter and yellower, darkening to
+/// [`COLOR`] as it grows.
+const YOUNG_COLOR: u32 = 0x6F8F3A;
+/// The pale yellow-green an old leaf fades to as it senesces.
+const OLD_COLOR: u32 = 0xA8A04A;
+/// Nodes below the head where a leaf starts to yellow, and where it comes to
+/// draw its full [`LeafParams::yellowing`]: the lowest few of the 18 to 20
+/// leaves a stem keeps at its defaults.
+const YELLOWING: (f32, f32) = (14.0, 18.0);
 const RESPONSE: Response = Response {
     roughness: 0.65,
     reflectance: 0.4,
@@ -226,6 +236,10 @@ pub struct LeafConfig {
     /// its leaflets are cut to and how far they are still folded from the
     /// bud. Follows `rank`.
     pub grown: f32,
+    /// How far it has faded toward [`OLD_COLOR`], 0 green to 1. Only a leaf
+    /// more than [`YELLOWING`]`.0` nodes below the head fades, each by a draw
+    /// of its own.
+    pub yellow: f32,
     /// The stream its own draws and its leaflets' come from.
     pub seed: u64,
     /// Nodes between it and its stem's head, 0 for the youngest. Kept, with
@@ -239,7 +253,7 @@ impl LeafConfig {
     /// variation drawn off `seed`.
     ///
     /// The *draw order* is part of this element's output: the length, the
-    /// angle and the droop, then the lateral pairs.
+    /// angle and the droop, then the lateral pairs, then how far it yellows.
     pub fn new(params: &LeafParams, seed: u64, rank: u32) -> Self {
         let mut rng = Rng::new(seed);
         let mut about = |jitter: f64| rng.range(1.0 - jitter, 1.0 + jitter) as f32;
@@ -252,12 +266,15 @@ impl LeafConfig {
             * (YOUNG_DROOP + (1.0 - YOUNG_DROOP) * settled)
             * about(DROOP_JITTER);
         let pairs = PAIRS.0 + (rng.unit() * (PAIRS.1 - PAIRS.0 + 1) as f64) as u32;
+        let aged = smooth((rank as f32 - YELLOWING.0) / (YELLOWING.1 - YELLOWING.0));
+        let yellow = (params.yellowing * aged * rng.unit() as f32).min(1.0);
         Self {
             length: length.max(MIN_LENGTH),
             angle,
             droop: droop.max(0.0),
             pairs,
             grown,
+            yellow,
             seed,
             rank,
         }
@@ -280,6 +297,9 @@ impl Metric<LeafConfig> for LeafMetric {
             (a.pairs as f32 - b.pairs as f32) * reach / 3.0,
             // The bud's fold closes every leaflet up by about half its width.
             (a.grown - b.grown) * reach / 2.0,
+            // A leaf's yellow is a draw of its own, so a near one serves:
+            // weighted under the shape, which the budget goes to first.
+            (a.yellow - b.yellow) * reach / 4.0,
         ]
         .iter()
         .map(|d| d * d)
@@ -297,8 +317,9 @@ impl Metric<LeafConfig> for LeafMetric {
 /// ruffled at its margin. The leaves near the head are still growing, small
 /// and upright, their leaflets narrow and still folded shut from the bud; a
 /// couple of trusses down they are full grown and open, and the older they
-/// are the more they droop. Every leaf draws its own size, angle, droop and
-/// leaflet count about these. Leaves are visual only, with no collider.
+/// are the more they droop. The young leaves are a lighter green, and the
+/// oldest yellow. Every leaf draws its own size, angle, droop, leaflet count
+/// and yellowing about these. Leaves are visual only, with no collider.
 #[derive(Resource, Reflect, Clone, Debug, PartialEq)]
 #[cfg_attr(
     feature = "python",
@@ -341,6 +362,13 @@ pub struct LeafParams {
     /// the pairs lean a little, the terminal leaflet never.
     #[reflect(@Slider { min: 0.0, max: 1.0, step: 0.05 })]
     pub asymmetry: f32,
+    /// How far the oldest leaves have yellowed. A leaf starts to fade fourteen
+    /// nodes below the head and may fade fully by eighteen, how far each one
+    /// goes a draw of its own: at 1 a leaf that old is anywhere from green to
+    /// a senescent leaf's pale yellow-green, at 2 half of them have faded all
+    /// the way, and 0 keeps every leaf green.
+    #[reflect(@Slider { min: 0.0, max: 2.0, step: 0.05 })]
+    pub yellowing: f32,
     /// How many distinct leaf meshes the scene may hold. A budget, not a
     /// count: the leaves are clustered and this is how many representatives
     /// the clustering may keep.
@@ -367,7 +395,8 @@ impl Default for LeafParams {
             curl: 1.0,
             fold: 0.35,
             asymmetry: 0.5,
-            variations: 32,
+            yellowing: 1.0,
+            variations: 40,
             detail: 1.0,
         }
     }
@@ -703,6 +732,13 @@ fn leaf_mesh(config: &LeafConfig, params: &LeafParams) -> Result<MeshData> {
     Ok(merge_meshes(&sheets))
 }
 
+/// A leaf's colour as linear RGB, before each mesh's shade: lighter and
+/// yellower the younger it is, and faded toward [`OLD_COLOR`] by its `yellow`.
+fn color(config: &LeafConfig) -> [f32; 3] {
+    let green = mix(srgb(COLOR), srgb(YOUNG_COLOR), 1.0 - config.grown);
+    mix(green, srgb(OLD_COLOR), config.yellow)
+}
+
 /// Builds one mesh per distinct leaf and gives it to every leaf that drew it.
 fn build(
     mut commands: Commands,
@@ -730,9 +766,9 @@ fn build(
         leaf_mesh(config, &params)
     });
     let mut geometry = Vec::with_capacity(meshes.len());
-    for (index, mesh) in meshes.into_iter().enumerate() {
+    for (index, (config, mesh)) in book.representatives.iter().zip(meshes).enumerate() {
         let color = shade(
-            srgb(COLOR),
+            color(config),
             &mut Rng::new(scene.seed ^ COLOR_STREAM ^ salt(index as u64)),
         );
         geometry.push(library.part(PART, index, mesh?.to_mesh(), RESPONSE.blade(color)));
@@ -750,6 +786,45 @@ fn build(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A leaf at the head is a lighter green than a grown one; only a leaf
+    /// more than `YELLOWING.0` nodes down yellows, the older the further, toward
+    /// a yellower colour; and none does at a `yellowing` of 0.
+    #[test]
+    fn a_leaf_is_lighter_at_the_head_and_yellows_with_age() {
+        let params = LeafParams::default();
+        let leaves = |params: &LeafParams, rank| -> Vec<LeafConfig> {
+            (0..64)
+                .map(|seed| LeafConfig::new(params, seed, rank))
+                .collect()
+        };
+        let light = |config: &LeafConfig| color(config).iter().sum::<f32>();
+        let (head, grown) = (leaves(&params, 0), leaves(&params, GROWING as u32));
+        assert!(head.iter().zip(&grown).all(|(h, g)| light(h) > light(g)));
+
+        let mean = |rank| leaves(&params, rank).iter().map(|c| c.yellow).sum::<f32>() / 64.0;
+        let (start, full) = (YELLOWING.0 as u32, YELLOWING.1 as u32);
+        assert!((0..=start).all(|rank| mean(rank) == 0.0));
+        assert!(0.0 < mean(start + 1) && mean(start + 1) < mean(full) && mean(full) > 0.3);
+
+        let old = leaves(&params, 19);
+        let oldest = old
+            .iter()
+            .max_by(|a, b| a.yellow.total_cmp(&b.yellow))
+            .unwrap();
+        let tint = |[r, g, _]: [f32; 3]| r / g;
+        let green = LeafConfig {
+            yellow: 0.0,
+            ..*oldest
+        };
+        assert!(tint(color(oldest)) > tint(color(&green)));
+
+        let never = LeafParams {
+            yellowing: 0.0,
+            ..params
+        };
+        assert!(leaves(&never, 19).iter().all(|c| c.yellow == 0.0));
+    }
 
     /// Every leaf the defaults call for builds at the coarsest, the default
     /// and the finest detail the panel offers, hangs from the stem's axis by

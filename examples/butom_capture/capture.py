@@ -53,11 +53,9 @@ GREENHOUSE_CFG = GreenhouseCfg(
     gutter=GutterCfg(height=0.95),
     wire=WireCfg(height=3.0),
     # A crop thick with leaves from its head down past the lower camera,
-    # where its ripe trusses hang. The generator strips the stem below the
-    # kept leaves, and always the two trusses nearest the harvest height.
-    # Meshed finer than the default for cameras a meter off: 9 to 13 sides
-    # round a stem rather than 6 or 7.
-    stem=StemCfg(harvest_height=1.0, leaves_kept=21, extra_stems=0.3, detail=1.5),
+    # where its ripe trusses hang. Meshed finer than the default for cameras
+    # a meter off: 9 to 13 sides round a stem rather than 6 or 7.
+    stem=StemCfg(harvest_height=1.0, extra_stems=0.3, detail=1.5),
     leaf=LeafCfg(length=0.5),
     truss=TrussCfg(fruit_diameter=0.05),
 )

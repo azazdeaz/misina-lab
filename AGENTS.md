@@ -39,7 +39,7 @@ GREENHOUSE_LAB_TOUR=shot.json GREENHOUSE_LAB_SHOT=out.png cargo run --release -p
 ```
 
 plays a shot file, the scene and the panel as the docs' pictures show them,
-saves it and quits, without ever showing its window; `VINERY_LAB_` and a bare
+saves it and quits, without opening a window; `VINERY_LAB_` and a bare
 `cargo run` for the vineyard. A shot file can live anywhere, and
 [docs-shots](.claude/skills/docs-shots/SKILL.md) says how one is written.
 
@@ -101,7 +101,7 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinery_lab`,
 | [web/index.html](web/index.html) | host page for the wasm playground |
 | [web/stage_docs.py](web/stage_docs.py) | copies the docs site's pages to where Zensical builds them from, pointing links to anything else at GitHub |
 | [zensical.toml](zensical.toml) | the docs site; its nav lists every page on it |
-| [docs/video/](docs/video/) | the README video: `record.sh` and the storyboard it plays, `encode.sh`, which every video is encoded with, and `publish.sh`, which uploads any of them to GitHub, the only host github.com plays video from, and points its README at it |
+| [docs/video/](docs/video/) | the README videos of the viewers: `record.sh` and the storyboards it plays, one per generator's crate, `encode.sh`, which every video is encoded with, and `publish.sh`, which uploads any of them to GitHub, the only host github.com plays video from, and points its README at it |
 | [docs/shots/](docs/shots/) | the docs' pictures: a shot file per picture, in a folder named after what renders it; `render.sh`, which renders them into `target/docs-assets`, and `publish.sh`, which force-pushes that folder to the assets repository the docs link |
 
 ## Docs
@@ -110,7 +110,7 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinery_lab`,
 - [crates/vinery-lab/README.md](crates/vinery-lab/README.md) — the vineyard generator: its features, the Isaac Lab workflow and the examples
 - [crates/vinery-lab/docs/parameters.md](crates/vinery-lab/docs/parameters.md) — every parameter, with its default and range (generated)
 - [crates/greenhouse-lab/README.md](crates/greenhouse-lab/README.md) — the greenhouse generator: what it builds, and its parameters page
-- [.claude/skills/readme-video/SKILL.md](.claude/skills/readme-video/SKILL.md) — re-recording the README video and changing what it shows; plain Markdown, for any agent
+- [.claude/skills/readme-video/SKILL.md](.claude/skills/readme-video/SKILL.md) — re-recording the README videos of the viewers and changing what they show; plain Markdown, for any agent
 - [.claude/skills/pruning-video/SKILL.md](.claude/skills/pruning-video/SKILL.md) — the same for the pruning demo's video, filmed in Isaac Sim
 - [.claude/skills/docs-shots/SKILL.md](.claude/skills/docs-shots/SKILL.md) — rendering the docs' pictures from their shots, placing a shot's camera by hand, and publishing them
 - [examples/isaaclab_demo/DEVELOPMENT.md](examples/isaaclab_demo/DEVELOPMENT.md) — the pinned Isaac Lab release and how to bump it

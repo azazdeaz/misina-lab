@@ -148,20 +148,23 @@ whole run, for demo videos. One captured frame becomes one video frame, so
 the stall a rebuild causes costs a frame rather than the freeze a screen
 recorder would keep. Frames are piped to `ffmpeg`, which
 has to be on `PATH`; the extension picks the container. `VINERY_LAB_RECORD_FPS`
-sets the rate, 30 by default, and is also how fast the window is sampled. See
+sets the rate, 30 by default, and is also how often a frame is captured. See
 `crates/misina-lab/src/record.rs`.
 
-`VINERY_LAB_TOUR=docs/video/tour.json cargo run --release` plays a storyboard
-of camera moves and panel edits, then hands the window back to the pointer.
-With `VINERY_LAB_RECORD` set too its clock advances one video frame per
-rendered frame, so the recording is smooth however long the rebuilds take, and
-the app quits at the end; `docs/video/record.sh` records the README video that
-way. `VINERY_LAB_SHOT=still.png` instead saves the window as the storyboard
-ends, and quits. With either set the window is never shown: what is saved is
-read off its own image, drawn whether it is on screen or not, so a still or a
-video needs a display but opens nothing on the desktop. See
+`VINERY_LAB_TOUR=docs/video/vinery-lab.json cargo run --release` plays a
+storyboard of camera moves and panel edits, then hands the window back to the
+pointer. A slider it slides rebuilds the scene at every frame of the slide,
+not once it settles as a drag does. With `VINERY_LAB_RECORD` set too its clock
+advances one video frame per rendered frame, so the recording is smooth
+however long the rebuilds take, and the app quits at the end;
+`docs/video/record.sh [crate]` records a README video that way, the
+vineyard's or, with `greenhouse-lab`, the greenhouse's.
+`VINERY_LAB_SHOT=still.png` instead saves the last frame as the storyboard
+ends, and quits. With either set the viewer opens no window: the camera draws
+the scene and the panel into an image of the storyboard's size, so a still or
+a video needs no display. See
 `crates/misina-lab/src/tour.rs`, and
-[the skill](.claude/skills/readme-video/SKILL.md) for changing the video.
+[the skill](.claude/skills/readme-video/SKILL.md) for changing the videos.
 
 The pruning, greenhouse and straddler demos' videos are filmed in Isaac Sim
 instead, headless: each demo's `record.sh` runs its `video.py`, which samples

@@ -24,6 +24,74 @@ Scene document format 11.
 
 ### Added
 
+- **greenhouse-lab**: A truss's fruit are packed. Each is laid out where it
+  would hang alone, then moved, its pedicel swinging round the rachis and
+  bending at its knuckle, until none lies in another, in the stems or on
+  another's pedicel; each fruit turns its top toward its knuckle, so the
+  last, pushed out past the rachis's end, faces back along it. A flower is
+  packed as far as its petals reach, and an elongated fruit as far as its
+  ends, as a capsule. The trusses sharing a mesh share its pedicels, packed
+  for the biggest fruit any of them hangs on each; each truss swings its own
+  fruit about their calyxes, back toward the way each would hang alone, up
+  to 20° off its pedicel, so crowded fruit touch rather than hang apart.
+  A truss's stalks are now as long as a
+  measured truss's, whatever the size of its fruit: a ripe medium truss's
+  fruit hang in a bunch off a rachis under 9 cm long, where it was up to
+  22 cm, and a cherry truss's hang apart on pedicels longer than they are
+  wide. New:
+  `TrussCfg.pedicel_length`, 31 mm by default, and
+  `TrussCfg.rachis_internode`, the rachis between two pedicels, 14 mm.
+- **misina-lab**: `geometry::packing::pack` moves a cluster of `Bob`s,
+  balls hung on stalks of two straight runs, each drawn out into a capsule
+  the way it hangs as far as its `drawn` says, apart until none lies in
+  another, in a stem or on another's stalk, every stalk keeping its length.
+  `packing::swing` swings each ball about its stalk's end, the stalks held
+  where they are, toward the way it would hang alone until it touches the
+  others. `packing::nearest` finds the points of two segments nearest each
+  other.
+- **greenhouse-lab**: A truss's stalks grow with its flowers. Each pedicel,
+  and the internode of rachis leading to it, is a third of its full length
+  when its flower opens, shorter in bud, and grows to full length over the
+  two and a half weeks after, before its fruit is full size. So a truss in
+  flower is short, its buds crowded at its tip, and the peduncle and rachis
+  thicken as it grows. New: `TrussCfg.stalks_in_flower`, a stalk's length
+  when its flower opens as a share of its full length, 0.35 by default.
+- **greenhouse-lab**: A truss sags under its fruit's weight. It grows
+  standing out from the stem, its rachis level, and its fruit bend its
+  peduncle and rachis down as they swell: a truss in flower stands out, and
+  one of grown fruit hangs from its bend much as every truss did before.
+  New: `TrussCfg.stiffness`, the Young's modulus they bend against, 70 MPa
+  by default. `TrussCfg.variations` is 24 by default, up from 16, as how far
+  a truss sags is one more way two trusses differ.
+- **misina-lab**: `geometry::bending::sag` finds where a rod held by its
+  first segment settles under the masses on its points, against its
+  flexural rigidity, and how each point turned, so whatever rides the rod
+  turns with it; `bending::rigidity` is a round section's. An organ is drawn
+  in the shape it grew into carrying nothing, then sagged under its load.
+- **greenhouse-lab**: Trusses flower. A truss shows at the head as a
+  cluster of buds, opens its flowers from its base to its tip from about
+  15 cm below the head, and sets them over the week after. A flower is a
+  calyx, five or six yellow petals swept back and the anther cone, on the
+  prim its fruit grows from, and a young fruit's calyx grows on from the
+  flower's. `greenhouse_lab:stage` is `bud` or `flower` until a fruit sets.
+  New: `FruitCfg.petal_length` and `FruitCfg.petal_reflex`.
+  `FruitCfg.variations` is 32 by default, up from 24, so the flowers' meshes
+  leave the fruit as many of their own as they had.
+- **greenhouse-lab**: Leaves change colour with age. A leaf at the head is
+  a lighter, yellower green than a grown one, and from fourteen nodes below
+  the head a leaf may fade toward a senescent leaf's pale yellow-green, each
+  by a draw of its own. New: `LeafCfg.yellowing`, how far the oldest leaves
+  fade, 1 by default and 0 for every leaf green. `LeafCfg.variations` is 40
+  by default, up from 32, which keeps the leaves' shapes about as close to
+  what each leaf drew as they were.
+- **greenhouse-lab**: Stems are deleafed as growers do it, up to a truss.
+  `StemParams.deleafed_to_truss` is the truss a pass strips a stem up to,
+  counted up from the lowest still on it: 3 by default, which leaves the
+  two trusses nearest their picking on bare stem and 18–20 leaves on a
+  stem. `StemParams.days_since_deleafing` is how long ago the crop was
+  deleafed: a stem carries three more leaves a week than the pass left it,
+  its lowest, which the next pass strips; 0 by default. A young crop keeps
+  every leaf until its first truss nears its picking.
 - **greenhouse-lab**: A path's heating pipes are one loop. At the row head
   each turns down through an elbow into the floor, to the mains under the
   main path, and at the far end two more elbows and a pipe across join the
@@ -113,12 +181,11 @@ Scene document format 11.
   model in Kit's viewport, translucent, and follows the ones moved or resized
   while it runs. Kit draws only a PhysX scene's colliders.
 - **greenhouse-lab**: leaves. A compound tomato leaf at every node of a stem
-  from the head down, `leaves_kept` of them: a terminal leaflet, three or four
-  pairs of laterals and small leaflets between them, each leaflet outlined
-  from its veins. Leaves are small and upright at the head and droop further
-  down. The stem below them is stripped, with a stub at each node, so the
-  two trusses nearest their picking always hang on bare stem. Leaves are
-  visual only, with no collider. New: `StemCfg.leaves_kept` and `LeafCfg`.
+  from the head down to where it was stripped: a terminal leaflet, three or
+  four pairs of laterals and small leaflets between them, each leaflet
+  outlined from its veins. Leaves are small and upright at the head and
+  droop further down. The stem below them is stripped, with a stub at each
+  node. Leaves are visual only, with no collider. New: `LeafCfg`.
 - **greenhouse-lab**: `LeafCfg.detail` sets how finely a leaf is meshed, as
   a multiplier: a full-grown leaf is about 1500 triangles at the default 1,
   500 at 0.1 and 4500 at 4. Coarser drops the leaflets' finest teeth first.
@@ -138,7 +205,7 @@ Scene document format 11.
   `camera`, and copies it: a view found by hand, ready to paste into a
   storyboard.
 - **misina-lab**: A storyboard's camera takes `fov`, the vertical field of
-  view. `{PACKAGE}_SHOT` saves the window to an image once a storyboard is
+  view. `{PACKAGE}_SHOT` saves the frame to an image once a storyboard is
   over, so a storyboard with no steps is a still of its opening shot.
 - **misina-lab**: `misina_lab.isaaclab.shots` renders a still of a generated
   scene in Isaac Sim from a shot file, its camera a storyboard's, or opens
@@ -175,9 +242,17 @@ Scene document format 11.
 
 ### Changed
 
-- **misina-lab**: A storyboard that saves a still or records a video plays in
-  a window that is never shown, so `{PACKAGE}_SHOT` and `{PACKAGE}_RECORD`
-  open nothing on the desktop. A preview still opens its window.
+- **vinery-lab**, **greenhouse-lab**: The web playgrounds start on a scene
+  just big enough to hold everything: the vineyard on a 24 by 18 m parcel
+  of three rows, the greenhouse on one 5 m row. The panel grows
+  either back to the defaults the native viewer starts on. New in
+  **misina-lab**: `viewer::start_from`, which starts the viewer from given
+  params rather than the defaults.
+- **misina-lab**: A storyboard that saves a still or records a video opens no
+  window and needs no display: the viewer draws the scene and the panel into
+  an image of the storyboard's size, so `{PACKAGE}_SHOT` and
+  `{PACKAGE}_RECORD` run on a machine with no desktop. A preview still opens
+  its window.
 - **greenhouse-lab**: A truss's rachis ends in its last fruit: its last
   internode is that fruit's pedicel out to the knuckle, where the rachis ran
   on past the fruit to a stump. Every other pedicel leaves the rachis's
@@ -187,9 +262,8 @@ Scene document format 11.
   fruit's calyx, where a stub on the fruit stood between them, and it leans
   the fruit out the way it left, so the fruit's top faces back toward the
   rachis. Each pedicel draws its own reach, swing and lean. Pedicels no longer
-  run through the fruit above them, and the rachis is a little longer between
-  fruit. New: `TrussCfg.pedicel_angle`, how far under the rachis the pedicels
-  leave it; 0 leaves them out to its sides.
+  run through the fruit above them. New: `TrussCfg.pedicel_angle`, how far
+  under the rachis the pedicels leave it; 0 leaves them out to its sides.
 - **greenhouse-lab** (**cfg**): `FruitCfg.jointed` is now `TrussCfg.jointed`:
   the knuckle is on the truss's pedicel, and a fruit has no stub of its own.
 - **misina-lab**: `rods.make_physics_cfg_newton` takes `broad_phase`.
@@ -220,6 +294,18 @@ Scene document format 11.
   leaves its edges clean where they were ragged and flickering. The pruning
   video's close-ups are filmed at f/96, as at f/48 the blades frayed against
   the blurred background.
+- **misina-lab**: A storyboard's slide rebuilds the scene at every frame of
+  it, where it reached the scene 150 ms after the slider stopped, as a drag
+  does: a recorded video shows the scene following the slider.
+- **misina-lab**: A storyboard's camera move that starts while another is
+  still under way blends out of it and keeps the camera's speed, where it
+  stopped the camera dead and started it again from rest.
+- **misina-lab**: The viewer's footer keeps each figure on one line: a window
+  too narrow for them all moves whole figures to a second row, where each
+  figure broke over two lines as its number grew.
+- **misina-lab**: The viewer's `{PACKAGE}_RECORD` video is near-lossless, at
+  CRF 10 where it was 20, as the Isaac Sim films' are: a video encoded from
+  it for upload loses detail only then. A file is about three times bigger.
 - **misina-lab**: The viewer's **Copy Isaac Lab cfg** button spans the
   panel's width and is taller than a control row.
 - **greenhouse-lab**: Lowered stems lie in a loose bundle along each side
@@ -279,11 +365,9 @@ Scene document format 11.
 - **greenhouse-lab**: Trusses are modelled closer to life. The rachis is a
   chain of internodes that zigzags, kinking away from each pedicel, and
   hangs nearer vertical toward its tip; the peduncle bends over a longer
-  arc. A pedicel is sized to its fruit, arches up and over and comes down
-  onto the fruit vertically, with the knuckle just under its tip, where the
-  fruit hangs a little off vertical. The sepals are half the fruit's
-  diameter long, lift off the shoulders to spread, and are folded and
-  twisted. Every representative truss draws its own kinks.
+  arc. The sepals are half the fruit's diameter long, lift off the
+  shoulders to spread, and are folded and twisted. Every representative
+  truss draws its own kinks.
 - **misina-lab**: A rod carries loads: `Cable.loads` is the mass hanging from
   each point, which the builder adds to the rod's own, and `cable()` takes
   it after the widths, empty for a rod that carries nothing.
@@ -334,6 +418,25 @@ Scene document format 11.
 
 ### Fixed
 
+- **misina-lab**: A `{PACKAGE}_RECORD` video keeps every frame in its place.
+  A frame whose readback landed more than 8 frames late, as one does while a
+  slide rebuilds the scene, was skipped, and written once it landed in the
+  place of a frame up to two seconds later: the camera jumped back for a
+  frame. Frames now wait for a late one up to 2 GiB, about 250 frames at
+  1080p, and one skipped is never written, and logged.
+- **greenhouse-lab** (**cfg**): `LayoutCfg.plant_spacing` is how far apart
+  the plants stand, exactly. A slab is cut to the whole number of plants
+  that brings it nearest 1.2 m, where every slab was 1.2 m and took the
+  nearest whole number of plants, so every spacing from 0.35 to 0.48 m built
+  the same rows, three plants to a slab. A row leaves at least 0.2 m of its
+  gutter bare at each end, and plants stand no closer than 0.15 m, so every
+  block sits whole on its slab. A lowered crop's stems rise along a wire as
+  far apart as the plants: every hook is slid by the same step, where each
+  stem was lowered as far as it had grown past the wire, give or take 15%,
+  which bunched some stems a few centimetres apart and left gaps of over
+  half a metre. The stems that run round a gutter's end rise on in step with the
+  rest, and trusses of neighbouring stems no longer run into each other or
+  into the stems.
 - **misina-lab**: The rods' solver keeps up to 1024 contacts for each body,
   `rods.BODY_CONTACTS`, where it kept Newton's 64. A robot body that meets
   rods as a proxy touches every rod shape against it at once, and VBD

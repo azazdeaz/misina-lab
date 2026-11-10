@@ -57,8 +57,8 @@ class LayoutCfg:
     """
     plant_spacing: float = 0.36
     """Distance between plants along a gutter, in meters, each in a propagation block on
-    a slab. A slab carries the whole number of plants closest to this, so the real
-    spacing comes out close to it rather than equal to it.
+    a slab. A slab is as long as the whole number of plants that brings it nearest
+    1.2 m, so the plants stand this far apart the whole row along.
     """
 
 
@@ -128,8 +128,8 @@ class StemCfg:
     the wire is too low for lies along the gutter. In full production the stem
     between `harvest_height` and the head carries `trusses` trusses with three leaves
     to each, so how much a stem grows in a week follows from the wire height rather
-    than being set. Only the top `leaves_kept` leaves are left on; the stem below
-    them is stripped bare.
+    than being set. The crop is deleafed about weekly, so the stem below its leaves
+    is bare.
     """
 
     harvest_height: float = 1.2
@@ -137,11 +137,11 @@ class StemCfg:
     full production, in meters: where a harvesting arm reaches to. A stem's lowest
     hangs up to a week's growth above it, the higher the sooner after its last
     picking, and a stem that grows faster than the rest hangs it up to 5% of its live
-    height lower. The stem below it has been picked and stripped bare.
+    height lower. The stem below it has been picked.
     """
     trusses: int = 9
     """Trusses on a stem in full production, from the lowest still on it up to the head.
-    At a truss a week, also the weeks from a truss flowering at the head to its
+    At a truss a week, also the weeks from a truss showing at the head to its
     picking.
     """
     development_spread: float = 0.2
@@ -153,10 +153,20 @@ class StemCfg:
     its trusses stray from its neighbours' heights only as far as it grows up to 5%
     faster or slower.
     """
-    leaves_kept: int = 16
-    """Leaves on a stem, counted down from the head. Growers strip the ones below, so
-    the stem under them is bare, and the two trusses nearest their picking always
-    hang on bare stem however many are kept.
+    deleafed_to_truss: int = 3
+    """The truss a deleafing pass strips a stem up to, counted up from the lowest still
+    on it: every leaf below it goes. 1 strips the stem below the truss being picked,
+    2 up to the next truss, a week's growth higher, and 3 leaves the two lowest
+    hanging on bare stem. Stripped up to its third, a stem keeps 18–20 leaves at
+    the defaults, the small ones at its head among them, and three fewer for each
+    truss higher; Dutch farms were measured carrying 19–24 in summer, counting
+    every leaf over 5 cm long.
+    """
+    days_since_deleafing: float = 0.0
+    """Days since the crop was last deleafed; growers deleaf it weekly. Each stem has
+    grown three leaves a week since, so it carries that many more than the pass left
+    it: its lowest, which the next pass strips. A stem planted since has not been
+    deleafed.
     """
     extra_stems: float = 0.0
     """Share of plants grown on with a third stem, which growers keep to raise the stem
@@ -197,9 +207,10 @@ class LeafCfg:
     folded along its midrib, puckered between its veins and ruffled at its margin.
     The leaves near the head are still growing, small and upright, their leaflets
     narrow and still folded shut from the bud; a couple of trusses down they are full
-    grown and open, and the older they are the more they droop. Every leaf draws its
-    own size, angle, droop and leaflet count about these. Leaves are visual only,
-    with no collider.
+    grown and open, and the older they are the more they droop. The young leaves are
+    a lighter green, and the oldest yellow. Every leaf draws its own size, angle,
+    droop, leaflet count and yellowing about these. Leaves are visual only, with no
+    collider.
     """
 
     length: float = 0.45
@@ -233,7 +244,14 @@ class LeafCfg:
     toward the tip. The small leaflets between the pairs lean a little, the terminal
     leaflet never.
     """
-    variations: int = 32
+    yellowing: float = 1.0
+    """How far the oldest leaves have yellowed. A leaf starts to fade fourteen nodes
+    below the head and may fade fully by eighteen, how far each one goes a draw of
+    its own: at 1 a leaf that old is anywhere from green to a senescent leaf's pale
+    yellow-green, at 2 half of them have faded all the way, and 0 keeps every leaf
+    green.
+    """
+    variations: int = 40
     """How many distinct leaf meshes the scene may hold. A budget, not a count: the
     leaves are clustered and this is how many representatives the clustering may
     keep.
@@ -255,8 +273,10 @@ class TrussCfg:
     hung along it.
 
     The peduncle numbers default to the means measured on medium trusses in a
-    high-wire house, and every truss draws its own about them. A medium truss tomato
-    is about 6 fruit of 60 mm; a cherry truss about 15 of 25 mm, branched.
+    high-wire house, and every truss draws its own about them; the rachis's internode
+    to what those trusses' measured lengths leave for it (est.), and the pedicel to a
+    genebank's measurements. A medium truss tomato is about 6 fruit of 60 mm; a
+    cherry truss about 15 of 25 mm, branched.
     """
 
     fruits: int = 6
@@ -277,19 +297,41 @@ class TrussCfg:
     """Angle between the stem and the peduncle where it leaves, in degrees: 90 leaves
     level, less leaves rising.
     """
+    stiffness: float = 70.0
+    """How stiff the peduncle and rachis are, as a Young's modulus in MPa. A truss grows
+    standing out from the stem, and its fruit's weight bends it down against this:
+    one in flower barely bends, and one sags further as its fruit swell. Below green
+    wood's, as a stalk under a load for weeks gives way to it more than it would at
+    once.
+    """
+    rachis_internode: float = 0.014
+    """Length of the rachis between two pedicels under grown fruit, in meters: short, a
+    truss's fruit crowd into a bunch, and long, they hang apart down the rachis.
+    """
+    pedicel_length: float = 0.031
+    """Length of a pedicel under a grown fruit, from the rachis to the fruit's calyx, in
+    meters. A small-fruited truss's are about as long as a large-fruited one's, so
+    its fruit hang further out for their size.
+    """
     pedicel_angle: float = 45.0
     """How far under the rachis its pedicels leave it, in degrees below its sides: 0
     leaves them level out to the sides, and more hangs the fruit further under it. At
     45 the two ranks, down alternate flanks, meet at a right angle, as they do on a
-    tomato truss; past 50, neighbouring fruit hang into each other.
+    tomato truss.
     """
     jointed: bool = True
     """Whether a pedicel has a knuckle, the joint a fruit breaks off at, as most truss
     varieties do.
     """
+    stalks_in_flower: float = 0.35
+    """How long a pedicel, and the internode of rachis leading to it, are when its
+    flower opens, as a share of their length under the grown fruit: about a third on
+    a large-fruited truss, whose stalks grow to about three times their length in
+    flower, and nearer 1 on a small-fruited one, whose barely grow on.
+    """
     missing_fruit: float = 0.05
     """Chance that a fruit is missing from its pedicel."""
-    variations: int = 16
+    variations: int = 24
     """How many distinct truss meshes the scene may hold. A budget, not a count: the
     trusses are clustered and this is how many representatives the clustering may
     keep.
@@ -298,19 +340,23 @@ class TrussCfg:
 
 @configclass
 class FruitCfg:
-    """The fruit: their shape, how ripe the crop is, and what colour ripe is.
+    """The fruit and the flowers they set from: their shape, how ripe the crop is, and
+    what colour ripe is.
 
-    Every fruit has a stage: set, expanding and mature green while it grows, then
-    breaker, turning, pink, light red and red as it colours from its blossom end up.
-    A truss sets its fruit near the head, and they reach full size five trusses down.
-    A stem colours from its lowest truss up and a truss from its base to its tip, so
-    in full production the lowest `ripe_trusses` trusses on a stem are colouring and
-    the ones above them still green; a young crop's trusses are all green until the
-    first are old enough. A truss is due once its tip fruit is turning. Every stem
-    runs a little ahead of or behind the rest.
+    Every fruit has a stage: bud and flower before it sets, set, expanding and mature
+    green while it grows, then breaker, turning, pink, light red and red as it
+    colours from its blossom end up. A truss shows at the head in bud, opens its
+    flowers from its base to its tip from about 15 cm below the head, sets them over
+    the week after, and they reach full size about five trusses further down. A stem
+    colours from its lowest truss up and a truss from its base to its tip, so in full
+    production the lowest `ripe_trusses` trusses on a stem are colouring and the ones
+    above them still green; a young crop's trusses are all green until the first are
+    old enough. A truss is due once its tip fruit is turning. Every stem runs a
+    little ahead of or behind the rest.
 
     Every fruit draws its own lobe count, its five or six sepals and how each curls,
-    and a slight lean, within the ranges the research notes give.
+    and a slight lean, within the ranges the research notes give; its flower has a
+    petal between each two sepals.
     """
 
     ripe_trusses: float = 1.0
@@ -332,10 +378,21 @@ class FruitCfg:
     """Depth of the grooves between a fruit's lobes, as a fraction of its radius: 0 is
     smooth, and a beefsteak's are about 0.15.
     """
-    variations: int = 24
-    """How many distinct fruit meshes the scene may hold, by size, shape and stage. A
-    budget, not a count: the fruit are clustered and this is how many representatives
-    the clustering may keep.
+    petal_length: float = 0.011
+    """Length of a flower's petals, in meters: an open tomato flower is under 25 mm
+    across, and a cherry tomato's smaller.
+    """
+    petal_reflex: float = 125.0
+    """How far an open flower's petals sweep back, in degrees off pointing straight
+    ahead: 90 opens it flat, and a tomato's sweep back past that toward its pedicel.
+    """
+    variations: int = 32
+    """How many distinct fruit and flower meshes the scene may hold, by size, shape and
+    stage. A budget, not a count: the fruit are clustered and this is how many
+    representatives the clustering may keep, though a crop in flower keeps one for
+    its flowers and one for its fruit at least. A fruit is drawn at its
+    representative's size, so on a small budget a truss's fruit, packed to touch at
+    their own sizes, are drawn into each other.
     """
 
 

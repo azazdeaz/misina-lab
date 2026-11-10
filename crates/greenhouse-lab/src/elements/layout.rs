@@ -18,15 +18,25 @@ use misina_lab::scene::{PrimRoot, UsdType};
 use super::Grow;
 
 /// A stone wool slab, in meters: its length along the row, its width and its
-/// height.
+/// height. A layout cuts its slabs to the whole number of plants that makes
+/// them nearest this long: [`GreenhouseLayout::slab`].
 pub const SLAB: Vec3 = Vec3::new(1.2, 0.195, 0.075);
 
-/// The least gap left between two slabs along a gutter, in meters.
+/// A propagation block, in meters.
+pub const BLOCK: Vec3 = Vec3::new(0.1, 0.1, 0.065);
+
+/// The gap left between two slabs along a gutter, in meters.
 const SLAB_GAP: f32 = 0.05;
 
-/// Floors on what Python may set, so that nothing is laid out at zero size.
+/// How much of a gutter is left bare at each end of a row, in meters: room
+/// for the lowered stems to turn round it.
+const BARE_END: f32 = 0.2;
+
+/// Floors on what Python may set, so that nothing is laid out at zero size;
+/// plants far enough apart that each block sits whole on its slab, the
+/// slab's ends `SLAB_GAP / 2` inside its plants' stretch.
 const MIN_PITCH: f32 = 0.1;
-const MIN_PLANT_SPACING: f32 = 0.05;
+const MIN_PLANT_SPACING: f32 = BLOCK.x + SLAB_GAP;
 
 /// Where the rows go.
 ///
@@ -54,9 +64,9 @@ pub struct LayoutParams {
     #[reflect(@Slider { min: 3.0, max: 5.0, step: 0.1 })]
     pub main_path: f32,
     /// Distance between plants along a gutter, in meters, each in a
-    /// propagation block on a slab. A slab carries the whole number of plants
-    /// closest to this, so the real spacing comes out close to it rather than
-    /// equal to it.
+    /// propagation block on a slab. A slab is as long as the whole number of
+    /// plants that brings it nearest 1.2 m, so the plants stand this far
+    /// apart the whole row along.
     #[reflect(@Slider { min: 0.3, max: 0.5, step: 0.01 })]
     pub plant_spacing: f32,
 }
@@ -89,6 +99,12 @@ pub struct GreenhouseLayout {
     pub margin: f32,
     /// How far the main path reaches along -X from the row head.
     pub main_path: f32,
+    /// How long a slab is along the row: a whole number of plants' spacing,
+    /// less the gap to the next slab.
+    pub slab: f32,
+    /// The stretch of a row the plants stand on, each centred on its own
+    /// spacing of it, from its start to its end along +X.
+    pub planted: (f32, f32),
     /// Each slab's centre along a row, the same in every row.
     pub slabs: Vec<f32>,
     /// Each plant's place along a row, the same in every row.
@@ -164,25 +180,30 @@ fn author(
     }
 }
 
-/// The layout `params` asks for. A row is at least one slab long.
+/// The layout `params` asks for. A row is at least one slab long, and its
+/// ends bare.
 fn solve(params: &LayoutParams) -> GreenhouseLayout {
     let count = params.rows.max(1);
     let pitch = params.pitch.max(MIN_PITCH);
-    let length = params.row_length.max(SLAB.x);
 
-    // As many slabs as fit with `SLAB_GAP` beside each, spread evenly over the
-    // whole row.
-    let slabs = (length / (SLAB.x + SLAB_GAP)).floor().max(1.0) as usize;
-    let step = length / slabs as f32;
-    let slabs: Vec<f32> = (0..slabs).map(|i| (i as f32 + 0.5) * step).collect();
-    let per_slab = (SLAB.x / params.plant_spacing.max(MIN_PLANT_SPACING))
-        .round()
+    // Each plant centred on its own `spacing` of the row, and each slab under
+    // `per_slab` of them, `SLAB_GAP` short of their stretch: as many as fit
+    // between the bare ends, centred on the row.
+    let spacing = params.plant_spacing.max(MIN_PLANT_SPACING);
+    let per_slab = ((SLAB.x + SLAB_GAP) / spacing).round().max(1.0) as usize;
+    let stretch = per_slab as f32 * spacing;
+    let slab = stretch - SLAB_GAP;
+    let length = params.row_length.max(slab + 2.0 * BARE_END);
+    let slabs = ((length - 2.0 * BARE_END + SLAB_GAP) / stretch)
+        .floor()
         .max(1.0) as usize;
-    let plants = slabs
-        .iter()
-        .flat_map(|centre| {
-            (0..per_slab).map(move |i| centre + SLAB.x * ((i as f32 + 0.5) / per_slab as f32 - 0.5))
-        })
+    let start = (length - slabs as f32 * stretch) / 2.0;
+    let planted = (start, start + slabs as f32 * stretch);
+    let plants = (0..slabs * per_slab)
+        .map(|i| start + (i as f32 + 0.5) * spacing)
+        .collect();
+    let slabs = (0..slabs)
+        .map(|k| start + (k as f32 + 0.5) * stretch)
         .collect();
 
     GreenhouseLayout {
@@ -196,6 +217,8 @@ fn solve(params: &LayoutParams) -> GreenhouseLayout {
         width: (count + 1) as f32 * pitch,
         margin: pitch / 2.0,
         main_path: params.main_path.max(0.0),
+        slab,
+        planted,
         slabs,
         plants,
     }
@@ -228,43 +251,65 @@ mod tests {
         }
     }
 
-    /// Slabs lie inside the row with a gap between each two, and every plant
-    /// stands on one, at about the spacing asked for — Python's stops
-    /// included.
+    /// Slabs lie between the row's bare ends with a gap between each two,
+    /// each within half a plant's spacing of 1.2 m long, and every plant's
+    /// block sits whole on one, all of them exactly the spacing asked for
+    /// apart and filling the planted stretch — Python's stops included.
     #[test]
     fn every_plant_stands_on_a_slab_inside_the_row() {
-        for (row_length, plant_spacing) in [(20.0, 0.36), (5.0, 0.5), (0.0, 0.3), (120.0, 0.0)] {
+        for (row_length, plant_spacing) in [
+            (20.0, 0.36),
+            (20.0, 0.42),
+            (5.0, 0.5),
+            (0.0, 0.3),
+            (120.0, 0.0),
+        ] {
             let params = LayoutParams {
                 row_length,
                 plant_spacing,
                 ..default()
             };
             let layout = solve(&params);
-            let half = SLAB.x / 2.0;
+            let asked = plant_spacing.max(MIN_PLANT_SPACING);
+            let half = layout.slab / 2.0;
+            assert!(
+                (layout.slab - SLAB.x).abs() <= asked / 2.0 + 1e-4,
+                "{params:?}: {} m slabs",
+                layout.slab
+            );
             let (first, last) = (layout.slabs[0], layout.slabs[layout.slabs.len() - 1]);
             assert!(
-                first >= half && last + half <= layout.length + 1e-4,
+                first - half >= BARE_END - 1e-4 && last + half <= layout.length - BARE_END + 1e-4,
                 "{params:?}"
             );
             assert!(
                 layout
                     .slabs
                     .windows(2)
-                    .all(|pair| pair[1] - pair[0] >= SLAB.x + SLAB_GAP - 1e-4),
+                    .all(|pair| pair[1] - pair[0] >= layout.slab + SLAB_GAP - 1e-4),
                 "{params:?}: slabs touch"
+            );
+            assert!(
+                layout.plants.iter().all(|x| layout
+                    .slabs
+                    .iter()
+                    .any(|slab| (x - slab).abs() + BLOCK.x / 2.0 <= half + 1e-4)),
+                "{params:?}: a block off every slab"
             );
             assert!(
                 layout
                     .plants
-                    .iter()
-                    .all(|x| layout.slabs.iter().any(|slab| (x - slab).abs() < half)),
-                "{params:?}: a plant off every slab"
+                    .windows(2)
+                    .all(|pair| (pair[1] - pair[0] - asked).abs() < 1e-4),
+                "{params:?}: {:?}",
+                layout.plants
             );
-            let asked = plant_spacing.max(MIN_PLANT_SPACING);
-            let spacing = SLAB.x * layout.slabs.len() as f32 / layout.plants.len() as f32;
+            let ends = (layout.plants[0], layout.plants[layout.plants.len() - 1]);
             assert!(
-                (spacing - asked).abs() <= asked / 2.0,
-                "{params:?}: {spacing}"
+                (ends.0 - asked / 2.0 - layout.planted.0).abs() < 1e-4
+                    && (ends.1 + asked / 2.0 - layout.planted.1).abs() < 1e-4,
+                "{params:?}: {:?}",
+                layout.planted
             );
         }
     }

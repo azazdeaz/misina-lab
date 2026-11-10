@@ -73,9 +73,9 @@ A video is right when:
   before the blades close.
 - each caption sits under its own take and is legible at the README's
   width, about 830 px.
-- the file is under 10 MB, the most GitHub takes on a free plan.
-  `docs/video/encode.sh` spends 9 MB whatever the length, so a longer video
-  gets fewer bits a second.
+- the file is under 100 MB, the most GitHub takes on a paid plan; a free
+  plan takes 10. `docs/video/encode.sh` encodes at a constant quality, so the
+  size follows the length and how busy the picture is.
 
 ## Change what it shows
 

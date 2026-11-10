@@ -68,8 +68,19 @@ SUBSTEPS = 4
 DECIMATION = 4
 """Physics steps per control tick: the robot is driven at 50 Hz."""
 
-STAGES = ("set", "expanding", "mature_green", "breaker", "turning", "pink", "light_red", "red")
-"""A fruit's `greenhouse_lab:stage`, from fruit set to red."""
+STAGES = (
+    "bud",
+    "flower",
+    "set",
+    "expanding",
+    "mature_green",
+    "breaker",
+    "turning",
+    "pink",
+    "light_red",
+    "red",
+)
+"""A fruit's `greenhouse_lab:stage`, from bud and flower to red."""
 DUE = STAGES.index("turning")
 
 STANDOFF = 0.12

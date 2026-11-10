@@ -9,16 +9,13 @@
 # first, four to a row.
 set -euo pipefail
 raw=$1 out=$2 filters=${3:-null}
-log=$(mktemp)
-trap 'rm -f "$log"*' EXIT
 
-# 9 MB, as GitHub takes 10 on a free plan: two passes at the bitrate that
-# fills it, however long the video. It starts playing before it has loaded.
-secs=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$raw")
-x264=(-vf "$filters" -c:v libx264 -preset slow -b:v "$(awk "BEGIN { print int(72000 / $secs) }")k"
-    -pix_fmt yuv420p -passlogfile "$log")
-ffmpeg -y -loglevel warning -i "$raw" "${x264[@]}" -pass 1 -f null /dev/null
-ffmpeg -y -loglevel warning -i "$raw" "${x264[@]}" -pass 2 -movflags +faststart "$out"
+# At a constant quality, so the size follows the picture: a minute of the
+# greenhouse at 1080p is about 55 MB, and GitHub takes 100 on a paid plan.
+# H.264, which every browser plays. It starts playing before it has loaded.
+ffmpeg -y -loglevel warning -i "$raw" -vf "$filters" \
+    -c:v libx264 -preset veryslow -crf 22 -pix_fmt yuv420p -movflags +faststart "$out"
+secs=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out")
 rows=$(( (${secs%.*} / 2 + 4) / 4 ))
 ffmpeg -y -loglevel warning -i "$out" \
     -vf "select='isnan(prev_selected_t)+gte(t-prev_selected_t,2)',scale=480:-2,tile=4x$rows" \

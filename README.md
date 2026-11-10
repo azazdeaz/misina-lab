@@ -147,7 +147,7 @@ The rows of a high-wire tomato greenhouse, grown to any week of the season.
 
 ![A greenhouse built on Misina Lab, in Isaac Lab](https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/greenhouse_demo/rows.webp)
 
-- 🍅 Every fruit its own prim, with its ripening stage
+- 🍅 Every fruit its own prim, with its stage from bud and flower to ripe
 - 🦾 A `Cut` and a `Bend` frame on every truss, where a gripper takes it
 - 📅 The crop's age in weeks, from young plants on their twines to meters of
   lowered stem
@@ -195,7 +195,7 @@ Move a slider and the scene rebuilds what it touches. **Copy Isaac Lab cfg**
 puts the settings on the clipboard, ready to paste into an Isaac Lab scene
 config.
 
-https://github.com/user-attachments/assets/529d2e5b-2bfa-458f-81d0-02c65c27ba53
+https://github.com/user-attachments/assets/4a6f6f8f-fa77-4f1f-934e-8d8ad76277d6
 
 ## Roadmap
 
