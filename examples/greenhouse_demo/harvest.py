@@ -186,7 +186,8 @@ class Truss:
 class Point:
     """Where a `Gesture` takes the shear's tip next: `offset` from a point
     of the truss's fruit, in meters ahead the way the shear comes in to cut
-    it, across the path into the crop, and up. `anchor` names the point:
+    it, across the path into the crop -- along the row, where the shear
+    comes in across the path -- and up. `anchor` names the point:
     "back", the near side of the fruit furthest back toward the arm, level
     with its middle; "low", the bottom of the lowest fruit; "middle", the
     middle of them all. The tip goes there on a straight line at `speed`,
@@ -434,8 +435,11 @@ def gesture_poses(gesture: Gesture, truss: Truss, shears, machine: Harvester) ->
     `gesture`'s points, about `truss`'s fruit as they hang now."""
     _, along = peduncle(truss, shears)
     level, up = heading(along, truss.side), np.array([0.0, 0.0, 1.0])
+    # Into the crop; where the shear comes in across the path, square to a
+    # peduncle along the row, this runs along the row instead.
     across = np.cross(up, level)
-    across *= np.sign(across @ truss.side)
+    if across @ truss.side < 0:
+        across = -across
     placed = []
     for body, offset, _, _ in truss.fruit:
         pose = shears.pose(body)
@@ -550,6 +554,8 @@ class Harvest:
         """The gestures still to make, at the first truss."""
         self.touching: tuple[np.ndarray, np.ndarray] | None = None
         """The gesture under way, past its first point."""
+        self.made = 0
+        """How many of `gestures` the arm has made to their last point."""
         self.stroke = Stroke(machine.shear, machine.shear_frame, shears)
         self.jobs = list(jobs)
         self.q = np.array(q, dtype=float)
@@ -874,6 +880,7 @@ class Harvest:
                 if settled and self.stage == "reach":
                     self._play("touch", self.touching)
                 elif settled and self.stage == "touch":
+                    self.made += 1
                     self._touch()
                 elif settled and self.stage == "approach":
                     self._play("inward", self.planned.inward)

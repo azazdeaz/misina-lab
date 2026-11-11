@@ -233,9 +233,9 @@ def main():
         due, last, left_at, shown = 0.0, None, None, None
         ridden, row = None, left
         share = 1.0 - np.exp(-1.0 / (LAG * FPS))
-        # The gestures made, by their place in `GESTURES`: one the arm could
-        # not make is passed over.
-        made: set[int] = set()
+        # The gestures begun, by their place in `GESTURES`: one the arm could
+        # not plan is passed over.
+        begun: set[int] = set()
         try:
             for step, harvest in enumerate(
                 demo.run(sim, robot, machine, PATHS, render=False, gestures=GESTURES)
@@ -243,8 +243,8 @@ def main():
                 now = step * demo.SIM_DT
                 truss = harvest.job if isinstance(harvest.job, demo.Truss) else None
                 if harvest.stage == "touch":
-                    made.add(len(GESTURES) - len(harvest.gestures))
-                touched, gesturing = bool(made), harvest.stage in ("reach", "touch")
+                    begun.add(len(GESTURES) - len(harvest.gestures))
+                touched, gesturing = bool(begun), harvest.stage in ("reach", "touch")
                 if truss and harvest.stage == "approach":
                     planned.add(truss.prim)
                 # A take's truss out of reach passes its caption on.
@@ -327,8 +327,8 @@ def main():
         missed = captions.keys() - {truss.prim for truss in harvest.cut}
         if len(captions) < len(TAKES) or missed:
             raise RuntimeError(f"of {len(TAKES)} takes, these trusses were not cut: {missed}")
-        if len(made) < len(GESTURES):
-            raise RuntimeError(f"the arm made {len(made)} of the {len(GESTURES)} gestures")
+        if harvest.made < len(GESTURES):
+            raise RuntimeError(f"the arm made {harvest.made} of the {len(GESTURES)} gestures")
 
 
 if __name__ == "__main__":
