@@ -11,7 +11,10 @@ use bevy::prelude::*;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::doc::{self, Capsule, FORMAT, Node, PartEntry, SceneDoc, Xform};
-use super::{Cable, Collider, Part, Prototypes, UsdAttributes, UsdReference, UsdRoot, UsdType};
+use super::{
+    ATTRIBUTE_ALONG, Cable, Collider, Part, Prototypes, Skin, UsdAttributes, UsdReference, UsdRoot,
+    UsdType,
+};
 
 /// The scene's coordinate convention. Authored natively rather than corrected
 /// downstream: `upAxis` and `metersPerUnit` are root-layer-only stage metadata
@@ -28,14 +31,14 @@ const METERS_PER_UNIT: f64 = 1.0;
 /// the viewer's save key.
 pub fn scene_doc(world: &mut World) -> anyhow::Result<SceneDoc> {
     let parts = part_entries(world)?;
-    let solid: HashSet<&str> = parts
+    let unique: HashSet<&str> = parts
         .iter()
-        .filter(|part| part.collision.is_some())
+        .filter(|part| part.collision.is_some() || part.along.is_some())
         .map(|part| part.name.as_str())
         .collect();
     let (root, namespace) = root_entity(world)?;
     let prims = collect_prims(world);
-    let root_node = build_node(root, &prims, &solid)?
+    let root_node = build_node(root, &prims, &unique)?
         .ok_or_else(|| anyhow!("the `UsdRoot` entity has no `Name`, so it has no prim path"))?;
 
     Ok(SceneDoc {
@@ -141,6 +144,11 @@ fn part_entry(name: &str, mesh: &Mesh, part: &Part) -> anyhow::Result<PartEntry>
         _ => None,
     };
 
+    let along = match mesh.attribute(ATTRIBUTE_ALONG) {
+        Some(VertexAttributeValues::Float32(along)) => Some(along.clone()),
+        _ => None,
+    };
+
     Ok(PartEntry {
         name: name.to_string(),
         points,
@@ -155,6 +163,7 @@ fn part_entry(name: &str, mesh: &Mesh, part: &Part) -> anyhow::Result<PartEntry>
         double_sided: part.double_sided,
         collision: part.collision.map(str::to_string),
         heightfield_resolution: part.heightfield_resolution,
+        along,
     })
 }
 
@@ -168,6 +177,7 @@ struct Prim {
     reference: Option<String>,
     collider: Option<Capsule>,
     cable: Option<doc::Cable>,
+    skin: Option<doc::Skin>,
     attributes: BTreeMap<String, doc::AttributeValue>,
     children: Vec<Entity>,
 }
@@ -181,6 +191,7 @@ fn collect_prims(world: &mut World) -> HashMap<Entity, Prim> {
         Option<&UsdReference>,
         Option<&Collider>,
         Option<&Cable>,
+        Option<&Skin>,
         Option<&UsdAttributes>,
         Option<&Children>,
     )>();
@@ -196,6 +207,7 @@ fn collect_prims(world: &mut World) -> HashMap<Entity, Prim> {
                 reference,
                 collider,
                 cable,
+                skin,
                 attributes,
                 children,
             )| {
@@ -206,6 +218,7 @@ fn collect_prims(world: &mut World) -> HashMap<Entity, Prim> {
                     reference: reference.map(|r| r.0.clone()),
                     collider: collider.map(|c| c.0),
                     cable: cable.map(|c| c.0.clone()),
+                    skin: skin.map(|s| s.0.clone()),
                     attributes: attributes.map(|a| a.0.clone()).unwrap_or_default(),
                     children: children.map(|c| c.to_vec()).unwrap_or_default(),
                 };
@@ -229,13 +242,12 @@ fn xform_of(transform: &Transform) -> Option<Xform> {
     })
 }
 
-/// One entity's prim and everything below it. `solid` names the parts that are
-/// their own collider, which is what decides whether a reference to one may be
-/// instanced.
+/// One entity's prim and everything below it. `unique` names the parts no
+/// reference to may be instanced: a collider of its own, or a skin.
 fn build_node(
     entity: Entity,
     prims: &HashMap<Entity, Prim>,
-    solid: &HashSet<&str>,
+    unique: &HashSet<&str>,
 ) -> anyhow::Result<Option<Node>> {
     let Some(prim) = prims.get(&entity) else {
         // Unnamed: no prim path, so neither it nor its subtree is exported.
@@ -245,7 +257,7 @@ fn build_node(
     let mut children: Vec<Node> = prim
         .children
         .iter()
-        .filter_map(|child| build_node(*child, prims, solid).transpose())
+        .filter_map(|child| build_node(*child, prims, unique).transpose())
         .collect::<anyhow::Result<_>>()?;
     // In name order rather than spawn order: a layer that rebuilds itself
     // respawns its subtree after its siblings, and a document keyed on its
@@ -274,14 +286,16 @@ fn build_node(
         // A part that is its own collider is referenced non-instanceable: the
         // collision schema lives inside the part, and inside a prototype it
         // would be reachable only through an instance proxy. It costs nothing
-        // — the ground is the only such part, and it has one instance.
+        // — the ground is the only such part, and it has one instance. A skin
+        // is too, since each one deforms on its own.
         instanceable: prim
             .reference
             .as_deref()
-            .is_some_and(|name| !solid.contains(name)),
+            .is_some_and(|name| !unique.contains(name)),
         reference: prim.reference.clone(),
         collider: prim.collider,
         cable: prim.cable.clone(),
+        skin: prim.skin.clone(),
         attributes: prim.attributes.clone(),
         children,
     }))
@@ -405,6 +419,47 @@ mod tests {
         assert_eq!(doc.parts[0].indices, [0, 1, 2]);
         assert!(doc.parts[0].double_sided);
         assert!(doc.parts[0].colors.is_none());
+    }
+
+    /// A skin's part carries where each of its points is bound, a reference
+    /// to it is never instanced, and the `SkelRoot` holding it carries the
+    /// skeleton: a joint per segment, bound at the segment's rest frame.
+    #[test]
+    fn a_skin_is_bound_where_its_points_lie_and_never_instanced() {
+        let mut world = world();
+        let root = root(&mut world);
+        let name = add_part(&mut world, "Skin", 0);
+        let mesh = world
+            .resource::<Prototypes>()
+            .get(&name)
+            .unwrap()
+            .mesh
+            .clone();
+        world
+            .resource_mut::<Assets<Mesh>>()
+            .get_mut(&mesh)
+            .unwrap()
+            .insert_attribute(ATTRIBUTE_ALONG, vec![0.0, 0.5, 1.0]);
+        let skin = crate::scene::Geometry {
+            reference: UsdReference(name),
+            mesh: Mesh3d(mesh),
+            material: MeshMaterial3d(Handle::default()),
+        };
+        let frame = Transform::from_xyz(0.0, 0.0, 0.05);
+        crate::scene::spawn_skin(&mut world.commands().entity(root), &[frame], &skin);
+        world.flush();
+
+        let doc = scene_doc(&mut world).unwrap();
+        assert_eq!(doc.parts[0].along.as_deref(), Some(&[0.0, 0.5, 1.0][..]));
+        let node = &doc.root.children[0];
+        assert_eq!(
+            (node.name.as_str(), node.type_name.as_str()),
+            ("Skin", "SkelRoot")
+        );
+        let bound = node.skin.as_ref().unwrap();
+        assert_eq!(bound.joints, ["Cable_edge_body_0"]);
+        assert_eq!(bound.binds[0].translate, [0.0, 0.0, 0.05]);
+        assert!(!node.children[0].instanceable);
     }
 
     /// A mesh's vertex colours reach the document as the viewer draws them:

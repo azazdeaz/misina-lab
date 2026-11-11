@@ -18,11 +18,20 @@ import math
 import pathlib
 
 import pytest
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, UsdSkel, Vt
 
 import misina_lab.usd
 from misina_lab.usd import GEOM, build_stage
-from misina_lab.usd.build import CABLE_MATERIAL, MATERIAL, MDL_OPAQUE, MDL_TRANSLUCENT, SHADER
+from misina_lab.usd.build import (
+    ALONG,
+    ANIMATION,
+    CABLE_MATERIAL,
+    MATERIAL,
+    MDL_OPAQUE,
+    MDL_TRANSLUCENT,
+    SHADER,
+    SKELETON,
+)
 
 ROOT = "/Vineyard"
 """The fixture document's root: the stage's default prim is named after it."""
@@ -33,6 +42,7 @@ FIXTURE = pathlib.Path(__file__).parent / "fixtures" / "tiny_scene.json"
 VINE = f"{ROOT}/Planting/Row_00/Vine_000"
 LEAF = f"{VINE}/Shoot_00/Leaf_00"
 CABLE = f"{VINE}/Shoot_01/Cable"
+SKIN = f"{VINE}/Shoot_01/Skin"
 TERRAIN = f"{ROOT}/Terrain"
 
 
@@ -570,6 +580,59 @@ def test_a_deep_transform_composes_onto_its_ancestors(stage: Usd.Stage):
         Usd.TimeCode.Default()
     )
     assert tuple(world.ExtractTranslation()) == pytest.approx((1.0, 2.05, 1.0), abs=1e-6)
+
+
+# --- skins ----------------------------------------------------------
+
+
+def test_a_skin_is_bound_to_a_joint_per_segment_at_its_rest_frame(stage: Usd.Stage):
+    """A `SkelRoot` holding the skin, a never-instanced reference to its
+    part; a skeleton of the segments' prims, bound and resting at their
+    frames, posed by an animation that starts there; each point bound to
+    three joints, its weights adding up to one."""
+    root = stage.GetPrimAtPath(SKIN)
+    assert root.IsA(UsdSkel.Root)
+    assert not stage.GetPrimAtPath(f"{SKIN}/Mesh").IsInstanceable()
+    skeleton = UsdSkel.Skeleton(stage.GetPrimAtPath(f"{SKIN}/{SKELETON}"))
+    joints = ["Cable_edge_body_0", "Cable_edge_body_1", "Cable_edge_body_2"]
+    assert list(skeleton.GetJointsAttr().Get()) == joints
+    binds = [c for m in skeleton.GetBindTransformsAttr().Get() for c in m.ExtractTranslation()]
+    assert binds == pytest.approx([0.02, 0.0, 0.01, 0.045, 0.0, 0.04, 0.05, 0.0, 0.085])
+    assert skeleton.GetRestTransformsAttr().Get() == skeleton.GetBindTransformsAttr().Get()
+    animation = UsdSkel.BindingAPI(skeleton).GetAnimationSource()
+    assert animation.GetPath() == f"{SKIN}/{ANIMATION}"
+    rest = [c for t in UsdSkel.Animation(animation).GetTranslationsAttr().Get() for c in t]
+    assert rest == pytest.approx(binds)
+
+    mesh = stage.GetPrimAtPath(f"{SKIN}/Mesh/{GEOM}")
+    binding = UsdSkel.BindingAPI(mesh)
+    assert binding.GetSkeletonRel().GetTargets() == [skeleton.GetPath()]
+    indices, weights = binding.GetJointIndicesPrimvar(), binding.GetJointWeightsPrimvar()
+    assert (indices.GetElementSize(), indices.GetInterpolation()) == (3, UsdGeom.Tokens.vertex)
+    assert max(indices.Get()) == 2
+    sums = [sum(weights.Get()[i : i + 3]) for i in range(0, len(weights.Get()), 3)]
+    assert sums == pytest.approx([1.0] * 8)
+    along = UsdGeom.PrimvarsAPI(mesh).GetPrimvar(ALONG).Get()
+    assert list(along) == [0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0]
+
+
+def test_a_skin_posed_at_rest_lies_where_it_was_built(stage: Usd.Stage):
+    """Skinned by USD's own reference code at its animation's rest pose, the
+    skin's every point stays where the part put it."""
+    root = UsdSkel.Root(stage.GetPrimAtPath(SKIN))
+    cache = UsdSkel.Cache()
+    cache.Populate(root, Usd.PrimDefaultPredicate)
+    (binding,) = cache.ComputeSkelBindings(root, Usd.PrimDefaultPredicate)
+    joints = cache.GetSkelQuery(binding.GetSkeleton()).ComputeSkinningTransforms(
+        Usd.TimeCode.Default()
+    )
+    (target,) = binding.GetSkinningTargets()
+    points = UsdGeom.Mesh(target.GetPrim()).GetPointsAttr().Get()
+    skinned = Vt.Vec3fArray(points)
+    assert target.ComputeSkinnedPoints(joints, skinned, Usd.TimeCode.Default())
+    assert [c for p in skinned for c in p] == pytest.approx(
+        [c for p in points for c in p], abs=1e-7
+    )
 
 
 # --- guards ---------------------------------------------------------

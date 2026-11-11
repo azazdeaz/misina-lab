@@ -403,6 +403,13 @@ pub struct StemParams {
     /// of simulating the crop.
     #[reflect(@Slider { min: 0.0, max: 5.5, step: 0.05 }, @Label("Trusses bend below"))]
     pub flexible_below: f32,
+    /// Whether a truss that bends is drawn as one skin bending with it, a
+    /// mesh bound to every segment of its rod, rather than as a rigid tube
+    /// on each segment, which kinks at every joint. A skin bends only where
+    /// a consumer poses it from the rod's bodies, as `misina_lab.isaaclab`
+    /// does under Newton; anywhere else it keeps the shape it was built in.
+    #[reflect(@Label("Skinned trusses"))]
+    pub skinned: bool,
     /// How finely the stems and the trusses' stems are meshed. At 1 a stem's
     /// tube strays from its shape by about a pixel to a camera half a meter
     /// away, as a leaf does at its own detail of 1; at 4 by a quarter of
@@ -425,6 +432,7 @@ impl Default for StemParams {
             turned_to_path: 0.8,
             head_diameter: 0.01,
             flexible_below: 0.0,
+            skinned: false,
             detail: 0.5,
         }
     }

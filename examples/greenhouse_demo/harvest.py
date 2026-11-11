@@ -50,7 +50,9 @@ the arm works, and the trusses a cut can drop."""
 
 GREENHOUSE_CFG = GreenhouseCfg(
     layout=LayoutCfg(rows=2, row_length=4.0),
-    stem=StemCfg(flexible_below=BELOW),
+    # Skinned: each rod is drawn by one mesh bending with it, which keeps the
+    # rachis's zigzag and its knots, where a tube per segment runs straight.
+    stem=StemCfg(flexible_below=BELOW, skinned=True),
 )
 
 GREENHOUSE_PATH = "/World/Greenhouse"
