@@ -394,6 +394,9 @@ class Shears:
         self._reshape(stub)
         self._reshape(piece)
         # Where the stub's capsule now ends, along the segment it was built on.
+        # ponytail: on a part `_split` handed over from the segment before, off
+        # by the two segments' length ratio; only a `cut` on a loose piece lands
+        # there. Tracking each body's span along the skin would cover it.
         end = self._center[stub] + self._half[stub]
         skins.split(
             self._stage,
