@@ -189,7 +189,8 @@ The hand's colliders are stiffer to the touch than the rest of the scene,
 too: 50 000 N/m, to Isaac Lab's default 2500. The solver bending the trusses
 lets a contact give in proportion to the load on it, and at the default a
 fruit borne up on the shear's head, its truss's weight on it, sinks a
-centimetre into it. Much stiffer, the closing shear stalls on the peduncle.
+centimetre into it. At 100 000 N/m, the closing shear stalls on the
+peduncle.
 
 The blade crosses the peduncle half a centimetre past its rod's first
 joint, and `Shears.cut` makes the cut at the joint. Now and then the
