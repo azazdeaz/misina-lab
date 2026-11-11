@@ -492,10 +492,12 @@ pub fn strand_mesh_ringed(strand: &Strand, spacing: f64) -> anyhow::Result<MeshD
     let mut stops: Vec<(f64, f64)> = match strand.tolerance {
         None => {
             let count = strand.stations.clamp(MIN_STATIONS, MAX_STATIONS);
-            let needed = within(spacing).min(MAX_FINE);
-            if needed > count {
-                // Even along the control points, as `spacing` is measured.
-                even(needed).map(|t| (t, t)).collect()
+            if spacing < total {
+                // Even along the control points, as `spacing` is measured,
+                // and no fewer than the strand's own stations.
+                even(within(spacing).clamp(count, MAX_FINE))
+                    .map(|t| (t, t))
+                    .collect()
             } else {
                 let (parameters, fractions) = stations(&rail, count);
                 parameters.into_iter().zip(fractions).collect()

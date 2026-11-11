@@ -282,7 +282,10 @@ def test_a_cut_splits_a_skin_where_it_splits_the_rod_and_leaves_it_as_drawn(shea
     out = np.cross(corners[:, 1] - corners[:, 0], corners[:, 2] - corners[:, 0])
     onward = now[~side].mean(axis=0) - now[side].mean(axis=0)
     assert len(caps) > 2 and ((out @ onward > 0) == side[caps[:, 0]]).all()
-    rest = np.array(UsdGeom.Mesh(mesh).GetPointsAttr().Get())[caps]
+    points = np.array(UsdGeom.Mesh(mesh).GetPointsAttr().Get())
+    extent = np.array(UsdGeom.Mesh(mesh).GetExtentAttr().Get())
+    assert np.allclose(extent, [points.min(axis=0), points.max(axis=0)])
+    rest = points[caps]
     normals = np.array(UsdGeom.Mesh(mesh).GetNormalsAttr().Get())[caps]
     for cap in (side[caps[:, 0]], ~side[caps[:, 0]]):
         face = np.cross(rest[cap, 1] - rest[cap, 0], rest[cap, 2] - rest[cap, 0]).sum(axis=0)

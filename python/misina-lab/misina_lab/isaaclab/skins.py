@@ -204,7 +204,9 @@ def split(stage, segment: str, at: float, pose: Callable[[str], np.ndarray] | No
         # Each point the caps copy, with all it has per point: these, its
         # weights, any colour or texture coordinates.
         source = np.r_[np.arange(len(points)), copied]
-        mesh.GetPointsAttr().Set(Vt.Vec3fArray.FromNumpy(points[source].astype(np.float32)))
+        rest = Vt.Vec3fArray.FromNumpy(points[source].astype(np.float32))
+        mesh.GetPointsAttr().Set(rest)
+        mesh.GetExtentAttr().Set(UsdGeom.PointBased.ComputeExtent(rest))
         for primvar in UsdGeom.PrimvarsAPI(prim).GetPrimvars():
             if primvar.GetInterpolation() == UsdGeom.Tokens.vertex:
                 value = primvar.Get()

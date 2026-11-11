@@ -227,8 +227,8 @@ pub fn skin_span(world: &mut World, organ: Entity) -> Option<(f32, f32)> {
     along.sort_by(f32::total_cmp);
     let bare = along
         .windows(2)
-        .filter(|pair| pair[0] >= 1.0)
-        .map(|pair| pair[1] - pair[0])
+        .filter(|pair| pair[1] > 1.0)
+        .map(|pair| pair[1] - pair[0].max(1.0))
         .fold(0.0, f32::max);
     Some((*along.last()?, bare))
 }
