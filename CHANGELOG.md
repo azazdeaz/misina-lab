@@ -152,6 +152,11 @@ Scene document format 12.
   `lone_damping`. **vinery-lab** sets it for the weeds' stems, which now
   spring back a little past upright before they settle, where they stopped
   dead.
+- **misina-lab**: `GeneratedSceneCfg.ROD_STRETCH` and `ROD_DAMPING` tune a
+  scene's rods in place of `rods.ROD_STRETCH` and `rods.ROD_DAMPING`.
+  **greenhouse-lab** sets them for its trusses: their fruit no longer bounce
+  for a second after a push or a lift lets go, and a pushed truss swings back
+  a little past rest before it settles, where it stopped dead.
 - **greenhouse-lab**: Stems collide, as a chain of capsules along each
   stem's axis from where it takes off from the lowered bundle,
   `Stem_n/Collision_00 …`, each straight from one of the axis's points to

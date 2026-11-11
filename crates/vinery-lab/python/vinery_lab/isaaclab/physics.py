@@ -50,8 +50,8 @@ the shoots sag about twice as far.
 
 
 def tune_shoots(
-    damping: float = rods.ROD_DAMPING,
-    stretch: float = rods.ROD_STRETCH,
+    damping: float = VineyardCfg.ROD_DAMPING,
+    stretch: float = VineyardCfg.ROD_STRETCH,
     weed_damping: float = VineyardCfg.LONE_ROD_DAMPING,
 ) -> CallbackHandle:
     """`rods.tune_rods` for a vineyard: a rod meets its own vine's canes and
