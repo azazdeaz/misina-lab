@@ -6,17 +6,20 @@ camera this script moves. It runs headless.
     uv run video.py OUT.mp4
 
 writes the frames to `OUT.mp4`, near-lossless, and the captions beside it as
-`OUT.srt`, then fails if a take's truss was not cut. `record.sh` runs it and
-encodes the two into the video to upload.
+`OUT.srt`, then fails if a take's truss was not cut or the arm could not
+make a gesture. `record.sh` runs it and encodes the two into the video to
+upload.
 
 The storyboard is the constants below: the shots, the `TAKES` filmed close
-up, and `PACE`, how fast each part plays. Frames are sampled on the
+up, the `GESTURES` the arm makes at the first take's truss before it cuts
+it, and `PACE`, how fast each part plays. Frames are sampled on the
 simulation's clock, one every so many physics steps however long those take
 to compute, so the video plays in simulated time.
 """
 
 import argparse
 import dataclasses
+import math
 import pathlib
 
 import numpy as np
@@ -72,6 +75,49 @@ CRATE = Shot(eye=(0.0, -0.45, 0.8), look=(0.0, 0.0, 0.1), lens=18.0)
 """The crate, from above the path across from the side the truss is cut on,
 as the arm carries the truss to it and lets it go: the point it frames is
 the crate's middle, at its underside."""
+
+TOUCH = Shot(
+    eye=(0.15, -0.6, 0.02),
+    look=(0.0, -0.03, -0.11),
+    lens=28.0,
+    caption="Pushed and brushed by the shear, the truss bends on its stalk and springs back",
+)
+"""The first take's `GESTURES`, close up: from the path a little ahead of the
+truss and level with its fruit, so a push along the row reads across the
+picture. It takes over from `CLOSE` once the arm has reached the first
+gesture's first point: on its way there from the folded arm, the shear
+swings past where this shot stands."""
+
+GESTURES = (
+    demo.Gesture(
+        "push",
+        (
+            demo.Point("back", (-0.06, 0.0, 0.0), hold=0.3),
+            demo.Point("back", (0.085, 0.0, 0.0), speed=0.06, hold=0.5),
+            demo.Point("back", (-0.06, 0.0, 0.0), speed=0.3, hold=1.0),
+        ),
+        yaw=math.radians(25.0),
+    ),
+    demo.Gesture(
+        "brush",
+        (
+            demo.Point("low", (-0.14, 0.0, -0.011), hold=0.3),
+            demo.Point("low", (0.07, 0.0, -0.011), speed=0.15),
+            demo.Point("low", (0.07, 0.0, -0.07), speed=0.15, hold=1.0),
+        ),
+        yaw=math.radians(25.0),
+    ),
+)
+"""What the arm does to the first take's truss before it cuts it, to show
+the crop giving way to it. It pushes the truss from the side, along the
+row, slowly: the shear's tip from 6 cm short of the fruit furthest back to
+8.5 cm past it, which moves the fruit about 6 cm; and draws back fast, so
+the truss springs back by itself. Then it brushes the lowest fruit from
+back to front, the way the shear comes in to cut: the backs of the hook and
+the jaw, 2.5 cm above the tip, pass a centimetre and a half into the bottom
+of the lowest fruit, and drop away. Both are turned toward the path, as a
+cut may be (`harvest.YAWS`), the arm out of the line of stems along the
+row."""
 
 TAKES = (
     "A truss is due once its least ripe fruit is turning",
@@ -187,10 +233,18 @@ def main():
         due, last, left_at, shown = 0.0, None, None, None
         ridden, row = None, left
         share = 1.0 - np.exp(-1.0 / (LAG * FPS))
+        # The gestures made, by their place in `GESTURES`: one the arm could
+        # not make is passed over.
+        made: set[int] = set()
         try:
-            for step, harvest in enumerate(demo.run(sim, robot, machine, PATHS, render=False)):
+            for step, harvest in enumerate(
+                demo.run(sim, robot, machine, PATHS, render=False, gestures=GESTURES)
+            ):
                 now = step * demo.SIM_DT
                 truss = harvest.job if isinstance(harvest.job, demo.Truss) else None
+                if harvest.stage == "touch":
+                    made.add(len(GESTURES) - len(harvest.gestures))
+                touched, gesturing = bool(made), harvest.stage in ("reach", "touch")
                 if truss and harvest.stage == "approach":
                     planned.add(truss.prim)
                 # A take's truss out of reach passes its caption on.
@@ -221,6 +275,8 @@ def main():
                     # A later take rides along as the arm swings out to its
                     # truss, past where the close-up stands.
                     shot, pace = REST, harvest.stage
+                elif truss and truss.prim in captions and touched and gesturing:
+                    shot, filmed, pace = TOUCH, truss, harvest.stage
                 elif (
                     truss
                     and truss.prim in captions
@@ -243,7 +299,8 @@ def main():
                 if filmed:
                     # Ahead is the way the shear comes in.
                     way = demo.heading(filmed.cut[:3, 0], filmed.side)
-                    point, side, caption = filmed.cut[:3, 3], filmed.side, captions[filmed.prim]
+                    point, side = filmed.cut[:3, 3], filmed.side
+                    caption = TOUCH.caption if gesturing else captions[filmed.prim]
                     if shot is CRATE:
                         point = (harvest.platform() @ machine.crate_frame)[:3, 3]
                     pose = framing(shot, point, side, float(np.sign(way[0])))
@@ -270,6 +327,8 @@ def main():
         missed = captions.keys() - {truss.prim for truss in harvest.cut}
         if len(captions) < len(TAKES) or missed:
             raise RuntimeError(f"of {len(TAKES)} takes, these trusses were not cut: {missed}")
+        if len(made) < len(GESTURES):
+            raise RuntimeError(f"the arm made {len(made)} of the {len(GESTURES)} gestures")
 
 
 if __name__ == "__main__":

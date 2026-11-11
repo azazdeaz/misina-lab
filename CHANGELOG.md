@@ -322,6 +322,10 @@ Scene document format 12.
   a friction coefficient of 0.25, where every one had the default 1.0. A
   truss let go slides off the open finger as the shear opens, where it lay
   on it until the blades were tipped down.
+- The harvest demo's video shows a truss giving way to the arm: before the
+  first cut, the open shear pushes the truss from the side and brushes its
+  lowest fruit, filmed close up. `harvest.run` makes any `Gesture` it is
+  given at the first truss, its points placed about the truss's fruit.
 - The pruning demo's vineyard grows bending weeds, and its robot's chassis
   and wheels push them aside as it drives the alley. Its video is filmed
   with them.

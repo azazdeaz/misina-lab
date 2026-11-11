@@ -205,6 +205,68 @@ def test_a_stems_fin_runs_from_its_front_back_to_its_rows_middle():
     assert front[1] < poses[0, 1, 3] < 0.1 < back[1]
 
 
+def test_a_gestures_tip_lands_on_its_points():
+    """The shear's tip lands on each point of a gesture, offset from the near
+    side of the fruit furthest back toward the arm, the bottom of the lowest,
+    or the middle of them all; the mouth turned as the level cut pose, then
+    `tilt` up about its pivot."""
+    harvest = pytest.importorskip("harvest")
+
+    class Rod:
+        """Two bodies running out along -y from a stem at the origin, the
+        path toward -y, then a body for each fruit: the first turned a
+        quarter about z, as a position and (x, y, z, w) rotation."""
+
+        bodies = np.arange(5)
+        poses = {
+            2: [0.03, -0.06, -0.10, 0.0, 0.0, np.sin(np.pi / 4), np.cos(np.pi / 4)],
+            3: [-0.03, -0.05, -0.14, 0.0, 0.0, 0.0, 1.0],
+            4: [0.0, -0.07, -0.12, 0.0, 0.0, 0.0, 1.0],
+        }
+
+        def capsules(self):
+            return np.array([[0.0, 0.0, 0.0], [0.0, -0.03, 0.0]]), np.array(
+                [[0.0, -0.03, 0.0], [0.0, -0.06, 0.0]]
+            )
+
+        def pose(self, body):
+            return np.array(self.poses[body])
+
+    rod = Rod()
+    cut = np.eye(4)
+    cut[:3, 0] = [0.0, -1.0, 0.0]
+    truss = harvest.Truss("", cut, True, side=np.array([0.0, 1.0, 0.0]), bodies=[0, 1])
+    truss.fruit = [
+        # Set off its turned body along the body's x, which is the world's y.
+        (2, kinematics.transform((0.01, 0.0, 0.0)), 0.02, 0.0),
+        # A capsule standing upright: the lowest, by its length.
+        (3, np.eye(4), 0.01, 0.03),
+        # The one reaching furthest back, by its radius.
+        (4, np.eye(4), 0.055, 0.0),
+    ]
+    ahead = harvest.heading(cut[:3, 0], truss.side)
+    up = np.array([0.0, 0.0, 1.0])
+    s = MACHINE.shear
+    tip = np.linalg.inv(MACHINE.tool) @ MACHINE.shear_frame
+    tip = tip @ [0.0, s.edge(s.blade + s.claw), s.blade + s.claw, 1.0]
+    # The shear comes in toward -x, so the arm is toward +x.
+    points = [
+        (harvest.Point("back", (-0.03, 0.0, 0.01)), np.array([0.055, -0.07, -0.12])),
+        (harvest.Point("low", (0.0, 0.01, -0.02)), np.array([-0.03, -0.05, -0.18])),
+        (harvest.Point("middle"), np.array([0.0, -0.17 / 3, -0.12])),
+    ]
+    across = np.cross(up, ahead) * np.sign(np.cross(up, ahead) @ truss.side)
+    for yaw, tilt in ((0.0, 0.0), (0.0, 0.5), (0.4, -0.3)):
+        gesture = harvest.Gesture("", tuple(p for p, _ in points), yaw=yaw, tilt=tilt)
+        poses = harvest.gesture_poses(gesture, truss, rod, MACHINE)
+        for pose, (point, anchor) in zip(poses, points, strict=True):
+            wanted = anchor + np.column_stack([ahead, across, up]) @ point.offset
+            assert (pose @ tip)[:3] == pytest.approx(wanted)
+            # Turned toward the path, it points into the row.
+            assert pose[:3, 2] @ truss.side == pytest.approx(np.sin(yaw) * np.cos(tilt))
+            assert pose[:3, 2] @ up == pytest.approx(np.sin(tilt))
+
+
 def test_a_turned_approach_cuts_as_far_off_the_stem():
     """Every cut pose keeps the blades' plane along the stem and the hook
     up, and the fixed blade as far off the stem's axis as coming in along

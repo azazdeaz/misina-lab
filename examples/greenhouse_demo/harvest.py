@@ -156,6 +156,8 @@ FALL = 3.0
 SEGMENT = re.compile(r"(.*)/Cable_edge_body_(\d+)$")
 # A stem's collider's label is its prim: one capsule along each span of it.
 STEM = re.compile(r"(.*/Stem_\d+)/Collision_\d+$")
+# A fruit's collider rides a segment of its truss's rod.
+FRUIT = re.compile(r".*/Fruit_\d+/Collision$")
 
 
 @dataclasses.dataclass
@@ -174,6 +176,45 @@ class Truss:
     """A point on that stem's axis by its node."""
     stem_shapes: list[int] = dataclasses.field(default_factory=list)
     """Its stem's colliders, by model index."""
+    fruit: list[tuple[int, np.ndarray, float, float]] = dataclasses.field(default_factory=list)
+    """Its fruit's colliders: each one's body, its pose in the body's frame,
+    its radius, and how far it is drawn out along its +Z either way: 0 for a
+    sphere, more for a capsule."""
+
+
+@dataclasses.dataclass(frozen=True)
+class Point:
+    """Where a `Gesture` takes the shear's tip next: `offset` from a point
+    of the truss's fruit, in meters ahead the way the shear comes in to cut
+    it, across the path into the crop, and up. `anchor` names the point:
+    "back", the near side of the fruit furthest back toward the arm, level
+    with its middle; "low", the bottom of the lowest fruit; "middle", the
+    middle of them all. The tip goes there on a straight line at `speed`,
+    in m/s, and holds still `hold` seconds."""
+
+    anchor: str
+    offset: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    speed: float = 0.05
+    hold: float = 0.0
+
+
+@dataclasses.dataclass(frozen=True)
+class Gesture:
+    """The open shear moved against the first truss before it is cut, to
+    show the crop giving way to the arm: its tip through `points`, the mouth
+    turned as a cut's is (see `turned`), `yaw` radians toward the path and
+    `tilt` up. The arm is planned to the first point keeping clear of
+    everything, the shear too, so it should stand clear of the truss; it
+    goes on to the others in straight lines. Turned toward the path, the arm
+    reaches in from it, out of the line of stems along the row. The shear
+    cuts only as it closes, so the truss is only pushed. The last point
+    should leave the shear clear of the truss, for the cut to be planned
+    from."""
+
+    name: str
+    points: tuple[Point, ...]
+    yaw: float = 0.0
+    tilt: float = 0.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -363,22 +404,64 @@ def approaches(
     `YAWS` about the stem toward the path, and tilted up to `TILTS` off
     level about its +X. A turned plane crosses the peduncle further out,
     where it is as far off the stem's axis as the unturned one."""
-    level = heading(along, truss.side)
     off = at - truss.axis
     reach = np.linalg.norm(off - (off @ truss.stem) * truss.stem)
-    toward = np.sign(np.cross(truss.stem, level) @ truss.side)
     poses = []
     for yaw in YAWS:
-        turn = rotation(truss.stem, toward * yaw)
-        x, ahead = turn @ along, turn @ level
-        up = np.cross(ahead, x)
         through = at + (reach / np.cos(yaw) - reach) * along
         for tilt in TILTS:
-            approach = np.cos(tilt) * ahead + np.sin(tilt) * up
             pose = np.eye(4)
-            pose[:3, 0], pose[:3, 1], pose[:3, 2] = x, np.cross(approach, x), approach
-            pose[:3, 3] = through - machine.shear.bypass * x
+            pose[:3, :3] = turned(truss, along, yaw, tilt)
+            pose[:3, 3] = through - machine.shear.bypass * pose[:3, 0]
             poses.append(pose)
+    return poses
+
+
+def turned(truss: Truss, along: np.ndarray, yaw: float, tilt: float) -> np.ndarray:
+    """The mouth's rotation at `truss`'s peduncle running `along`: +X along
+    it and +Z level the way the shear points, `heading`, turned `yaw` about
+    the stem toward the path and then tilted `tilt` up about its +X."""
+    level = heading(along, truss.side)
+    toward = np.sign(np.cross(truss.stem, level) @ truss.side)
+    turn = rotation(truss.stem, toward * yaw)
+    x, ahead = turn @ along, turn @ level
+    approach = np.cos(tilt) * ahead + np.sin(tilt) * np.cross(ahead, x)
+    return np.column_stack([x, np.cross(approach, x), approach])
+
+
+def gesture_poses(gesture: Gesture, truss: Truss, shears, machine: Harvester) -> list[np.ndarray]:
+    """The mouth's world poses that put the shear's tip on each of
+    `gesture`'s points, about `truss`'s fruit as they hang now."""
+    _, along = peduncle(truss, shears)
+    level, up = heading(along, truss.side), np.array([0.0, 0.0, 1.0])
+    across = np.cross(up, level)
+    across *= np.sign(across @ truss.side)
+    placed = []
+    for body, offset, _, _ in truss.fruit:
+        pose = shears.pose(body)
+        placed.append(frame_of(pose[:3], pose[3:]) @ offset)
+    middles, axes = np.array([f[:3, 3] for f in placed]), np.array([f[:3, 2] for f in placed])
+    radii, halves = np.array([f[2] for f in truss.fruit]), np.array([f[3] for f in truss.fruit])
+    # How far each fruit reaches from its middle toward the arm, and down.
+    behind = radii + halves * np.abs(axes @ level)
+    under = radii + halves * np.abs(axes[:, 2])
+    back, low = np.argmin(middles @ level - behind), np.argmin(middles[:, 2] - under)
+    anchors = {
+        "back": middles[back] - behind[back] * level,
+        "low": middles[low] - under[low] * up,
+        "middle": middles.mean(axis=0),
+    }
+    mouth = turned(truss, along, gesture.yaw, gesture.tilt)
+    s = machine.shear
+    claw = np.linalg.inv(machine.tool) @ machine.shear_frame
+    tip = mouth @ (claw @ [0.0, s.edge(s.blade + s.claw), s.blade + s.claw, 1.0])[:3]
+    poses = []
+    for point in gesture.points:
+        pose = np.eye(4)
+        pose[:3, :3] = mouth
+        offset = np.column_stack([level, across, up]) @ point.offset
+        pose[:3, 3] = anchors[point.anchor] + offset - tip
+        poses.append(pose)
     return poses
 
 
@@ -443,13 +526,30 @@ class Harvest:
     arm may brush the truss it cuts, and failing that any truss: the rods
     bend aside, as the crop does round a picker's arm. The trolley, the
     rails, the floor and every other stretch of stem it never touches.
+
+    Before the first truss's cut is planned, the arm makes `gestures` at it,
+    each a stage `reach` to its first point and a stage `touch` through the
+    rest, leaving out one it cannot make or finish. The tally counts the time
+    they take toward that truss's cut.
     """
 
     def __init__(
-        self, machine: Harvester, planner, jobs: list, base: np.ndarray, q, shears, tally: Tally
+        self,
+        machine: Harvester,
+        planner,
+        jobs: list,
+        base: np.ndarray,
+        q,
+        shears,
+        tally: Tally,
+        gestures=(),
     ):
         self.machine, self.planner, self.base = machine, planner, base
         self.shears, self.tally = shears, tally
+        self.gestures: list[Gesture] = list(gestures)
+        """The gestures still to make, at the first truss."""
+        self.touching: tuple[np.ndarray, np.ndarray] | None = None
+        """The gesture under way, past its first point."""
         self.stroke = Stroke(machine.shear, machine.shear_frame, shears)
         self.jobs = list(jobs)
         self.q = np.array(q, dtype=float)
@@ -546,6 +646,46 @@ class Harvest:
         self.tally.crowded += self.tries == 1 and len(soft) > 2
         self.planned, self.soft, self.beside = planned, soft, beside
         self._play("approach", planned.approach)
+
+    def _touch(self) -> None:
+        """Make the next of `gestures` at the truss the trolley stands for, or
+        plan its cut once none is left."""
+        while self.gestures and self.job.fruit:
+            gesture = self.gestures.pop(0)
+            if (planned := self._gesture(gesture)) is not None:
+                reach, self.touching = planned
+                self._play("reach", reach)
+                return
+            print(f"[INFO]: {self.job.prim}: no way to {gesture.name}")
+        self._plan()
+
+    def _gesture(
+        self, gesture: Gesture
+    ) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]] | None:
+        """`gesture` at the job's truss, as the arm's joint positions and
+        velocities every `planner.dt` on its way to the first point and then
+        through the rest; or None if the arm cannot make it. The way to the
+        first point keeps clear of the truss, but for the stretch of its stem
+        by that point, and every straight line after it is solved before any
+        is made."""
+        platform = self.platform()
+        poses = gesture_poses(gesture, self.job, self.shears, self.machine)
+        beside = (self.job.stem_shapes, poses[0][:3, 3])
+        reached = self.planner.reach(self.q[3:], platform, poses[0], set(), beside)
+        if reached is None:
+            return None
+        stretches, q = [], reached[0][-1]
+        for i, point in enumerate(gesture.points):
+            if i:
+                line = self.planner.line(q, platform, poses[i - 1], poses[i], point.speed)
+                if line is None:
+                    return None
+                stretches.append(line)
+                q = line[0][-1]
+            # Held for one point at least, so the gesture never ends empty.
+            still = np.repeat(q[None], max(1, round(point.hold / self.planner.dt)), axis=0)
+            stretches.append((still, np.zeros_like(still)))
+        return reached, tuple(np.concatenate(part) for part in zip(*stretches, strict=True))
 
     def _play(self, stage: str, trajectory: tuple[np.ndarray, np.ndarray]) -> None:
         self.stage, self.ticks, self.clock = stage, 0, 0.0
@@ -687,6 +827,10 @@ class Harvest:
             print(f"[INFO]: {self.job.prim}: gave up at the {self.stage}")
             self.tally.missed += self.tries == TRIES
             self._play("outward", self.planned.outward)
+        elif self.ticks > PATIENCE and self.stage in ("reach", "touch"):
+            # A gesture the arm cannot finish is left, not the truss.
+            print(f"[INFO]: {self.job.prim}: gave up at the {self.stage}")
+            self._touch()
         elif self.ticks > PATIENCE:
             print(f"[INFO]: {getattr(self.job, 'prim', 'a run')}: gave up at {self.stage}")
             self.tally.missed += isinstance(self.job, Truss)
@@ -701,7 +845,7 @@ class Harvest:
                 self.velocity[:3] = step / tick
                 self.ticks = 0
             elif settled and isinstance(self.job, Truss):
-                self._plan()
+                self._touch()
             elif settled:
                 self._next()
         elif self.stage == "close":
@@ -727,7 +871,11 @@ class Harvest:
                 self.ticks = 0
             else:
                 self.target[3:] = positions[-1]
-                if settled and self.stage == "approach":
+                if settled and self.stage == "reach":
+                    self._play("touch", self.touching)
+                elif settled and self.stage == "touch":
+                    self._touch()
+                elif settled and self.stage == "approach":
                     self._play("inward", self.planned.inward)
                 elif settled and self.stage == "outward" and self.severed:
                     self._pull(hand)
@@ -782,12 +930,14 @@ def run(
     machine: Harvester,
     paths: list[int] | None = None,
     render: bool = True,
+    gestures: tuple[Gesture, ...] = (),
 ) -> Iterator[Harvest]:
     """Reset the simulation of the scene `design_scene` laid out and harvest
     `paths`, every one by default, for as long as the run lasts, yielding the
-    `Harvest` after every physics step. `FALL` seconds after its last job the
-    tally is printed, and a run without a window ends. Without `render` no
-    step renders, and what does is up to the caller."""
+    `Harvest` after every physics step, the arm making `gestures` at the first
+    truss before it is cut. `FALL` seconds after its last job the tally is
+    printed, and a run without a window ends. Without `render` no step
+    renders, and what does is up to the caller."""
     from isaaclab_newton.physics import NewtonManager
 
     from misina_lab.isaaclab.cutting import Shears
@@ -805,11 +955,15 @@ def run(
         if match := SEGMENT.match(label):
             chains.setdefault(match[1], []).append((int(match[2]), body))
     trusses = read_trusses(stage, GREENHOUSE_PATH)
-    stems = stem_axes(NewtonManager.get_model())
+    model = NewtonManager.get_model()
+    stems = stem_axes(model)
     rows: dict[str, list[int]] = {}
     for stem, (shapes, _, _) in stems.items():
         # A stem's row is its plant's parent.
         rows.setdefault(stem.rsplit("/", 2)[0], []).extend(shapes)
+    shape_body, scale = model.shape_body.numpy(), model.shape_scale.numpy()
+    placed = model.shape_transform.numpy()
+    fruit = [shape for shape, label in enumerate(model.shape_label) if FRUIT.match(label)]
     for truss in trusses:
         truss.bodies = [body for _, body in sorted(chains[truss.prim])]
         shapes, starts, ends = stems[truss.prim.rsplit("/", 1)[0]]
@@ -817,6 +971,11 @@ def run(
         truss.stem = (ends - starts)[nearest] / np.linalg.norm((ends - starts)[nearest])
         truss.axis = starts[nearest]
         truss.stem_shapes = list(shapes)
+        truss.fruit = [
+            (int(shape_body[s]), frame_of(placed[s, :3], placed[s, 3:]), *map(float, scale[s, :2]))
+            for s in fruit
+            if shape_body[s] in truss.bodies
+        ]
     ys = path_ys(stage, GREENHOUSE_PATH)
     paths = paths if paths is not None else list(range(len(ys)))
     if not all(0 <= path < len(ys) for path in paths):
@@ -860,7 +1019,7 @@ def run(
     # Where the robot starts.
     spawned = [0.0, 0.0, 0.0, *ARM_HOME]
     planner = Planner(machine, ROBOT_PATH, list(rows.values()))
-    harvest = Harvest(machine, planner, jobs, base, spawned, shears, tally)
+    harvest = Harvest(machine, planner, jobs, base, spawned, shears, tally, gestures)
     print(f"[INFO]: {len(trusses)} trusses bend, {tally.due} due on paths {paths}", flush=True)
     sim.set_camera_view(eye=[-3.5, -2.5, 2.8], target=[1.5, 0.0, 1.0])
     step, after = 0, 0
