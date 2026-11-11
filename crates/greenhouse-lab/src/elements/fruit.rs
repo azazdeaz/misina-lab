@@ -494,7 +494,10 @@ impl FruitConfig {
 }
 
 /// Two fruit share a mesh when they are near in size, in shape and in colour,
-/// and two flowers when they are near in how far they have opened.
+/// and two flowers when they are near in how far they have opened. The lobe
+/// and sepal counts each fruit draws are left out: the fruit sharing a mesh
+/// show its own, drawn from the same params as theirs, and a term for them
+/// would spend the variations on counts, not on sizes and colours.
 pub struct FruitMetric;
 
 impl Metric<FruitConfig> for FruitMetric {
