@@ -33,9 +33,9 @@ directly: the shape refresh clones the contact-pair list anew, and the graph
 would go on reading the old one.
 
 The rendered organ follows. The tube drawn along a segment is rescaled to its
-capsule's new length, and whatever hangs off the shortened segment past the
-cut -- a leaf -- is hidden, since a prim cannot move to the piece that carries
-on without it.
+capsule's new length, or a rod's skin is split at the cut (`skins.split`),
+and whatever hangs off the shortened segment past the cut -- a leaf -- is
+hidden, since a prim cannot move to the piece that carries on without it.
 
 A piece can be held: one of its bodies turned kinematic and moved with a
 frame, a hand's, the rest of the piece hanging from it on its joints, until
@@ -53,6 +53,8 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import numpy as np
+
+from . import skins
 
 SPLINTER = 0.01
 """The shortest piece, in meters, a cut leaves either side of it.
@@ -391,6 +393,13 @@ class Shears:
         self._pull[stub, 1], self._pull[piece, 0] = self.radius[stub], self.radius[piece]
         self._reshape(stub)
         self._reshape(piece)
+        # Where the stub's capsule now ends, along the segment it was built on.
+        end = self._center[stub] + self._half[stub]
+        skins.split(
+            self._stage,
+            self.labels[self.bodies[stub]],
+            (end + self._drawn[stub]) / (2 * self._drawn[stub]),
+        )
         pair = sorted((int(self._shape[stub]), int(self._shape[piece])))
         for copy in self._pair_copies:
             row = len(copy.shape_contact_pairs) - self._slots.count + self._slots.row[joint]

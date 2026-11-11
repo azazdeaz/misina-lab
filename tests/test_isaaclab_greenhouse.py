@@ -3,7 +3,8 @@
 Requires Isaac Lab, and the greenhouse's extension; skipped where either is
 missing. What is pinned here is what the cfg cannot show: that Newton's rod
 importer takes a bent truss as a rod held at the stem, carrying the weight of
-its fruit, its every body where the prim riding it was authored.
+its fruit, its every body where the prim riding it was authored, and that the
+truss's skin, posed at those bodies, starts where it was built.
 """
 
 from __future__ import annotations
@@ -24,10 +25,10 @@ except ImportError:
 
 import numpy as np  # noqa: E402
 from newton import ModelBuilder  # noqa: E402
-from pxr import Usd, UsdGeom  # noqa: E402
+from pxr import Gf, Usd, UsdGeom, UsdSkel, Vt  # noqa: E402
 
-from misina_lab.isaaclab import rods  # noqa: E402
-from misina_lab.usd.build import build_usd  # noqa: E402
+from misina_lab.isaaclab import rods, skins  # noqa: E402
+from misina_lab.usd.build import ALONG, ANIMATION, SKELETON, build_usd  # noqa: E402
 
 BELOW = 1.8
 """A height that bends the two lowest trusses on every stem at the defaults."""
@@ -44,11 +45,11 @@ def test_a_greenhouse_bends_trusses_only_below_its_height():
 
 @pytest.fixture(scope="module")
 def greenhouse(tmp_path_factory):
-    """A short row whose lowest trusses bend: its document, the stage built
-    from it, and Newton's builder holding that stage."""
+    """A short row whose lowest trusses bend, skinned: its document, the
+    stage built from it, and Newton's builder holding that stage."""
     params = greenhouse_lab.GreenhouseParams()
     layout, stem = params.layout, params.stem
-    (layout.rows, layout.row_length), stem.flexible_below = (1, 2.0), BELOW
+    (layout.rows, layout.row_length), stem.flexible_below, stem.skinned = (1, 2.0), BELOW, True
     params.layout, params.stem = layout, stem
     doc = json.loads(params.generate_scene_json())
     path = tmp_path_factory.mktemp("greenhouse") / "greenhouse.usda"
@@ -129,3 +130,62 @@ def test_a_bent_truss_is_a_rod_held_at_the_stem_carrying_its_fruit(greenhouse):
             assert builder.body_label[body] == label.rsplit("/", 2)[0], label
         else:
             assert body == -1, label
+
+
+def skin_roots(stage: Usd.Stage) -> list[Usd.Prim]:
+    return [prim for prim in stage.Traverse() if prim.IsA(UsdSkel.Root)]
+
+
+def test_a_skin_posed_at_its_bodies_starts_where_it_was_built(greenhouse):
+    """Each joint of a truss's skin posed at its segment's body, where Newton
+    starts it, leaves the skin where it was built, on whatever rides the
+    segments: the skin's binds are the frames the bodies are built in."""
+    _, path, builder = greenhouse
+    stage = Usd.Stage.Open(str(path))
+    index = {label: body for body, label in enumerate(builder.body_label)}
+    body_q = np.array(builder.body_q, dtype=float)
+    xforms, cache = UsdGeom.XformCache(), UsdSkel.Cache()
+    worst, posed = 0.0, 0
+    for root in skin_roots(stage):
+        skeleton = UsdSkel.Skeleton(root.GetChild(SKELETON))
+        world = xforms.GetLocalToWorldTransform(skeleton.GetPrim())
+        turn = world.ExtractRotationQuat()
+        frame = np.array([*world.ExtractTranslation(), *turn.GetImaginary(), turn.GetReal()])
+        organ = root.GetParent().GetPath()
+        bodies = [index[f"{organ}/{joint}"] for joint in skeleton.GetJointsAttr().Get()]
+        local = skins.seen_from(frame, body_q[bodies])
+        animation = UsdSkel.Animation(root.GetChild(ANIMATION))
+        animation.GetTranslationsAttr().Set(Vt.Vec3fArray([Gf.Vec3f(*p) for p in local[:, :3]]))
+        animation.GetRotationsAttr().Set(
+            Vt.QuatfArray([Gf.Quatf(w, x, y, z) for x, y, z, w in local[:, 3:]])
+        )
+        cache.Populate(UsdSkel.Root(root), Usd.PrimDefaultPredicate)
+        (binding,) = cache.ComputeSkelBindings(UsdSkel.Root(root), Usd.PrimDefaultPredicate)
+        joints = cache.GetSkelQuery(binding.GetSkeleton()).ComputeSkinningTransforms(
+            Usd.TimeCode.Default()
+        )
+        (target,) = binding.GetSkinningTargets()
+        points = UsdGeom.Mesh(target.GetPrim()).GetPointsAttr().Get()
+        skinned = Vt.Vec3fArray(points)
+        assert target.ComputeSkinnedPoints(joints, skinned, Usd.TimeCode.Default())
+        worst = max(worst, float(np.abs(np.array(skinned) - np.array(points)).max()))
+        posed += 1
+    assert posed > 5 and worst < 1e-4, f"{posed} skins, {worst} m off"
+
+
+def test_a_cut_splits_a_skin_where_it_splits_the_rod(greenhouse):
+    """Past a cut halfway along a segment, a skin's points follow only the
+    bodies past it and the rest only those before it, and no face spans it."""
+    _, path, _ = greenhouse
+    stage = Usd.Stage.Open(str(path))
+    root = skin_roots(stage)[0]
+    mesh = next(prim for prim in Usd.PrimRange(root) if prim.IsA(UsdGeom.Mesh))
+    faces = len(UsdGeom.Mesh(mesh).GetFaceVertexIndicesAttr().Get()) // 3
+    assert skins.split(stage, f"{root.GetParent().GetPath()}/Cable_edge_body_2", 0.5)
+
+    before = np.array(UsdGeom.PrimvarsAPI(mesh).GetPrimvar(ALONG).Get()) < 2.5
+    joints = np.array(UsdSkel.BindingAPI(mesh).GetJointIndicesPrimvar().Get()).reshape(-1, 3)
+    assert joints[before].max() == 2 and joints[~before].min() == 3
+    kept = np.array(UsdGeom.Mesh(mesh).GetFaceVertexIndicesAttr().Get()).reshape(-1, 3)
+    assert (before[kept].all(axis=1) | ~before[kept].any(axis=1)).all()
+    assert faces - 40 < len(kept) < faces, f"{len(kept)} of {faces} faces kept"

@@ -107,13 +107,16 @@ use misina_lab::geometry::bending::{rigidity, sag};
 use misina_lab::geometry::mesh::{MeshData, merge_meshes};
 use misina_lab::geometry::packing::{Bob, pack, swing};
 use misina_lab::geometry::par_map;
-use misina_lab::geometry::strand::{Bark, Bulge, Collar, Strand, sides_within, strand_mesh};
+use misina_lab::geometry::strand::{
+    Bark, Bulge, Collar, Strand, sides_within, strand_mesh, strand_mesh_along,
+};
 use misina_lab::palette::{COLOR_STREAM, Response, shade, srgb};
 use misina_lab::params::{Label, Slider};
 use misina_lab::quantize::{Metric, farthest_first};
 use misina_lab::rng::{Rng, salt};
 use misina_lab::scene::{
-    Library, Order, cable, configs_changed, rebase, segment_frames, segment_of, spawn_rod,
+    Library, Order, cable, configs_changed, rebase, segment_frames, segment_of, skin_mesh,
+    spawn_rod, spawn_skin,
 };
 use nalgebra::Point3;
 
@@ -125,10 +128,12 @@ use super::{Grow, SceneParams, smooth, vector};
 pub const PART: &str = "Truss";
 
 /// The mesh-library prefixes a bent truss's parts register under: the tube
-/// on each segment of its rod, and the pedicels a segment carries. Layers of
-/// their own, because a representative has one of each per segment where it
-/// has one mesh, and [`Library::clear`] drops a whole prefix at a time.
+/// on each segment of its rod, or the skin over all of them, and the pedicels
+/// a segment carries. Layers of their own, because a representative has one
+/// of each per segment where it has one mesh, and [`Library::clear`] drops a
+/// whole prefix at a time.
 const TUBE: &str = "TrussTube";
+const SKIN: &str = "TrussSkin";
 const PEDICELS: &str = "Pedicels";
 
 /// The held segment of a bent truss's rod, from the stem's axis out along the
@@ -874,8 +879,10 @@ struct Rod<M> {
     widths: Vec<f32>,
     /// Each segment's rest frame, its tube, and the pedicels it carries, in
     /// that frame: on a branched truss's fork segment, the second rachis too.
+    /// A skinned rod has no tubes but its skin, in the truss's frame.
     frames: Vec<Transform>,
     tubes: Vec<M>,
+    skin: Option<M>,
     pedicels: Vec<Option<M>>,
     /// Where along the axis each fruit's pedicel leaves it, from the truss's
     /// base to its tip, and where the `Bend` sits.
@@ -886,8 +893,8 @@ struct Rod<M> {
 impl Rod<Mesh> {
     /// The rod cut from `axis`, carrying each of `riders` on the segment at
     /// its station, its tubes meshed to `tolerance` and swollen where `main`,
-    /// the strand along the axis, is. Its points are evenly spaced past the
-    /// held segment.
+    /// the strand along the axis, is; or, `skinned`, drawn by `main` itself.
+    /// Its points are evenly spaced past the held segment.
     fn new(
         axis: &Axis,
         main: &Strand,
@@ -895,6 +902,7 @@ impl Rod<Mesh> {
         tolerance: f64,
         holds: Vec<f32>,
         bend: f32,
+        skinned: bool,
     ) -> Result<Self> {
         let length = axis.length();
         let held = HELD.min(length / 2.0);
@@ -907,30 +915,38 @@ impl Rod<Mesh> {
         let frames = segment_frames(&points);
         // Each tube runs straight along its segment and overruns both ends by
         // its radius there, as a `segment_tubes` tube does, and swells where
-        // `main` does. `main`'s swellings sit at their distance along its
-        // points, under a millimeter short of their station past the bend.
-        let tubes = frames
-            .iter()
-            .enumerate()
-            .map(|(k, frame)| {
-                let (from, to) = (Vec3::from(points[k]), Vec3::from(points[k + 1]));
-                let (base, top) = (widths[k] / 2.0, widths[k + 1] / 2.0);
-                let run = (to - from).normalize();
-                let mut tube = strand(
-                    &[from - run * base, to + run * top],
-                    &[base, top],
-                    tolerance,
-                    main.bulges.clone(),
-                    main.collars.clone(),
-                );
-                // Measured from where the tube starts instead.
-                let start = (stations[k] - base) as f64;
-                tube.bulges.iter_mut().for_each(|b| b.at -= start);
-                tube.collars.iter_mut().for_each(|c| c.at -= start);
-                let into = rebase(frame, &Transform::IDENTITY);
-                Ok(strand_mesh(&tube)?.transformed(&into).to_mesh())
-            })
-            .collect::<Result<_>>()?;
+        // `main` does; a skin is `main` itself, ringed often enough to bend
+        // smoothly between joints. `main`'s points and swellings sit at their
+        // distance along it, under a millimeter short of their station past
+        // the bend.
+        let (tubes, skin) = if skinned {
+            let (mesh, along) = strand_mesh_along(main, (SEGMENT / 4.0) as f64)?;
+            (Vec::new(), Some(skin_mesh(&mesh, &along, &stations)))
+        } else {
+            let tubes = frames
+                .iter()
+                .enumerate()
+                .map(|(k, frame)| {
+                    let (from, to) = (Vec3::from(points[k]), Vec3::from(points[k + 1]));
+                    let (base, top) = (widths[k] / 2.0, widths[k + 1] / 2.0);
+                    let run = (to - from).normalize();
+                    let mut tube = strand(
+                        &[from - run * base, to + run * top],
+                        &[base, top],
+                        tolerance,
+                        main.bulges.clone(),
+                        main.collars.clone(),
+                    );
+                    // Measured from where the tube starts instead.
+                    let start = (stations[k] - base) as f64;
+                    tube.bulges.iter_mut().for_each(|b| b.at -= start);
+                    tube.collars.iter_mut().for_each(|c| c.at -= start);
+                    let into = rebase(frame, &Transform::IDENTITY);
+                    Ok(strand_mesh(&tube)?.transformed(&into).to_mesh())
+                })
+                .collect::<Result<_>>()?;
+            (tubes, None)
+        };
         let mut carried = vec![Vec::new(); frames.len()];
         for (at, rider) in riders {
             let k = segment_of(&stations, *at);
@@ -939,6 +955,7 @@ impl Rod<Mesh> {
         }
         Ok(Self {
             tubes,
+            skin,
             pedicels: carried
                 .iter()
                 .map(|meshes| (!meshes.is_empty()).then(|| merge_meshes(meshes).to_mesh()))
@@ -1158,6 +1175,7 @@ fn stems(axis: &Axis, node: &Node) -> Vec<(Vec3, Vec3, f32)> {
 ///
 /// Draws, off the config's own stream: its rachises' kinks, as [`Axis::new`]
 /// does, then how its pedicels lie, as [`lay`] does.
+#[allow(clippy::too_many_arguments)]
 fn build_truss(
     config: &TrussConfig,
     loads: &[f32],
@@ -1166,6 +1184,7 @@ fn build_truss(
     tolerance: f64,
     whole: bool,
     bent: bool,
+    skinned: bool,
 ) -> Result<Built<Mesh>> {
     let mut rng = Rng::new(config.seed);
     let grown = stalks(config, params);
@@ -1310,7 +1329,9 @@ fn build_truss(
     };
     let middle = straight + (fork - straight) / 2.0;
     let rod = if bent {
-        Some(Rod::new(&axis, &main, &riders, tolerance, holds, middle)?)
+        Some(Rod::new(
+            &axis, &main, &riders, tolerance, holds, middle, skinned,
+        )?)
     } else {
         None
     };
@@ -1381,7 +1402,7 @@ pub(crate) fn build(
     fruit_params: Res<FruitParams>,
     trusses: Query<(Entity, &Order, &TrussConfig)>,
 ) -> Result<()> {
-    for prefix in [PART, TUBE, PEDICELS] {
+    for prefix in [PART, TUBE, SKIN, PEDICELS] {
         library.clear(prefix);
     }
 
@@ -1476,12 +1497,21 @@ pub(crate) fn build(
     let shapes = par_map(&book.representatives, |index, laden| {
         let (whole, bent) = ways[index];
         let (config, balls) = (&laden.config, &held[index]);
-        build_truss(config, &laden.loads, &params, balls, tolerance, whole, bent)
+        build_truss(
+            config,
+            &laden.loads,
+            &params,
+            balls,
+            tolerance,
+            whole,
+            bent,
+            stem.skinned,
+        )
     });
 
     // Tubes and pedicels are numbered across the whole layer, because how many
     // a representative needs depends on how long its rod came out.
-    let (mut tubes, mut pedicels) = (0, 0);
+    let (mut tubes, mut skins, mut pedicels) = (0, 0, 0);
     let mut built = Vec::with_capacity(book.len());
     for (index, shape) in shapes.into_iter().enumerate() {
         let shape = shape?;
@@ -1499,6 +1529,7 @@ pub(crate) fn build(
                 .into_iter()
                 .map(|tube| register(TUBE, &mut tubes, tube))
                 .collect(),
+            skin: rod.skin.map(|skin| register(SKIN, &mut skins, skin)),
             pedicels: rod
                 .pedicels
                 .into_iter()
@@ -1589,6 +1620,9 @@ pub(crate) fn build(
                         .map(|(j, _, fruit)| (rod.holds[*j], fruit.mass())),
                 );
                 let curve = cable(rod.points.clone(), rod.widths.clone(), loads, *surface);
+                if let Some(skin) = &rod.skin {
+                    spawn_skin(&mut truss, &rod.frames, skin);
+                }
                 spawn_rod(&mut truss, curve, &rod.frames, &rod.tubes)
             }
             None => {
@@ -1648,8 +1682,9 @@ pub(crate) fn build(
 mod tests {
     use std::collections::BTreeMap;
 
+    use bevy::mesh::VertexAttributeValues;
     use misina_lab::geometry::packing::nearest;
-    use misina_lab::scene::{CABLE, Cable, STEM, segment_name};
+    use misina_lab::scene::{ATTRIBUTE_ALONG, CABLE, Cable, STEM, Skin, segment_name};
     use misina_lab::testing::{named_children, prim_path};
 
     use super::*;
@@ -1674,6 +1709,71 @@ mod tests {
             riders.insert((prim_path(world, truss), name), in_scene(world, entity));
         }
         riders
+    }
+
+    /// A skinned truss that bends is drawn by one skin, not by tubes: a joint
+    /// per segment, named after it and bound at its rest frame, and the
+    /// skin's points bound from the rod's base to its tip.
+    #[test]
+    fn a_skinned_truss_is_drawn_by_one_skin_bound_to_its_segments() {
+        let mut params = small();
+        params.stem.flexible_below = 1.8;
+        params.stem.skinned = true;
+        let mut app = grown(params);
+        let world = app.world_mut();
+        let trusses: Vec<Entity> = world
+            .query_filtered::<Entity, With<TrussConfig>>()
+            .iter(world)
+            .collect();
+        let mut skins = 0;
+        for truss in trusses {
+            let children: BTreeMap<String, Entity> =
+                named_children(world, truss).into_iter().collect();
+            let Some(skin) = children.get(misina_lab::scene::SKIN) else {
+                continue;
+            };
+            skins += 1;
+            let path = prim_path(world, truss);
+            let bound = world.entity(*skin).get::<Skin>().unwrap().0.clone();
+            let cable = world.entity(children[CABLE]).get::<Cable>().unwrap();
+            let segments = cable.0.points.len() - 1;
+            assert_eq!(bound.joints.len(), segments, "{path}");
+            for (index, (joint, bind)) in bound.joints.iter().zip(&bound.binds).enumerate() {
+                assert_eq!(joint, &segment_name(index));
+                let segment = children[joint];
+                let frame = world.entity(segment).get::<Transform>().unwrap();
+                assert_eq!(
+                    frame.translation.to_array(),
+                    bind.translate,
+                    "{path}: {joint}"
+                );
+                assert!(
+                    named_children(world, segment)
+                        .iter()
+                        .all(|(name, _)| name != STEM),
+                    "{path}: {joint} has a tube"
+                );
+            }
+            let mesh = named_children(world, *skin)[0].1;
+            let mesh = &world.entity(mesh).get::<Mesh3d>().unwrap().0;
+            let Some(VertexAttributeValues::Float32(along)) = world
+                .resource::<Assets<Mesh>>()
+                .get(mesh)
+                .unwrap()
+                .attribute(ATTRIBUTE_ALONG)
+            else {
+                panic!("{path}: the skin is bound nowhere");
+            };
+            let (first, last) = along
+                .iter()
+                .fold((f32::MAX, f32::MIN), |(lo, hi), a| (lo.min(*a), hi.max(*a)));
+            assert_eq!(first, 0.0, "{path}");
+            assert!(
+                (last - segments as f32).abs() < 0.1,
+                "{path}: bound to {last} of {segments} segments"
+            );
+        }
+        assert!(skins > 0, "no truss bends");
     }
 
     /// A truss whose node is below `flexible_below` is a rod, and the rest are
@@ -1814,6 +1914,7 @@ mod tests {
             TOLERANCE,
             false,
             true,
+            false,
         )
         .unwrap()
         .rod
@@ -2079,9 +2180,17 @@ mod tests {
                 };
                 let config = TrussConfig::new(&params, 0, order, node);
                 let (loads, balls) = (laden(&config, share), balls(&config, &fruit));
-                let built =
-                    build_truss(&config, &loads, &params, &balls, TOLERANCE, true, order < 3)
-                        .unwrap();
+                let built = build_truss(
+                    &config,
+                    &loads,
+                    &params,
+                    &balls,
+                    TOLERANCE,
+                    true,
+                    order < 3,
+                    false,
+                )
+                .unwrap();
                 let grown = stalks(&config, &params);
                 let rng = &mut Rng::new(config.seed);
                 let rachises = Axis::new(&config, &loads, &grown, modulus(&params), rng).rachises;

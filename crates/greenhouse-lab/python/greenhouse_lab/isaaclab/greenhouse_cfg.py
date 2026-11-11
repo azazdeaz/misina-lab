@@ -188,6 +188,13 @@ class StemCfg:
     lower is exported as a rod a physics engine bends and a robot can cut, carrying
     its fruit, rather than as a static mesh. 0 bends none.
     """
+    skinned: bool = False
+    """Whether a truss that bends is drawn as one skin bending with it, a mesh bound to
+    every segment of its rod, rather than as a rigid tube on each segment, which
+    kinks at every joint. A skin bends only where a consumer poses it from the rod's
+    bodies, as `misina_lab.isaaclab` does under Newton; anywhere else it keeps the
+    shape it was built in.
+    """
     detail: float = 0.5
     """How finely the stems and the trusses' stems are meshed. At 1 a stem's tube strays
     from its shape by about a pixel to a camera half a meter away, as a leaf does at

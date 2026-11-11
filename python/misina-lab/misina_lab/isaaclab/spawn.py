@@ -41,6 +41,7 @@ from isaaclab.sim.utils import clone
 from isaaclab.utils.configclass import configclass
 
 from .rods import steps_rods, tune_rods
+from .skins import drive_skins
 
 if TYPE_CHECKING:
     from pxr import Usd
@@ -164,7 +165,7 @@ def for_backend(cfg: GeneratedSceneCfg) -> GeneratedSceneCfg:
     """The cfg to spawn under the physics backend in force.
 
     With rods and a backend that steps one, `cfg` itself, and the rods are
-    tuned for it (`tune_rods`). With one that cannot -- MJWarp refuses a model
+    tuned for it (`tune_rods`) and their skins posed (`drive_skins`). With one that cannot -- MJWarp refuses a model
     holding a rod, PhysX ignores the curve -- what `cfg.without_rods()` gives,
     which is its own scene in the cache. `cfg` itself again with nothing to
     decide: no rod authored, or no simulation running.
@@ -182,6 +183,7 @@ def for_backend(cfg: GeneratedSceneCfg) -> GeneratedSceneCfg:
                 f"{type(cfg).__name__} authors rods but names no PLANT to group them by"
             )
         tune_rods(cfg.PLANT, lone_damping=cfg.LONE_ROD_DAMPING)
+        drive_skins()
         return cfg
     solver = getattr(physics, "solver_cfg", physics)
     logger.warning(

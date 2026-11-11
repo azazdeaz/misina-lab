@@ -21,6 +21,7 @@ except ImportError as err:  # pragma: no cover - depends on the environment
 from .colliders import ColliderView
 from .cutting import Shears
 from .rods import CABLE, PLANT_GROUPS, SCENE_GROUP, make_physics_cfg_newton, steps_rods, tune_rods
+from .skins import drive_skins
 from .spawn import GeneratedSceneCfg, resolve_usd_path, spawn_generated, to_params
 
 __all__ = [
@@ -30,6 +31,7 @@ __all__ = [
     "SCENE_GROUP",
     "GeneratedSceneCfg",
     "Shears",
+    "drive_skins",
     "make_physics_cfg_newton",
     "resolve_usd_path",
     "spawn_generated",

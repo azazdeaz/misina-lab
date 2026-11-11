@@ -153,6 +153,22 @@ A flexible organ is a curve and the material it bends by
     drives the segment prims, so a flexible organ draws correctly at its rest
     shape and never moves.
 
+A rod's skin is a ``SkelRoot`` holding a mesh bound to a joint per segment
+    A part with ``along`` is a rod's skin, and binds itself: each point to
+    three joints at the weights `skin_weights` gives it, as
+    ``primvars:skel:jointIndices`` and ``primvars:skel:jointWeights``, with
+    ``along`` kept beside them as a primvar of its own for a cut to read. The
+    node carrying a ``skin`` is the ``SkelRoot`` holding a reference to it.
+    Under it go a ``Skeleton`` with a joint per segment, named after the
+    segment's prim and bound at its rest frame, and the ``SkelAnimation``
+    posing it, authored at that rest pose for a consumer to overwrite with
+    the bodies' poses. ``skel:skeleton`` is authored on the mesh itself,
+    inside the reference, rather than inherited from the ``SkelRoot``.
+
+    A skin is never instanceable: a skeleton outside a prototype cannot pose
+    the mesh inside it. Where nothing poses it, a skin draws at its rest
+    shape, as a rod's tubes do where nothing drives the segment prims.
+
 Custom attributes are authored on the prim itself, in the generator's namespace
     A node's ``attributes`` become ``<namespace>:<name>``, where the document's
     ``namespace`` is the generator's Python package, so a label cannot collide
@@ -197,9 +213,9 @@ import math
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, UsdSkel, Vt
 
-FORMAT = 11
+FORMAT = 12
 """Document version this builder understands. See `crates/misina-lab/src/scene/doc.rs`."""
 
 PARTS = "parts"
@@ -216,6 +232,17 @@ HEIGHT_FIELD = "newton:heightfield:resolution"
 
 The one part a scene has at most one of, so it is also how `ground.py` finds
 the surface again without going by name."""
+
+SKELETON = "Skeleton"
+ANIMATION = "Animation"
+"""Names of the `Skeleton` and `SkelAnimation` authored under a rod's skin."""
+
+ALONG = "along"
+"""The primvar a skin's mesh keeps its document's ``along`` in: per point,
+where along the rod it is bound, in segments."""
+
+SKIN_INFLUENCES = 3
+"""Joints each point of a skin is bound to. See `skin_weights`."""
 
 NON_TRANSFORMABLE = frozenset({"Scope"})
 """Prim types the generator emits that cannot carry an xform op stack.
@@ -419,7 +446,37 @@ def _author_part(stage: Usd.Stage, library: str, part: Mapping[str, Any]) -> Usd
         # Backends that read the triangles ignore the attribute.
         mesh.GetPrim().CreateAttribute(HEIGHT_FIELD, Sdf.ValueTypeNames.Float).Set(resolution)
 
+    if along := part.get("along"):
+        indices, weights = skin_weights(along)
+        binding = UsdSkel.BindingAPI.Apply(mesh.GetPrim())
+        binding.CreateJointIndicesPrimvar(False, SKIN_INFLUENCES).Set(Vt.IntArray(indices))
+        binding.CreateJointWeightsPrimvar(False, SKIN_INFLUENCES).Set(Vt.FloatArray(weights))
+        binding.CreateGeomBindTransformAttr(Gf.Matrix4d(1.0))
+        UsdGeom.PrimvarsAPI(mesh).CreatePrimvar(
+            ALONG, Sdf.ValueTypeNames.FloatArray, UsdGeom.Tokens.vertex
+        ).Set(Vt.FloatArray(along))
+
     return mesh
+
+
+def skin_weights(along: Sequence[float]) -> tuple[list[int], list[float]]:
+    """Each of a skin's points' `SKIN_INFLUENCES` joints and their weights,
+    flattened, by where `along` puts the point: a quadratic B-spline over the
+    segment it lies on and the two either side of it, each joint's weight
+    peaking at its segment's middle. The weights hand a point on from joint
+    to joint smoothly, so the skin bends without a kink at any; a rigid tube
+    per segment turns all at once at the joint. A joint past either end of
+    the rod is its end one, and the rod has as many segments as the largest
+    of `along`, rounded up."""
+    count = max(1, math.ceil(max(along, default=0.0)))
+    indices: list[int] = []
+    weights: list[float] = []
+    for at in along:
+        joint = min(int(at), count - 1)
+        u = at - joint
+        indices += (max(joint - 1, 0), joint, min(joint + 1, count - 1))
+        weights += ((1 - u) ** 2 / 2, 0.5 + u - u * u, u * u / 2)
+    return indices, weights
 
 
 def _extent(
@@ -597,6 +654,9 @@ def _author_node(
     if cable := node.get("cable"):
         _author_cable(spec, cable)
 
+    if skin := node.get("skin"):
+        _author_skin(layer, spec, skin, node.get("children", ()))
+
     # On this spec even when it is an instance; see the module docstring.
     for name, value in node.get("attributes", {}).items():
         _author_attribute(spec, f"{namespace}:{name}", value)
@@ -680,6 +740,55 @@ def _author_collider(spec: Sdf.PrimSpec, collider: Mapping[str, Any]) -> None:
     ).default = UsdGeom.Tokens.guide
 
     spec.SetInfo("apiSchemas", _COLLISION_API)
+
+
+def _author_skin(
+    layer: Sdf.Layer,
+    spec: Sdf.PrimSpec,
+    skin: Mapping[str, Any],
+    children: Iterable[Mapping[str, Any]],
+) -> None:
+    """The skeleton under a rod's ``SkelRoot``, its animation at the rest
+    pose, and the binding of every mesh referenced below it. See the module
+    docstring."""
+    joints = Vt.TokenArray(skin["joints"])
+    translations, rotations, binds = [], [], []
+    for bind in skin["binds"]:
+        x, y, z, w = bind["orient"]
+        translations.append(Gf.Vec3f(*bind["translate"]))
+        rotations.append(Gf.Quatf(w, Gf.Vec3f(x, y, z)))
+        binds.append(
+            Gf.Matrix4d(1.0)
+            .SetRotate(Gf.Quatd(w, x, y, z))
+            .SetTranslateOnly(Gf.Vec3d(*bind["translate"]))
+        )
+
+    skeleton = Sdf.PrimSpec(spec, SKELETON, Sdf.SpecifierDef, "Skeleton")
+    animation = Sdf.PrimSpec(spec, ANIMATION, Sdf.SpecifierDef, "SkelAnimation")
+    skeleton.SetInfo("apiSchemas", Sdf.TokenListOp.Create(prependedItems=["SkelBindingAPI"]))
+    for owner, name, value_type, value in (
+        (skeleton, "joints", Sdf.ValueTypeNames.TokenArray, joints),
+        (skeleton, "bindTransforms", Sdf.ValueTypeNames.Matrix4dArray, Vt.Matrix4dArray(binds)),
+        (skeleton, "restTransforms", Sdf.ValueTypeNames.Matrix4dArray, Vt.Matrix4dArray(binds)),
+        (animation, "joints", Sdf.ValueTypeNames.TokenArray, joints),
+    ):
+        Sdf.AttributeSpec(owner, name, value_type, Sdf.VariabilityUniform).default = value
+    for name, value_type, value in (
+        ("translations", Sdf.ValueTypeNames.Float3Array, Vt.Vec3fArray(translations)),
+        ("rotations", Sdf.ValueTypeNames.QuatfArray, Vt.QuatfArray(rotations)),
+        ("scales", Sdf.ValueTypeNames.Half3Array, Vt.Vec3hArray([Gf.Vec3h(1.0)] * len(binds))),
+    ):
+        Sdf.AttributeSpec(animation, name, value_type).default = value
+    Sdf.RelationshipSpec(
+        skeleton, "skel:animationSource", custom=False
+    ).targetPathList.explicitItems = [animation.path]
+
+    for child in children:
+        if child.get("reference") is not None:
+            mesh = Sdf.CreatePrimInLayer(layer, spec.path.AppendPath(f"{child['name']}/{GEOM}"))
+            Sdf.RelationshipSpec(
+                mesh, "skel:skeleton", custom=False
+            ).targetPathList.explicitItems = [skeleton.path]
 
 
 def _author_cable(spec: Sdf.PrimSpec, cable: Mapping[str, Any]) -> None:

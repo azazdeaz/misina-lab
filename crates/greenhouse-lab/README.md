@@ -130,6 +130,10 @@ peduncle and rachis a `Cable` and a prim per segment that Newton drives:
           /Cut
 ```
 
+With `StemCfg.skinned`, the rod is drawn by one skin that bends with it
+instead of a tube on each segment, which kinks at every joint: `/Skin`, a
+`SkelRoot` beside the segments, and the segments carry no `/Stem`.
+
 The fruit weigh on the rod, and `Cut` sits within a centimetre of its first
 joint, so `Shears` cutting there drops the whole truss. A fruit's collider
 rides its segment's body too, seated there by the rod tuning, and passes

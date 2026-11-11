@@ -34,6 +34,9 @@
 //!   see [`AttributeValue`].
 //! - A part with [`colors`](PartEntry::colors) is coloured per point, and its
 //!   material reads that primvar instead of a constant; see `build.py`.
+//! - A part with [`along`](PartEntry::along) is a rod's skin, drawn under a
+//!   prim carrying a [`Skin`]: the builder binds it to a skeleton there with
+//!   a joint per segment, which a consumer poses from the rod's bodies.
 
 use std::collections::BTreeMap;
 
@@ -42,7 +45,7 @@ use serde::{Deserialize, Serialize};
 /// Bumped when the shape of this document changes incompatibly. The builder
 /// refuses anything it does not recognise, so a stale cached scene fails
 /// loudly instead of composing into something subtly wrong.
-pub const FORMAT: u32 = 11;
+pub const FORMAT: u32 = 12;
 
 /// One generated scene, ready to be turned into a USD stage.
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -121,6 +124,15 @@ pub struct PartEntry {
     /// mesh as its convex hull. Absent on a part that is not one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub heightfield_resolution: Option<f32>,
+    /// Present on a rod's skin: per point, where along the rod it is bound,
+    /// in segments -- the index of the segment it lies on plus how far along
+    /// that segment, from 0 at the rod's first point to its segment count at
+    /// its last. See [`super::ATTRIBUTE_ALONG`].
+    ///
+    /// Every prim referencing such a part is authored non-instanceable, as
+    /// one referencing a collider is: each deforms on its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub along: Option<Vec<f32>>,
 }
 
 /// The `physics:approximation` of an exact triangle-mesh collider. USD spells
@@ -159,7 +171,9 @@ pub struct Node {
     /// Cleared on a prim referencing a part that carries
     /// [`collision`](PartEntry::collision): a collider inside a prototype is
     /// reached only through an instance proxy, and the one part that applies
-    /// to has a single instance, so it shares nothing anyway.
+    /// to has a single instance, so it shares nothing anyway. Cleared too on
+    /// one referencing a skin, a part with [`along`](PartEntry::along): a
+    /// skeleton outside a prototype cannot pose the mesh inside it.
     #[serde(default, skip_serializing_if = "is_false")]
     pub instanceable: bool,
     /// A collision proxy standing in for geometry too detailed to collide
@@ -172,6 +186,10 @@ pub struct Node {
     /// `reference`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cable: Option<Cable>,
+    /// The joints a rod's skin is bound to, on a `"SkelRoot"` prim holding
+    /// the skin's mesh; see [`Skin`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skin: Option<Skin>,
     /// Custom attributes of this prim, by name within
     /// [`SceneDoc::namespace`] — ground truth a consumer reads off the stage,
     /// which nothing renders or simulates. Any prim may carry them, an
@@ -297,6 +315,16 @@ pub struct Cable {
     pub reflectance: f32,
 }
 
+/// The skeleton a rod's skin is bound to: a joint per segment of the rod,
+/// each named after the segment's prim, a sibling of the prim carrying this,
+/// and bound at that prim's rest frame. `binds` are in the frame of the
+/// prim's parent, the organ, which the skin's points are in too.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Skin {
+    pub joints: Vec<String>,
+    pub binds: Vec<Xform>,
+}
+
 fn is_false(b: &bool) -> bool {
     !*b
 }
@@ -316,6 +344,7 @@ impl Node {
             instanceable: false,
             collider: None,
             cable: None,
+            skin: None,
             attributes: BTreeMap::new(),
             children: Vec::new(),
         }
@@ -389,6 +418,7 @@ mod tests {
                 double_sided: true,
                 collision: None,
                 heightfield_resolution: None,
+                along: None,
             }],
             root,
         }
