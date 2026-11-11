@@ -9,10 +9,10 @@
 #
 # A shot's picture, or one this checkout's Markdown links there, that the
 # folder lacks is kept as published, so only the shots a change affects need
-# rendering; the copies it fetches are removed again when it exits, so the
-# folder only ever holds renders. Refuses while one is neither rendered nor
-# published, as a new shot's is until it is rendered, and when main has moved
-# since it started. Needs push access.
+# rendering. The set is staged apart from the folder, which so only ever
+# holds renders. Refuses while one is neither rendered nor published, as a new
+# shot's is until it is rendered, and when main has moved since it started.
+# Needs push access.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
@@ -25,22 +25,20 @@ cd "$repo"
 # URL serves a copy cached for minutes, and the push expects it, so a publish
 # started from an older set fails rather than undoing a newer one.
 base=$(git ls-remote "$remote" refs/heads/main | cut -f1)
-missing= tmp= kept=()
-# A fetched copy left behind would pass for a render on the next run.
-cleanup() {
-    for path in "${kept[@]}"; do rm -f "$assets/$path"; done
-    [[ -z $tmp ]] || rm -rf "$tmp"
-}
-trap cleanup EXIT
+# The renders, and the copies fetched for pictures not rendered, which in the
+# folder would pass for renders on the next run.
+stage=$(mktemp -d)
+trap 'rm -rf "$stage"' EXIT
+cp -r "$assets/." "$stage"
+missing= kept=()
 while read -r path; do
     # A path in the assets repository, so one inside the folder.
     [[ $path != *..* ]] || { echo "not a picture's path: $path" >&2; exit 1; }
-    [[ -f $assets/$path ]] && continue
+    [[ -f $stage/$path ]] && continue
     # Not rendered here: the pages keep the copy they show now.
-    if curl -fsSL --create-dirs -o "$assets/$path" "${raw%main/}$base/$path"; then
+    if curl -fsSL --create-dirs -o "$stage/$path" "${raw%main/}$base/$path"; then
         kept+=("$path")
     else
-        rm -f "$assets/$path"
         missing+=$path$'\n'
     fi
 # Every shot's picture, as render.sh names it, and every picture the Markdown
@@ -53,10 +51,7 @@ done < <({
 [[ -z $missing ]] || { printf 'neither in %s nor published:\n%s' "$assets" "$missing" >&2; exit 1; }
 source=$(git describe --always --dirty)
 
-# A throwaway repository over the folder, which stays a plain folder.
-tmp=$(mktemp -d)
-export GIT_DIR=$tmp GIT_WORK_TREE=$assets
-cd "$assets"
+cd "$stage"
 git init -q -b main
 git add -A
 git commit -q -m "Rendered from misina-lab $source" ${kept[*]:+-m "Kept as published: ${kept[*]}"}
