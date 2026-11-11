@@ -108,7 +108,7 @@ use misina_lab::geometry::mesh::{MeshData, merge_meshes};
 use misina_lab::geometry::packing::{Bob, pack, swing};
 use misina_lab::geometry::par_map;
 use misina_lab::geometry::strand::{
-    Bark, Bulge, Collar, Strand, sides_within, strand_mesh, strand_mesh_along,
+    Bark, Bulge, Collar, Strand, sides_within, strand_mesh, strand_mesh_ringed,
 };
 use misina_lab::palette::{COLOR_STREAM, Response, shade, srgb};
 use misina_lab::params::{Label, Slider};
@@ -116,7 +116,7 @@ use misina_lab::quantize::{Metric, farthest_first};
 use misina_lab::rng::{Rng, salt};
 use misina_lab::scene::{
     Library, Order, cable, configs_changed, rebase, segment_frames, segment_of, skin_mesh,
-    spawn_rod, spawn_skin,
+    spawn_rod,
 };
 use nalgebra::Point3;
 
@@ -920,8 +920,8 @@ impl Rod<Mesh> {
         // distance along it, under a millimeter short of their station past
         // the bend.
         let (tubes, skin) = if skinned {
-            let (mesh, along) = strand_mesh_along(main, (SEGMENT / 4.0) as f64)?;
-            (Vec::new(), Some(skin_mesh(&mesh, &along, &stations)))
+            let mesh = strand_mesh_ringed(main, (SEGMENT / 4.0) as f64)?;
+            (Vec::new(), Some(skin_mesh(&mesh, &points)))
         } else {
             let tubes = frames
                 .iter()
@@ -1620,10 +1620,13 @@ pub(crate) fn build(
                         .map(|(j, _, fruit)| (rod.holds[*j], fruit.mass())),
                 );
                 let curve = cable(rod.points.clone(), rod.widths.clone(), loads, *surface);
-                if let Some(skin) = &rod.skin {
-                    spawn_skin(&mut truss, &rod.frames, skin);
-                }
-                spawn_rod(&mut truss, curve, &rod.frames, &rod.tubes)
+                spawn_rod(
+                    &mut truss,
+                    curve,
+                    &rod.frames,
+                    &rod.tubes,
+                    rod.skin.as_ref(),
+                )
             }
             None => {
                 let mesh = built
@@ -1682,10 +1685,9 @@ pub(crate) fn build(
 mod tests {
     use std::collections::BTreeMap;
 
-    use bevy::mesh::VertexAttributeValues;
     use misina_lab::geometry::packing::nearest;
-    use misina_lab::scene::{ATTRIBUTE_ALONG, CABLE, Cable, STEM, Skin, segment_name};
-    use misina_lab::testing::{named_children, prim_path};
+    use misina_lab::scene::{CABLE, Cable, STEM, Skin, segment_name};
+    use misina_lab::testing::{named_children, prim_path, skin_span};
 
     use super::*;
     use crate::elements::{grown, in_scene, small};
@@ -1754,23 +1756,10 @@ mod tests {
                     "{path}: {joint} has a tube"
                 );
             }
-            let mesh = named_children(world, *skin)[0].1;
-            let mesh = &world.entity(mesh).get::<Mesh3d>().unwrap().0;
-            let Some(VertexAttributeValues::Float32(along)) = world
-                .resource::<Assets<Mesh>>()
-                .get(mesh)
-                .unwrap()
-                .attribute(ATTRIBUTE_ALONG)
-            else {
-                panic!("{path}: the skin is bound nowhere");
-            };
-            let (first, last) = along
-                .iter()
-                .fold((f32::MAX, f32::MIN), |(lo, hi), a| (lo.min(*a), hi.max(*a)));
-            assert_eq!(first, 0.0, "{path}");
+            let (reach, bare) = skin_span(world, truss).expect("a skin");
             assert!(
-                (last - segments as f32).abs() < 0.1,
-                "{path}: bound to {last} of {segments} segments"
+                (reach - segments as f32).abs() < 0.1 && bare < 0.5,
+                "{path}: bound to {reach} of {segments} segments, {bare} of one bare"
             );
         }
         assert!(skins > 0, "no truss bends");

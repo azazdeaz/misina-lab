@@ -293,6 +293,13 @@ class ShootCfg:
     nothing for a solver to pick up. For a backend with no rods, or to keep a
     canopy's look without paying for the bodies.
     """
+    skinned: bool = False
+    """Whether a shoot that bends is drawn as one skin bending with it, a mesh bound to
+    every segment of its rod, rather than as a tube on each segment, which kinks at
+    every joint. A skin bends only where a consumer poses it from the rod's bodies,
+    as `misina_lab.isaaclab` does under Newton; anywhere else it keeps the shape it
+    was built in.
+    """
     segment: float = 0.09
     """Length of one segment of a bending shoot's rod, in meters — a stray shoot's or
     a dormant cane's.
@@ -456,6 +463,13 @@ class WeedCfg:
     is exported as a deformable curve a solver bends, with its leaves riding it. Each
     is a chain of rigid bodies, ten to the metre: the default parcel at the defaults
     bends about 2,500 stems, 12,000 bodies.
+    """
+    skinned: bool = False
+    """Whether a stem that bends is drawn as one skin bending with it, a mesh bound to
+    every segment of its rod, rather than as a tube on each segment, which kinks at
+    every joint. A skin bends only where a consumer poses it from the rod's bodies,
+    as `misina_lab.isaaclab` does under Newton; anywhere else it keeps the shape it
+    was built in.
     """
     variations: int = 24
     """How many distinct plant meshes the scene may hold. A budget, not a count."""

@@ -31,6 +31,7 @@ from misina_lab.usd.build import (
     MDL_TRANSLUCENT,
     SHADER,
     SKELETON,
+    skin_weights,
 )
 
 ROOT = "/Vineyard"
@@ -614,6 +615,15 @@ def test_a_skin_is_bound_to_a_joint_per_segment_at_its_rest_frame(stage: Usd.Sta
     assert sums == pytest.approx([1.0] * 8)
     along = UsdGeom.PrimvarsAPI(mesh).GetPrimvar(ALONG).Get()
     assert list(along) == [0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0]
+
+
+def test_a_skins_weights_hand_a_point_on_from_joint_to_joint():
+    """At a rod's first point a skin's point follows the first joint alone,
+    at its last the last alone, and between them three, by a quadratic
+    B-spline: a quarter along the second segment, mostly its own joint."""
+    indices, weights = skin_weights([0.0, 1.25, 3.0])
+    assert indices == [0, 0, 1, 0, 1, 2, 1, 2, 2]
+    assert weights == pytest.approx([0.5, 0.5, 0.0, 0.28125, 0.6875, 0.03125, 0.0, 0.5, 0.5])
 
 
 def test_a_skin_posed_at_rest_lies_where_it_was_built(stage: Usd.Stage):

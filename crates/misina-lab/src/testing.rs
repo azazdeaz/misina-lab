@@ -3,16 +3,18 @@
 //! Always compiled, since a generator's `#[cfg(test)]` modules cannot reach a
 //! `#[cfg(test)]` item here. Fixtures for a whole pipeline ([`grown`]), ways
 //! to find a prim on the scene graph ([`prim`], [`prim_path`], [`organs`]),
-//! the [`MeshData`] readers the kernel tests share, and the two checks every
-//! params aggregate is held to ([`check_params`], [`nudged`]).
+//! how a rod's skin is bound ([`skin_span`]), the [`MeshData`] readers the
+//! kernel tests share, and the two checks every params aggregate is held to
+//! ([`check_params`], [`nudged`]).
 
+use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 
 use crate::geometry::mesh::MeshData;
 
 use crate::Params;
 use crate::params::{self, Slider, Widget};
-use crate::scene::{Order, PrimRoot};
+use crate::scene::{ATTRIBUTE_ALONG, Order, PrimRoot, SKIN};
 
 pub use crate::generate::{grown, scene_app};
 
@@ -198,6 +200,37 @@ pub fn named_children(world: &mut World, entity: Entity) -> Vec<(String, Entity)
             Some((name, child))
         })
         .collect()
+}
+
+/// How the skin of the rod at `organ` is bound: how far along the rod its
+/// points reach, in segments, and the longest stretch with no point bound in
+/// it past the rod's first segment, which is held and bends nowhere. None
+/// for a rod drawn without a skin. See [`crate::scene::skin_mesh`].
+pub fn skin_span(world: &mut World, organ: Entity) -> Option<(f32, f32)> {
+    let (_, skin) = named_children(world, organ)
+        .into_iter()
+        .find(|(name, _)| name == SKIN)?;
+    let (_, mesh) = named_children(world, skin)[0];
+    let mesh = &world
+        .entity(mesh)
+        .get::<Mesh3d>()
+        .expect("a skin draws a mesh")
+        .0;
+    let Some(VertexAttributeValues::Float32(along)) = world
+        .resource::<Assets<Mesh>>()
+        .get(mesh)
+        .and_then(|mesh| mesh.attribute(ATTRIBUTE_ALONG))
+    else {
+        panic!("{}: the skin is bound nowhere", prim_path(world, organ));
+    };
+    let mut along = along.clone();
+    along.sort_by(f32::total_cmp);
+    let bare = along
+        .windows(2)
+        .filter(|pair| pair[0] >= 1.0)
+        .map(|pair| pair[1] - pair[0])
+        .fold(0.0, f32::max);
+    Some((*along.last()?, bare))
 }
 
 // ─── Meshes ─────────────────────────────────────────────────────────
