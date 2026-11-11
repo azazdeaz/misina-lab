@@ -25,7 +25,7 @@ except ImportError:
 
 import numpy as np  # noqa: E402
 from newton import ModelBuilder  # noqa: E402
-from pxr import Gf, Usd, UsdGeom, UsdSkel, Vt  # noqa: E402
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdSkel, Vt  # noqa: E402
 
 from misina_lab.isaaclab import rods, skins  # noqa: E402
 from misina_lab.usd.build import ALONG, ANIMATION, SKELETON, build_usd  # noqa: E402
@@ -136,11 +136,22 @@ def skin_roots(stage: Usd.Stage) -> list[Usd.Prim]:
     return [prim for prim in stage.Traverse() if prim.IsA(UsdSkel.Root)]
 
 
-def test_a_skin_posed_at_its_bodies_starts_where_it_was_built(greenhouse):
+@pytest.mark.parametrize("scale", [1.0, 2.0])
+def test_a_skin_posed_at_its_bodies_starts_where_it_was_built(greenhouse, tmp_path, scale):
     """Each joint of a truss's skin posed at its segment's body, where Newton
     starts it, leaves the skin where it was built, on whatever rides the
-    segments: the skin's binds are the frames the bodies are built in."""
+    segments: the skin's binds are the frames the bodies are built in. In a
+    scene spawned scaled, the scale is divided out of each joint's position."""
     _, path, builder = greenhouse
+    if scale != 1.0:
+        # A copy apart from the fixture's layer, which the other tests read.
+        layer = Sdf.Layer.OpenAsAnonymous(str(path))
+        copy = Usd.Stage.Open(layer)
+        UsdGeom.Xformable(copy.GetDefaultPrim()).AddScaleOp().Set(Gf.Vec3f(scale, scale, scale))
+        path = tmp_path / "scaled.usda"
+        layer.Export(str(path))
+        builder = ModelBuilder()
+        builder.add_usd(str(path))
     stage = Usd.Stage.Open(str(path))
     index = {label: body for body, label in enumerate(builder.body_label)}
     body_q = np.array(builder.body_q, dtype=float)
@@ -148,12 +159,10 @@ def test_a_skin_posed_at_its_bodies_starts_where_it_was_built(greenhouse):
     worst, posed = 0.0, 0
     for root in skin_roots(stage):
         skeleton = UsdSkel.Skeleton(root.GetChild(SKELETON))
-        world = xforms.GetLocalToWorldTransform(skeleton.GetPrim())
-        turn = world.ExtractRotationQuat()
-        frame = np.array([*world.ExtractTranslation(), *turn.GetImaginary(), turn.GetReal()])
+        frame, size = skins.frame_of(xforms.GetLocalToWorldTransform(skeleton.GetPrim()))
         organ = root.GetParent().GetPath()
         bodies = [index[f"{organ}/{joint}"] for joint in skeleton.GetJointsAttr().Get()]
-        local = skins.seen_from(frame, body_q[bodies])
+        local = skins.seen_from(frame, body_q[bodies], size[0])
         animation = UsdSkel.Animation(root.GetChild(ANIMATION))
         animation.GetTranslationsAttr().Set(Vt.Vec3fArray([Gf.Vec3f(*p) for p in local[:, :3]]))
         animation.GetRotationsAttr().Set(

@@ -97,29 +97,28 @@ class Skins:
                 if (found := re.fullmatch(rf"(.*)/{CABLE}{_ROD_BODY_SUFFIX}", label))
             }
         )
-        bodies, starts, frames, self._poses = [], [], [], []
+        bodies, starts, frames, sizes, self._poses = [], [], [], [], []
         for organ in organs:
             skeleton = UsdSkel.Skeleton(stage.GetPrimAtPath(f"{organ}/{SKIN}/{SKELETON}"))
             if not skeleton:
                 continue
             joints = [index[f"{organ}/{name}"] for name in skeleton.GetJointsAttr().Get()]
             # The skeleton's space is its organ's, which nothing moves.
-            world = cache.GetLocalToWorldTransform(skeleton.GetPrim())
-            scale = [world.GetRow3(axis).GetLength() for axis in range(3)]
-            if not np.allclose(scale, 1.0, atol=1e-4):
-                raise ValueError(f"{organ} is scaled by {scale}; its skin would not fit its rod")
-            turn = world.ExtractRotationQuat()
-            frame = [*world.ExtractTranslation(), *turn.GetImaginary(), turn.GetReal()]
+            frame, scale = frame_of(cache.GetLocalToWorldTransform(skeleton.GetPrim()))
+            if not np.allclose(scale, scale[0], rtol=1e-4):
+                raise ValueError(f"{organ} is scaled unevenly, by {scale}; its skin would shear")
             animation = fabric.GetPrimAtPath(f"{organ}/{SKIN}/{ANIMATION}")
             starts.append(len(bodies))
             bodies += joints
             frames += [frame] * len(joints)
+            sizes += [scale[0]] * len(joints)
             self._poses.append(
                 (animation.GetAttribute("translations"), animation.GetAttribute("rotations"))
             )
         self._bodies = np.array(bodies, dtype=int)
         self._starts = np.array(starts, dtype=int)
         self._frames = np.array(frames, dtype=float).reshape(-1, 7)
+        self._sizes = np.array(sizes, dtype=float)[:, None]
         self._last = np.full((len(bodies), 7), np.nan)
         self._vt = usdrt.Vt
 
@@ -132,7 +131,7 @@ class Skins:
         how many it posed."""
         if not len(self):
             return 0
-        local = seen_from(self._frames, body_q[self._bodies])
+        local = seen_from(self._frames, body_q[self._bodies], self._sizes)
         moved = np.maximum.reduceat(np.abs(local - self._last).max(axis=1), self._starts)
         # A skin never posed has NaN for its last pose, which moved too.
         moved = np.flatnonzero(~(moved <= MOVED))
@@ -181,15 +180,23 @@ def split(stage, segment: str, at: float) -> bool:
     return True
 
 
-def seen_from(frames: np.ndarray, poses: np.ndarray) -> np.ndarray:
-    """`poses` as seen from `frames`: each a position and a unit xyzw
-    quaternion in the world, `frames` row by row with `poses` or one for all
-    of them. A joint's pose in its skeleton's space is its body's seen from
-    the skeleton's frame."""
+def frame_of(world) -> tuple[np.ndarray, np.ndarray]:
+    """A skeleton's local-to-world matrix `world` as a frame, its position
+    and unit xyzw quaternion, and the scale along each of its axes."""
+    turn = world.RemoveScaleShear().ExtractRotationQuat()
+    frame = np.array([*world.ExtractTranslation(), *turn.GetImaginary(), turn.GetReal()])
+    return frame, np.array([world.GetRow3(axis).GetLength() for axis in range(3)])
+
+
+def seen_from(frames: np.ndarray, poses: np.ndarray, sizes=1.0) -> np.ndarray:
+    """`poses` as seen from `frames` drawn at `sizes`, a uniform scale: each
+    a position and a unit xyzw quaternion in the world, `frames` and `sizes`
+    row by row with `poses` or one for all of them. A joint's pose in its
+    skeleton's space is its body's seen from the skeleton's frame, its
+    position divided by the skeleton's scale."""
     away = frames[..., 3:] * np.array([-1.0, -1.0, -1.0, 1.0])
-    return np.concatenate(
-        [_rotate(away, poses[:, :3] - frames[..., :3]), _multiply(away, poses[:, 3:])], axis=1
-    )
+    near = _rotate(away, poses[:, :3] - frames[..., :3]) / sizes
+    return np.concatenate([near, _multiply(away, poses[:, 3:])], axis=1)
 
 
 def _multiply(a: np.ndarray, b: np.ndarray) -> np.ndarray:
