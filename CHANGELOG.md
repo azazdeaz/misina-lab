@@ -24,6 +24,16 @@ Scene document format 12.
 
 ### Added
 
+- **greenhouse-lab**: A fruit's outline has knobs of its own:
+  `FruitCfg.widest`, where it is widest; `FruitCfg.stem_dip`, how deep its
+  stem scar is sunk; `FruitCfg.stem_blockiness` and
+  `FruitCfg.blossom_blockiness`, how blocky either half is; and
+  `FruitCfg.blossom_tip`, a blossom end drawn out to a point or dented. Each
+  fruit strays a little from all but the stem dip, as far as its
+  `irregularity` says. The defaults grow a round truss tomato, its shoulders
+  a little blockier than its blossom end, and the greenhouse README gives
+  the settings for a cherry, a plum and a beefsteak tomato. A pointed
+  fruit's collider reaches its tip.
 - **misina-lab**: A rod can be drawn by one skin that bends with it, rather
   than a tube on each segment, which kinks at every joint.
   `strand_mesh_along` meshes a strand and says how far along it each point

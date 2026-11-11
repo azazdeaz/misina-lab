@@ -443,10 +443,13 @@ class FruitParams:
 
     A fruit has a lobe per locule, the chambers its seeds grow in, and a groove over
     each wall between two: deepest round its shoulders, where it pleats out from the
-    calyx, and fading toward its blossom end. Every fruit draws its own lobe count,
-    how wide and how full each lobe is and how deep each groove, its lean, and its
-    five or six sepals and how each curls, within the ranges the research notes give;
-    its flower has a petal between each two sepals.
+    calyx, and fading toward its blossom end. Its outline is rounded either side of
+    where it is widest, blocky or round at its shoulders and at its blossom end, its
+    stem scar sunk in a dip and its blossom end pointed, flat or dented. Every fruit
+    draws its own lobe count, how wide and how full each lobe is and how deep each
+    groove, its lean, how its outline strays from the params', and its five or six
+    sepals and how each curls, within the ranges the research notes give; its flower
+    has a petal between each two sepals.
     """
 
     ripe_trusses: float
@@ -464,6 +467,30 @@ class FruitParams:
     beefsteaks are, and over 1 elongated, as plum tomatoes are. Each fruit draws a
     little either side.
     """
+    widest: float
+    """Where a fruit is widest, as a share of its height from its stem end: over 0.5 it
+    is fuller toward its blossom end, as a plum tomato is. Each fruit strays a little
+    either side.
+    """
+    stem_dip: float
+    """How deep the dip a fruit's stem scar sits in is, as a fraction of its radius:
+    about 0.1 on a round truss tomato, next to none on a cherry or a plum tomato, and
+    about 0.2 on a beefsteak.
+    """
+    stem_blockiness: float
+    """How blocky a fruit's stem half is: 0 is an ellipse, and 1 has broad, flat
+    shoulders. Each fruit strays a little either side.
+    """
+    blossom_blockiness: float
+    """How blocky a fruit's blossom half is: 0 is an ellipse, and 1 has a broad, flat
+    blossom end. Each fruit strays a little either side.
+    """
+    blossom_tip: float
+    """How far a fruit's blossom end is drawn out to a point, as a plum tomato's is, as
+    a share of the height of its blossom half. Under 0 it is pushed in: flat at about
+    -0.075, and dented past that, as a beefsteak's is. Each fruit strays a little
+    either side.
+    """
     locules: float
     """How many locules a fruit has, and so lobes: 2 in a cherry or a plum tomato, 3 to
     6 in a round or a truss tomato, and more in a beefsteak. Each fruit draws up to
@@ -480,8 +507,9 @@ class FruitParams:
     """
     irregularity: float
     """How irregular a fruit is: how far its lobes differ in width and in fullness and
-    its grooves in depth, and how far its blossom end leans. 0 is a regular fruit; at
-    1 about one fruit in five leans visibly, and 2 is lopsided.
+    its grooves in depth, how far its blossom end leans, and how far its outline
+    strays from the params'. 0 is a regular fruit; at 1 about one fruit in five leans
+    visibly, and 2 is lopsided.
     """
     petal_length: float
     """Length of a flower's petals, in meters: an open tomato flower is under 25 mm
@@ -516,6 +544,11 @@ class FruitParams:
         spread: float = 0.2,
         color: FruitColor = "red",
         aspect: float = 0.9,
+        widest: float = 0.5,
+        stem_dip: float = 0.1,
+        stem_blockiness: float = 0.3,
+        blossom_blockiness: float = 0.2,
+        blossom_tip: float = 0.0,
         locules: float = 4.0,
         ribbing: float = 0.08,
         rib_reach: float = 0.35,
