@@ -446,7 +446,7 @@ mod tests {
             material: MeshMaterial3d(Handle::default()),
         };
         let frame = Transform::from_xyz(0.0, 0.0, 0.05);
-        crate::scene::spawn_skin(&mut world.commands().entity(root), &[frame], &skin);
+        super::super::spawn_skin(&mut world.commands().entity(root), &[frame], &skin);
         world.flush();
 
         let doc = scene_doc(&mut world).unwrap();

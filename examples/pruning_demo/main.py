@@ -72,13 +72,14 @@ VINEYARD_CFG = VineyardCfg(
     parcel=ParcelCfg(row_spacing=2.4, trellis_height=1.5, headland=8.0, min_row_length=4.0),
     # One cane per spur, so pruning to two buds leaves a two-bud spur.
     vine=VineCfg(shoots_per_spur=1.0),
-    # Winter: bare lignified canes with buds a dormant internode apart.
-    shoot=ShootCfg(dormant=True, internode=0.12, length=1.1, radius=0.005, lean=0.08),
+    # Winter: bare lignified canes with buds a dormant internode apart, each
+    # drawn by a skin that bends with its rod.
+    shoot=ShootCfg(dormant=True, internode=0.12, length=1.1, radius=0.005, lean=0.08, skinned=True),
     # A dry, short winter floor.
     cover=CoverCfg(dryness=0.6, height=0.06),
-    # Last season's tall weeds, still standing: their long stems are rods too,
-    # bent aside by the robot as it drives and works through them.
-    weed=WeedCfg(flexible=True),
+    # Last season's tall weeds, still standing: their long stems are skinned
+    # rods too, bent aside by the robot as it drives and works through them.
+    weed=WeedCfg(flexible=True, skinned=True),
 )
 
 VINEYARD_PATH = "/World/Vineyard"
