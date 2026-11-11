@@ -446,13 +446,22 @@ def gesture_poses(gesture: Gesture, truss: Truss, shears, machine: Harvester) ->
         placed.append(frame_of(pose[:3], pose[3:]) @ offset)
     middles, axes = np.array([f[:3, 3] for f in placed]), np.array([f[:3, 2] for f in placed])
     radii, halves = np.array([f[2] for f in truss.fruit]), np.array([f[3] for f in truss.fruit])
-    # How far each fruit reaches from its middle toward the arm, and down.
-    behind = radii + halves * np.abs(axes @ level)
+    # How far each fruit reaches from its middle toward the arm, level with
+    # its middle: out through its side, or through a round end where the
+    # side ends first. And how far it reaches down.
+    cos = np.abs(axes @ level)
+    sin = np.sqrt(np.maximum(1.0 - cos**2, 1e-12))
+    behind = np.where(
+        radii / sin * cos <= halves,
+        radii / sin,
+        halves * cos + np.sqrt(np.maximum(radii**2 - (halves * sin) ** 2, 0.0)),
+    )
     under = radii + halves * np.abs(axes[:, 2])
     back, low = np.argmin(middles @ level - behind), np.argmin(middles[:, 2] - under)
     anchors = {
         "back": middles[back] - behind[back] * level,
-        "low": middles[low] - under[low] * up,
+        # The bottom of its lower round end.
+        "low": middles[low] - halves[low] * np.sign(axes[low, 2]) * axes[low] - radii[low] * up,
         "middle": middles.mean(axis=0),
     }
     mouth = turned(truss, along, gesture.yaw, gesture.tilt)

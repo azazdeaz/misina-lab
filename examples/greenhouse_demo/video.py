@@ -300,6 +300,8 @@ def main():
                     # Ahead is the way the shear comes in.
                     way = demo.heading(filmed.cut[:3, 0], filmed.side)
                     point, side = filmed.cut[:3, 3], filmed.side
+                    # The gestures' caption is up from the first reach, a
+                    # shot before their close-up takes over from `CLOSE`.
                     caption = TOUCH.caption if gesturing else captions[filmed.prim]
                     if shot is CRATE:
                         point = (harvest.platform() @ machine.crate_frame)[:3, 3]

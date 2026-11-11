@@ -65,6 +65,10 @@ class GeneratedSceneCfg(FileCfg):
     fragment is applied to the spawned prim rather than baked into the USD,
     and takes no part in the cache key.
 
+    The upper-case attributes are the generator's own, set by its subclass.
+    Set on an instance, they are lost to `copy()` and `replace()`, which
+    rebuild a cfg from its fields.
+
     There is no `usd_path`: the fragments are what identifies the asset, and
     the file backing it is an implementation detail of the cache.
 

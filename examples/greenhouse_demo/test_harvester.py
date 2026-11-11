@@ -205,10 +205,38 @@ def test_a_stems_fin_runs_from_its_front_back_to_its_rows_middle():
     assert front[1] < poses[0, 1, 3] < 0.1 < back[1]
 
 
-def test_a_gestures_tip_lands_on_its_points():
+@pytest.mark.parametrize(
+    "fruit, back, low, middle",
+    [
+        (
+            [
+                # Set off its turned body along the body's x, which is the world's y.
+                (2, kinematics.transform((0.01, 0.0, 0.0)), 0.02, 0.0),
+                # A capsule standing upright: the lowest, by its length.
+                (3, np.eye(4), 0.01, 0.03),
+                # The one reaching furthest back, by its radius.
+                (4, np.eye(4), 0.055, 0.0),
+            ],
+            (0.055, -0.07, -0.12),
+            (-0.03, -0.05, -0.18),
+            (0.0, -0.17 / 3, -0.12),
+        ),
+        (
+            # A capsule leaning 45 degrees toward the arm: level with its
+            # middle, its side is r / sin 45 toward the arm, and its bottom
+            # lies under its lower round end, away from the arm.
+            [(4, kinematics.transform(rpy=(0.0, np.pi / 4, 0.0)), 0.02, 0.03)],
+            (0.02 * np.sqrt(2), -0.07, -0.12),
+            (-0.03 * np.sqrt(0.5), -0.07, -0.12 - 0.03 * np.sqrt(0.5) - 0.02),
+            (0.0, -0.07, -0.12),
+        ),
+    ],
+)
+def test_a_gestures_tip_lands_on_its_points(fruit, back, low, middle):
     """The shear's tip lands on each point of a gesture, offset from the near
-    side of the fruit furthest back toward the arm, the bottom of the lowest,
-    or the middle of them all; the mouth turned as the level cut pose, then
+    side of the fruit furthest back toward the arm, level with its middle,
+    the bottom of the lowest, or the middle of them all, on the fruit's
+    capsule however it leans; the mouth turned as the level cut pose, then
     `tilt` up about its pivot."""
     harvest = pytest.importorskip("harvest")
 
@@ -236,14 +264,7 @@ def test_a_gestures_tip_lands_on_its_points():
     cut = np.eye(4)
     cut[:3, 0] = [0.0, -1.0, 0.0]
     truss = harvest.Truss("", cut, True, side=np.array([0.0, 1.0, 0.0]), bodies=[0, 1])
-    truss.fruit = [
-        # Set off its turned body along the body's x, which is the world's y.
-        (2, kinematics.transform((0.01, 0.0, 0.0)), 0.02, 0.0),
-        # A capsule standing upright: the lowest, by its length.
-        (3, np.eye(4), 0.01, 0.03),
-        # The one reaching furthest back, by its radius.
-        (4, np.eye(4), 0.055, 0.0),
-    ]
+    truss.fruit = fruit
     ahead = harvest.heading(cut[:3, 0], truss.side)
     up = np.array([0.0, 0.0, 1.0])
     s = MACHINE.shear
@@ -251,9 +272,9 @@ def test_a_gestures_tip_lands_on_its_points():
     tip = tip @ [0.0, s.edge(s.blade + s.claw), s.blade + s.claw, 1.0]
     # The shear comes in toward -x, so the arm is toward +x.
     points = [
-        (harvest.Point("back", (-0.03, 0.0, 0.01)), np.array([0.055, -0.07, -0.12])),
-        (harvest.Point("low", (0.0, 0.01, -0.02)), np.array([-0.03, -0.05, -0.18])),
-        (harvest.Point("middle"), np.array([0.0, -0.17 / 3, -0.12])),
+        (harvest.Point("back", (-0.03, 0.0, 0.01)), np.array(back)),
+        (harvest.Point("low", (0.0, 0.01, -0.02)), np.array(low)),
+        (harvest.Point("middle"), np.array(middle)),
     ]
     across = np.cross(up, ahead) * np.sign(np.cross(up, ahead) @ truss.side)
     for yaw, tilt in ((0.0, 0.0), (0.0, 0.5), (0.4, -0.3)):
