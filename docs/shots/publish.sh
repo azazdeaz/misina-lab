@@ -9,9 +9,10 @@
 #
 # A shot's picture, or one this checkout's Markdown links there, that the
 # folder lacks is kept as published, so only the shots a change affects need
-# rendering. Refuses while one is neither rendered nor published, as a new
-# shot's is until it is rendered, and when main has moved since it started.
-# Needs push access.
+# rendering; the copies it fetches are removed again when it exits, so the
+# folder only ever holds renders. Refuses while one is neither rendered nor
+# published, as a new shot's is until it is rendered, and when main has moved
+# since it started. Needs push access.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
@@ -24,7 +25,13 @@ cd "$repo"
 # URL serves a copy cached for minutes, and the push expects it, so a publish
 # started from an older set fails rather than undoing a newer one.
 base=$(git ls-remote "$remote" refs/heads/main | cut -f1)
-missing= kept=
+missing= kept= tmp=
+# A fetched copy left behind would pass for a render on the next run.
+cleanup() {
+    for path in $kept; do rm -f "$assets/$path"; done
+    [[ -z $tmp ]] || rm -rf "$tmp"
+}
+trap cleanup EXIT
 while read -r path; do
     # A path in the assets repository, so one inside the folder.
     [[ $path != *..* ]] || { echo "not a picture's path: $path" >&2; exit 1; }
@@ -47,9 +54,8 @@ done < <({
 source=$(git describe --always --dirty)
 
 # A throwaway repository over the folder, which stays a plain folder.
-GIT_DIR=$(mktemp -d)
-export GIT_DIR GIT_WORK_TREE=$assets
-trap 'rm -rf "$GIT_DIR"' EXIT
+tmp=$(mktemp -d)
+export GIT_DIR=$tmp GIT_WORK_TREE=$assets
 cd "$assets"
 git init -q -b main
 git add -A
