@@ -19,6 +19,11 @@
 //! it and a `Collision` capsule round the body: a sphere on a round fruit,
 //! a capsule standing on an elongated one. The calyx stands clear of it.
 //!
+//! The body is meshed in rings round its axis, as finely as `detail` asks:
+//! the rings go where its meridian curves, and as many sides go round it as
+//! its girth needs, so it keeps within the same distance of its shape at any
+//! size. Each sepal lies along one of the body's own meridians.
+//!
 //! Before it sets, a fruit is a flower, nodding below the same origin: a
 //! calyx of narrow sepals, a petal between each two of them, and the anther
 //! cone in the middle. A bud is closed, its petals meeting over the cone;
@@ -69,7 +74,7 @@ use bevy::prelude::*;
 use misina_lab::geometry::mesh::{MeshData, merge_meshes};
 use misina_lab::geometry::outline::outline_mesh;
 use misina_lab::geometry::par_map;
-use misina_lab::geometry::shapes::leaf;
+use misina_lab::geometry::shapes::{leaf, simplify_by};
 use misina_lab::palette::{Response, mix, srgb};
 use misina_lab::params::{Choices, Label, Slider};
 use misina_lab::quantize::{Metric, farthest_first};
@@ -78,6 +83,8 @@ use misina_lab::scene::{
     COLLISION, Library, Order, Surface, UsdAttributes, capsule, configs_changed,
 };
 
+use super::leaf::TOLERANCE;
+use super::stem::MIN_DETAIL;
 use super::{Grow, smooth};
 
 /// The mesh-library prefix the fruit register under, and the prim under a
@@ -134,10 +141,8 @@ const ASPECT_JITTER: f64 = 0.05;
 /// A fruit's density, in kg/m³: about water's (est.).
 const DENSITY: f32 = 1000.0;
 
-/// Lobes a fruit may have, and the fewest sides round the body: a whole
-/// number of sides per lobe, at least this many in all.
+/// Lobes a fruit may have.
 const LOBES: (u32, u32) = (3, 5);
-const SECTORS: u32 = 16;
 
 /// The meridian is a superellipse, `|sin|` and `|cos|` raised to this: under
 /// 1 gives the broad shoulders and broad blossom end of a tomato.
@@ -149,8 +154,9 @@ const SCAR: f32 = 0.1;
 const RIM: f32 = 0.38;
 const DIP: f32 = 0.17;
 
-/// Rings round the body below the rim, down to the blossom end.
-const BELOW_RIM: usize = 6;
+/// How finely the meridian is sampled for the rings to be picked from, as a
+/// step of polar angle.
+const STEP: f32 = 0.01;
 
 /// How far the blossom end leans off the axis and one side bulges, as
 /// fractions of the radius, at most.
@@ -567,6 +573,17 @@ pub struct FruitParams {
     /// into each other.
     #[reflect(@Slider { min: 1.0, max: 64.0, step: 1.0 }, @Label("Fruit variations"))]
     pub variations: u32,
+    /// How finely a fruit's skin is meshed, as a multiplier: at 1 its rings
+    /// and meridians keep within 0.6 mm of its shape, about a pixel to a
+    /// camera half a meter away, as a leaf's margin does at its own detail of
+    /// 1, and its faces within twice that; at 3 its rings and meridians keep
+    /// within 0.2 mm and its faces within 0.4 mm, which leaves its outline
+    /// round from close up. A full-grown 60 mm fruit
+    /// comes to about 1250 triangles with its calyx at 3, about 450 at 1 and
+    /// 3700 at 8; each fruit is meshed for its own size, so a young one
+    /// costs less.
+    #[reflect(@Slider { min: 0.1, max: 8.0, step: 0.05 }, @Label("Fruit detail"))]
+    pub detail: f32,
 }
 
 impl Default for FruitParams {
@@ -580,6 +597,7 @@ impl Default for FruitParams {
             petal_length: 0.011,
             petal_reflex: 125.0,
             variations: 32,
+            detail: 3.0,
         }
     }
 }
@@ -607,7 +625,7 @@ pub fn plugin(app: &mut App) {
             reauthor.run_if(resource_changed::<FruitParams>),
             build.run_if(
                 configs_changed::<FruitConfig>
-                    // `color` and `variations` reach no config.
+                    // `color`, `variations` and `detail` reach no config.
                     .or_eager(resource_changed::<FruitParams>),
             ),
         )
@@ -664,7 +682,7 @@ struct Body {
     half: f32,
     dip: f32,
     ribbing: f32,
-    lobes: f32,
+    lobes: u32,
     /// Where the blossom end leans to, and the side that bulges and by how
     /// much, as fractions of the radius.
     lean: Vec2,
@@ -676,44 +694,95 @@ struct Body {
 }
 
 impl Body {
+    /// Meshed for its rings and meridians to keep within `tolerance` of its
+    /// surface, and so its faces within twice that: its rings where its
+    /// meridian needs them, and as many sides round it as its widest ring
+    /// needs, a whole number per lobe.
+    ///
     /// Draws, first off the mesh's stream: the lean's size and bearing, then
     /// the bulge's.
-    fn new(config: &FruitConfig, rng: &mut Rng) -> Self {
+    fn new(config: &FruitConfig, tolerance: f32, rng: &mut Rng) -> Self {
         let radius = config.across() / 2.0;
         let lean = rng.range(0.0, LEAN) as f32;
         let lean = Vec2::from_angle(rng.unit() as f32 * TAU) * lean;
         let bulge = (rng.range(0.0, BULGE) as f32, rng.unit() as f32 * TAU);
-        let mut rings = vec![SCAR, (SCAR + RIM) / 2.0, RIM];
-        rings.extend((1..=BELOW_RIM).map(|i| RIM + (PI - RIM) * i as f32 / (BELOW_RIM + 1) as f32));
-        let n = config.lobes * SECTORS.div_ceil(config.lobes.max(1));
-        let dip = DIP * radius;
-        let half = radius * config.aspect;
-        Self {
+        let mut body = Self {
             radius,
-            half,
-            dip,
+            half: radius * config.aspect,
+            dip: DIP * radius,
             ribbing: config.ribbing,
-            lobes: config.lobes as f32,
+            lobes: config.lobes,
             lean,
             bulge,
-            rings,
-            sectors: (0..n).map(|i| TAU * i as f32 / n as f32).collect(),
-        }
+            rings: Vec::new(),
+            sectors: Vec::new(),
+        };
+        body.rings = body.rings_within(tolerance);
+        body.sectors = body.sectors_within(tolerance);
+        body
+    }
+
+    /// The meridian `theta` from the stem end, before the ribbing, the bulge
+    /// and the lean: how far off the axis it is and how high; and how far
+    /// down the body, 0 at the stem end to 1 at the blossom end.
+    fn profile(&self, theta: f32) -> (Vec2, f32) {
+        let (sin, cos) = theta.sin_cos();
+        let rho = self.radius * sin.abs().powf(SQUARE);
+        let z = self.half * cos.signum() * cos.abs().powf(SQUARE);
+        let dip = self.dip * (1.0 - smooth((theta - SCAR) / (RIM - SCAR)));
+        let down = (1.0 - z / self.half) / 2.0;
+        (Vec2::new(rho, z - self.half + self.dip - dip), down)
     }
 
     /// The point `theta` from the stem end and `phi` round.
     fn at(&self, theta: f32, phi: f32) -> Vec3 {
-        let (sin, cos) = theta.sin_cos();
-        let rho = self.radius * sin.abs().powf(SQUARE);
-        let z = self.half * cos.signum() * cos.abs().powf(SQUARE);
-        let rib = 1.0 - self.ribbing * (1.0 - (self.lobes * phi).cos()) / 2.0;
+        let (profile, down) = self.profile(theta);
+        let rib = 1.0 - self.ribbing * (1.0 - (self.lobes as f32 * phi).cos()) / 2.0;
         let bulge = 1.0 + self.bulge.0 * (phi - self.bulge.1).cos();
-        let dip = self.dip * (1.0 - smooth((theta - SCAR) / (RIM - SCAR)));
-        // 0 at the stem end to 1 at the blossom end.
-        let down = (1.0 - z / self.half) / 2.0;
-        let r = rho * rib * bulge;
-        Vec3::new(r * phi.cos(), r * phi.sin(), z - self.half + self.dip - dip)
+        let r = profile.x * rib * bulge;
+        Vec3::new(r * phi.cos(), r * phi.sin(), profile.y)
             + (self.lean * self.radius * down).extend(0.0)
+    }
+
+    /// The polar angles of the rings, from the stem end: one at the scar and
+    /// one at the rim, and between those and the poles the fewest that keep
+    /// the meridian within `tolerance` of its curve.
+    fn rings_within(&self, tolerance: f32) -> Vec<f32> {
+        let mut rings = Vec::new();
+        for (from, to) in [(0.0, SCAR), (SCAR, RIM), (RIM, PI)] {
+            let steps = ((to - from) / STEP).ceil() as usize;
+            let mut line: Vec<(f32, Vec2)> = (0..steps)
+                .map(|i| from + (to - from) * i as f32 / steps as f32)
+                .chain([to])
+                .map(|theta| (theta, self.profile(theta).0))
+                .collect();
+            simplify_by(&mut line, tolerance as f64, |(_, at)| at.as_dvec2());
+            // Each span starts where the last ended, the first at the pole.
+            rings.extend(line.iter().skip(1).map(|(theta, _)| *theta));
+        }
+        // The blossom end is a pole, not a ring.
+        rings.pop();
+        rings
+    }
+
+    /// The azimuths of the points round each ring: as many as keep its
+    /// widest ring within `tolerance` of its curve, a whole number per lobe.
+    fn sectors_within(&self, tolerance: f32) -> Vec<f32> {
+        // A side strays `r (1 - cos(a / 2))` off the arc it cuts across, an
+        // arc `r` round turning through `a`. Where the bulge peaks on a
+        // lobe's crest the body is `out` off its axis and curves `sharp`
+        // times as tightly as a circle that far round, so there each of `n`
+        // sides cuts across `sharp TAU / n` of an arc `out / sharp` round.
+        let bulge = self.bulge.0;
+        let out = self.radius * (1.0 + bulge);
+        let ribbing = self.ribbing * (self.lobes * self.lobes) as f32 / 2.0;
+        let sharp = 1.0 + ribbing + bulge / (1.0 + bulge);
+        let sides = sharp * PI / (1.0 - (sharp * tolerance / out).min(1.0)).acos();
+        // A crest and a groove per lobe at least, and no finer than the
+        // meridian is sampled, however fine the tolerance.
+        let lobes = self.lobes.max(1);
+        let n = lobes * (sides.min(TAU / STEP).ceil() as u32).div_ceil(lobes).max(2);
+        (0..n).map(|i| TAU * i as f32 / n as f32).collect()
     }
 
     fn mesh(&self) -> MeshData {
@@ -731,16 +800,13 @@ impl Body {
     }
 
     /// The meridian `phi` round, the points the body's own rings put on it,
-    /// from the stem scar down as far as a sepal may lie.
-    fn meridian(&self, phi: f32) -> Vec<Vec3> {
-        let mut line = vec![self.at(0.0, phi)];
-        line.extend(
-            self.rings
-                .iter()
-                .take_while(|theta| **theta <= HUG)
-                .map(|theta| self.at(*theta, phi)),
-        );
-        line
+    /// from the stem scar down as far as a sepal may lie, each with its polar
+    /// angle.
+    fn meridian(&self, phi: f32) -> Vec<(f32, Vec3)> {
+        std::iter::once(0.0)
+            .chain(self.rings.iter().copied().take_while(|theta| *theta <= HUG))
+            .map(|theta| (theta, self.at(theta, phi)))
+            .collect()
     }
 }
 
@@ -839,11 +905,13 @@ fn calyx(config: &FruitConfig, body: &Body, rng: &mut Rng) -> Result<Vec<MeshDat
             let bearing = (first + i as f32 * even + stray).rem_euclid(TAU);
             let phi = body.sectors[(bearing / TAU * sectors as f32).round() as usize % sectors];
             let side = Vec3::new(-phi.sin(), phi.cos(), 0.0);
-            let path = Path::new(body.meridian(phi), side);
-            let start = SEPAL_START * path.arcs[1];
-            // It leaves past the rim, where the shoulder is convex: the
-            // meridian's fourth point, after the pole, the scar and the dip.
-            let ridge = path.arcs[3] - start;
+            let meridian = body.meridian(phi);
+            let path = Path::new(meridian.iter().map(|(_, at)| *at).collect(), side);
+            // How far along it the body's ring at `theta` is.
+            let arc = |theta: f32| path.arcs[meridian.partition_point(|(t, _)| *t < theta)];
+            let start = SEPAL_START * arc(SCAR);
+            // It leaves past the rim, where the shoulder is convex.
+            let ridge = arc(RIM) - start;
             let leave = (droop * long).max(ridge).min(path.length() - start);
             let (from, ahead, up) = path.at(start + leave);
             // Off the skin by `lift` where it leaves, then round an arc that
@@ -1005,13 +1073,14 @@ fn flower(config: &FruitConfig, rng: &mut Rng) -> Result<(Vec<MeshData>, Vec<[f3
 }
 
 /// One fruit in its own frame, hanging below the origin, with a colour per
-/// point: its body and its calyx.
+/// point: its body, meshed to `tolerance`, and its calyx.
 fn fruit(
     config: &FruitConfig,
     ripe: [f32; 3],
+    tolerance: f32,
     rng: &mut Rng,
 ) -> Result<(Vec<MeshData>, Vec<[f32; 3]>)> {
-    let body = Body::new(config, rng);
+    let body = Body::new(config, tolerance, rng);
     let skin_mesh = body.mesh();
     let (low, high) = skin_mesh
         .points
@@ -1035,13 +1104,13 @@ fn fruit(
 }
 
 /// One fruit, or the flower it sets from, in its own frame below the origin,
-/// with a colour per point.
-fn fruit_mesh(config: &FruitConfig, ripe: [f32; 3]) -> Result<Mesh> {
+/// with a colour per point, a fruit's body meshed to `tolerance`.
+fn fruit_mesh(config: &FruitConfig, ripe: [f32; 3], tolerance: f32) -> Result<Mesh> {
     let mut rng = Rng::new(config.seed ^ CALYX_STREAM);
     let (pieces, colors) = if config.in_flower() {
         flower(config, &mut rng)?
     } else {
-        fruit(config, ripe, &mut rng)?
+        fruit(config, ripe, tolerance, &mut rng)?
     };
     let rgba: Vec<[f32; 4]> = colors.iter().map(|[r, g, b]| [*r, *g, *b, 1.0]).collect();
     Ok(merge_meshes(&pieces)
@@ -1076,7 +1145,10 @@ fn build(
         &FruitMetric,
     );
     let ripe = srgb(params.ripe().hex());
-    let meshes = par_map(&book.representatives, |_, config| fruit_mesh(config, ripe));
+    let tolerance = TOLERANCE as f32 / params.detail.max(MIN_DETAIL);
+    let meshes = par_map(&book.representatives, |_, config| {
+        fruit_mesh(config, ripe, tolerance)
+    });
     let mut geometry = Vec::with_capacity(meshes.len());
     for (index, (config, mesh)) in book.representatives.iter().zip(meshes).enumerate() {
         let response = if config.in_flower() { PETALS } else { SKIN };
@@ -1140,11 +1212,77 @@ mod tests {
         }
     }
 
-    /// The body is closed and wound outward: every edge is walked once each
-    /// way, and the volume it encloses is positive. It hangs from its stem
-    /// scar at the fruit's origin, its shoulders rising round it no higher
-    /// than the dip is deep; it carries a sheet per sepal, and grows from set
-    /// to mature green while its calyx stays the size it was.
+    /// The farthest `curve` strays from the chords between its points at
+    /// `knots`.
+    fn strays(knots: &[f32], curve: impl Fn(f32) -> Vec3) -> f32 {
+        let mut farthest = 0.0f32;
+        for w in knots.windows(2) {
+            let (a, b) = (curve(w[0]), curve(w[1]));
+            for k in 1..16 {
+                let p = curve(w[0] + (w[1] - w[0]) * k as f32 / 16.0);
+                let t = ((p - a).dot(b - a) / (b - a).length_squared()).clamp(0.0, 1.0);
+                farthest = farthest.max(p.distance(a.lerp(b, t)));
+            }
+        }
+        farthest
+    }
+
+    /// The farthest the body strays from the triangles its mesh lays over
+    /// it: two per face between rings, fanned from the face's first corner
+    /// as `MeshData::to_mesh` fans it, and one per face at a pole.
+    fn faces_stray(body: &Body) -> f32 {
+        let thetas = [&[0.0][..], &body.rings, &[PI]].concat();
+        let phis = [&body.sectors[..], &[TAU]].concat();
+        let last = thetas.len() - 2;
+        let mut farthest = 0.0f32;
+        for (j, t) in thetas.windows(2).enumerate() {
+            for f in phis.windows(2) {
+                let [a, b, c, d] = [(t[0], f[0]), (t[1], f[0]), (t[1], f[1]), (t[0], f[1])]
+                    .map(|(theta, phi)| body.at(theta, phi));
+                let fan = match j {
+                    0 => vec![[a, b, c]],
+                    _ if j == last => vec![[a, b, d]],
+                    _ => vec![[a, b, c], [a, c, d]],
+                };
+                for k in 0..81 {
+                    let (u, v) = ((k / 9) as f32 / 8.0, (k % 9) as f32 / 8.0);
+                    let p = body.at(t[0] + (t[1] - t[0]) * u, f[0] + (f[1] - f[0]) * v);
+                    let off = fan.iter().map(|abc| off_triangle(p, *abc));
+                    farthest = farthest.max(off.fold(f32::MAX, f32::min));
+                }
+            }
+        }
+        farthest
+    }
+
+    /// How far `p` is from the triangle `abc`.
+    fn off_triangle(p: Vec3, [a, b, c]: [Vec3; 3]) -> f32 {
+        let n = (b - a).cross(c - a).normalize();
+        let q = p - n * (p - a).dot(n);
+        let edges = [(a, b), (b, c), (c, a)];
+        if edges
+            .iter()
+            .all(|(u, v)| (*v - *u).cross(q - *u).dot(n) >= 0.0)
+        {
+            return p.distance(q);
+        }
+        edges
+            .iter()
+            .map(|(u, v)| {
+                let t = ((p - *u).dot(*v - *u) / (*v - *u).length_squared()).clamp(0.0, 1.0);
+                p.distance(u.lerp(*v, t))
+            })
+            .fold(f32::MAX, f32::min)
+    }
+
+    /// At any detail the body is closed and wound outward: every edge is
+    /// walked once each way, and the volume it encloses is positive; and it
+    /// keeps within its tolerance of its surface down every meridian and
+    /// round every ring, and within twice that across every face, where the
+    /// two add up. It hangs from its stem scar at the fruit's origin,
+    /// its shoulders rising round it no higher than the dip is deep; it
+    /// carries a sheet per sepal, and grows from set to mature green while
+    /// its calyx stays the size it was, meshed the finer the bigger it gets.
     #[test]
     fn a_fruit_is_closed_wound_outward_and_grows_inside_its_calyx() {
         let shapes: [fn(&mut FruitParams); 3] = [
@@ -1152,67 +1290,138 @@ mod tests {
             |p| (p.aspect, p.ribbing) = (0.6, 0.2),
             |p| p.aspect = 1.6,
         ];
+        let details = [0.1, FruitParams::default().detail, 8.0];
         for edit in shapes {
-            let mut widths = Vec::new();
-            for stage in [0.0, 0.5, 1.0, 1.5, 2.0, 5.0, 8.0] {
-                let config = config(stage, edit);
-                let mut rng = Rng::new(config.seed ^ CALYX_STREAM);
-                let body = Body::new(&config, &mut rng);
-                let sepals = calyx(&config, &body, &mut rng).unwrap();
-                assert_eq!(sepals.len(), config.sepals as usize);
+            // A full-grown fruit's triangles at each detail.
+            let mut full = [0; 3];
+            for (k, detail) in details.into_iter().enumerate() {
+                let tolerance = TOLERANCE as f32 / detail;
+                let mut widths = Vec::new();
+                for stage in [0.0, 0.5, 1.0, 1.5, 2.0, 5.0, 8.0] {
+                    let at = format!("detail {detail}, stage {stage}");
+                    let config = config(stage, edit);
+                    let mut rng = Rng::new(config.seed ^ CALYX_STREAM);
+                    let body = Body::new(&config, tolerance, &mut rng);
+                    let sepals = calyx(&config, &body, &mut rng).unwrap();
+                    assert_eq!(sepals.len(), config.sepals as usize);
 
-                let mesh = body.mesh();
-                let mut edges: HashMap<(i32, i32), i32> = HashMap::new();
-                let mut volume = 0.0;
-                let mut cursor = 0;
-                for count in &mesh.face_vertex_counts {
-                    let face = &mesh.face_vertex_indices[cursor..cursor + *count as usize];
-                    cursor += face.len();
-                    for (k, a) in face.iter().enumerate() {
-                        *edges.entry((*a, face[(k + 1) % face.len()])).or_default() += 1;
-                    }
-                    let p = |i: i32| Vec3::from(mesh.points[i as usize]);
-                    for k in 1..face.len() - 1 {
-                        volume += p(face[0]).dot(p(face[k]).cross(p(face[k + 1])));
-                    }
-                }
-                assert!(
-                    edges
+                    // The rings are picked on the meridian before the bulge
+                    // and the lean, which stretch it by a few percent.
+                    let poles = [&[0.0][..], &body.rings, &[PI]].concat();
+                    let round = [&body.sectors[..], &[TAU]].concat();
+                    let strayed = body
+                        .sectors
                         .iter()
-                        .all(|((a, b), n)| *n == 1 && edges.get(&(*b, *a)) == Some(&1)),
-                    "body at {stage} is open or mis-wound"
-                );
-                assert!(volume > 0.0, "body at {stage} is inside out");
+                        .map(|phi| strays(&poles, |theta| body.at(theta, *phi)))
+                        .chain(
+                            body.rings
+                                .iter()
+                                .map(|theta| strays(&round, |phi| body.at(*theta, phi))),
+                        )
+                        .fold(0.0, f32::max);
+                    assert!(strayed <= 1.05 * tolerance, "{at}: {strayed} m off");
+                    let faced = faces_stray(&body);
+                    assert!(faced <= 2.0 * tolerance, "{at}: a face {faced} m off");
 
-                assert!(body.at(0.0, 0.0).length() < 1e-6, "{stage}: off its calyx");
-                assert!(
-                    mesh.points.iter().all(|p| p[2] <= body.dip + 1e-6),
-                    "{stage}: above its calyx"
-                );
-                let triangles = fruit_mesh(&config, [1.0; 3])
-                    .unwrap()
-                    .indices()
-                    .unwrap()
-                    .len()
-                    / 3;
-                assert!(triangles < 600, "{triangles} triangles");
-                let across = body
-                    .mesh()
-                    .points
-                    .iter()
-                    .fold(0.0f32, |m, p| m.max(p[0].hypot(p[1])));
-                widths.push((stage, across));
+                    let mesh = body.mesh();
+                    let mut edges: HashMap<(i32, i32), i32> = HashMap::new();
+                    let mut volume = 0.0;
+                    let mut cursor = 0;
+                    for count in &mesh.face_vertex_counts {
+                        let face = &mesh.face_vertex_indices[cursor..cursor + *count as usize];
+                        cursor += face.len();
+                        for (k, a) in face.iter().enumerate() {
+                            *edges.entry((*a, face[(k + 1) % face.len()])).or_default() += 1;
+                        }
+                        let p = |i: i32| Vec3::from(mesh.points[i as usize]);
+                        for k in 1..face.len() - 1 {
+                            volume += p(face[0]).dot(p(face[k]).cross(p(face[k + 1])));
+                        }
+                    }
+                    assert!(
+                        edges
+                            .iter()
+                            .all(|((a, b), n)| *n == 1 && edges.get(&(*b, *a)) == Some(&1)),
+                        "{at}: open or mis-wound"
+                    );
+                    assert!(volume > 0.0, "{at}: inside out");
+
+                    assert!(body.at(0.0, 0.0).length() < 1e-6, "{at}: off its calyx");
+                    assert!(
+                        mesh.points.iter().all(|p| p[2] <= body.dip + 1e-6),
+                        "{at}: above its calyx"
+                    );
+                    let triangles = fruit_mesh(&config, [1.0; 3], tolerance)
+                        .unwrap()
+                        .indices()
+                        .unwrap()
+                        .len()
+                        / 3;
+                    let across = mesh
+                        .points
+                        .iter()
+                        .fold(0.0f32, |m, p| m.max(p[0].hypot(p[1])));
+                    widths.push((stage, across, triangles));
+                    full[k] = triangles;
+                }
+                for w in widths.windows(2) {
+                    let ((_, a, fewer), (stage, b, more)) = (w[0], w[1]);
+                    let grows = if stage <= MATURE_GREEN {
+                        b > a
+                    } else {
+                        (b - a).abs() < 1e-6
+                    };
+                    assert!(
+                        grows && fewer <= more,
+                        "detail {detail}, stage {stage}: {a} then {b} across, \
+                         {fewer} then {more} triangles"
+                    );
+                }
             }
-            for w in widths.windows(2) {
-                let ((_, a), (stage, b)) = (w[0], w[1]);
-                let grows = if stage <= MATURE_GREEN {
-                    b > a
-                } else {
-                    (b - a).abs() < 1e-6
+            assert!(
+                full[0] < full[1] && full[1] < full[2] && full[1] < 2000,
+                "triangles at {details:?}: {full:?}"
+            );
+        }
+    }
+
+    /// Round its widest ring a fruit keeps within its tolerance at any size,
+    /// plain or fully ribbed, even where it bulges most; and however fine a
+    /// tolerance it is asked for, it is meshed no finer than its meridian is
+    /// sampled.
+    #[test]
+    fn a_fruit_keeps_round_where_it_bulges_and_is_meshed_no_finer_than_sampled() {
+        let tolerance = TOLERANCE as f32 / 8.0;
+        let shapes: [fn(&mut FruitParams); 2] = [|_| {}, |p| p.ribbing = 0.3];
+        for edit in shapes {
+            for mm in 50..70 {
+                let config = FruitConfig {
+                    diameter: mm as f32 / 1000.0,
+                    ..config(8.0, edit)
                 };
-                assert!(grows, "at {stage}: {a} then {b}");
+                let mut body = Body::new(
+                    &config,
+                    tolerance,
+                    &mut Rng::new(config.seed ^ CALYX_STREAM),
+                );
+                body.bulge.0 = BULGE as f32;
+                body.sectors = body.sectors_within(tolerance);
+                let round = [&body.sectors[..], &[TAU]].concat();
+                // Its peak swept across a lobe.
+                for k in 0..16 {
+                    body.bulge.1 = TAU * k as f32 / (16 * config.lobes) as f32;
+                    let strayed = strays(&round, |phi| body.at(PI / 2.0, phi));
+                    assert!(strayed <= tolerance, "{mm} mm across: {strayed} m off");
+                }
             }
         }
+
+        // A side round it and a ring down it every `STEP`, rounded up to a
+        // whole number of sides per lobe, and the scar's and the rim's rings.
+        let config = config(8.0, |_| {});
+        let finest = Body::new(&config, 0.0, &mut Rng::new(config.seed ^ CALYX_STREAM));
+        assert!(finest.sectors.len() as f32 <= TAU / STEP + LOBES.1 as f32);
+        assert!(finest.rings.len() as f32 <= PI / STEP + 3.0);
     }
 
     /// A bud is closed, its petals within a little of the axis, and swells;
@@ -1227,7 +1436,7 @@ mod tests {
             let config = config(stage, |_| {});
             let (pieces, _) = flower(&config, &mut Rng::new(config.seed ^ CALYX_STREAM)).unwrap();
             assert_eq!(pieces.len(), 2 * config.sepals as usize + 1);
-            let triangles = fruit_mesh(&config, [1.0; 3])
+            let triangles = fruit_mesh(&config, [1.0; 3], TOLERANCE as f32)
                 .unwrap()
                 .indices()
                 .unwrap()

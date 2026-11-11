@@ -24,6 +24,19 @@ Scene document format 11.
 
 ### Added
 
+- **greenhouse-lab**: `FruitCfg.detail` sets how finely a fruit's skin is
+  meshed, as a multiplier, each fruit for its own size: its rings go where
+  its outline curves and its sides follow its girth, so a young fruit costs
+  less. At the default 3 its rings and meridians keep within 0.2 mm of its
+  shape and its faces within 0.4 mm, and its outline stays round from close
+  up, where its rings strayed about 0.6 mm and showed its corners; a
+  full-grown fruit comes to about 1250 triangles with its calyx, and 1
+  meshes it about as coarsely as before. The skin's colour is sampled at
+  every ring, so the shoulders' last band of colour shows with the crisper
+  edge its stage gives it.
+- **misina-lab**: `geometry::shapes::simplify_by` is `simplify` over items
+  that each stand at a point of the polyline, so whatever a kept point
+  stands for comes through with it.
 - **greenhouse-lab**: A truss's fruit are packed. Each is laid out where it
   would hang alone, then moved, its pedicel swinging round the rachis and
   bending at its knuckle, until none lies in another, in the stems or on

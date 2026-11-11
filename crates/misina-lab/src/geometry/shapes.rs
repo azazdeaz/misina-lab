@@ -151,6 +151,11 @@ pub fn serrate(edge: &mut [DVec2], depth: f64, spacing: f64, toward_end: bool) {
 /// chord between the points kept either side of it (Douglas–Peucker). Both
 /// ends are kept.
 pub fn simplify(line: &mut Vec<DVec2>, tolerance: f64) {
+    simplify_by(line, tolerance, |point| *point);
+}
+
+/// [`simplify`] over items that each stand at a point of the polyline, `at`.
+pub fn simplify_by<T>(line: &mut Vec<T>, tolerance: f64, at: impl Fn(&T) -> DVec2) {
     if line.len() < 3 {
         return;
     }
@@ -159,8 +164,8 @@ pub fn simplify(line: &mut Vec<DVec2>, tolerance: f64) {
     (keep[0], keep[last]) = (true, true);
     let mut spans = vec![(0, last)];
     while let Some((a, b)) = spans.pop() {
-        let chord = (line[b] - line[a]).normalize_or(DVec2::X);
-        let off = |i: &usize| chord.perp_dot(line[*i] - line[a]).abs();
+        let chord = (at(&line[b]) - at(&line[a])).normalize_or(DVec2::X);
+        let off = |i: &usize| chord.perp_dot(at(&line[*i]) - at(&line[a])).abs();
         let far = (a + 1..b).max_by(|i, j| off(i).total_cmp(&off(j)));
         if let Some(far) = far.filter(|i| off(i) > tolerance) {
             keep[far] = true;
