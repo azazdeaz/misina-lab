@@ -136,6 +136,16 @@ def skin_roots(stage: Usd.Stage) -> list[Usd.Prim]:
     return [prim for prim in stage.Traverse() if prim.IsA(UsdSkel.Root)]
 
 
+def test_a_skeleton_is_framed_at_a_uniform_scale_only():
+    """A turned skeleton at one scale is framed with it; one turned under an
+    uneven scale is not, even where its axes come out as long as each other."""
+    turn = Gf.Matrix4d().SetRotate(Gf.Rotation(Gf.Vec3d(1, 1, 1), Gf.Vec3d(1, 0, 0)))
+    assert skins.frame_of(turn * Gf.Matrix4d().SetScale(2.0))[1] == pytest.approx(2.0)
+    sheared = turn * Gf.Matrix4d().SetScale(Gf.Vec3d(2, 1, 1))
+    assert [sheared.GetRow3(axis).GetLength() for axis in range(3)] == pytest.approx([2**0.5] * 3)
+    assert skins.frame_of(sheared)[1] is None
+
+
 @pytest.mark.parametrize("scale", [1.0, 2.0])
 def test_a_skin_posed_at_its_bodies_starts_where_it_was_built(greenhouse, tmp_path, scale):
     """Each joint of a truss's skin posed at its segment's body, where Newton
@@ -162,7 +172,7 @@ def test_a_skin_posed_at_its_bodies_starts_where_it_was_built(greenhouse, tmp_pa
         frame, size = skins.frame_of(xforms.GetLocalToWorldTransform(skeleton.GetPrim()))
         organ = root.GetParent().GetPath()
         bodies = [index[f"{organ}/{joint}"] for joint in skeleton.GetJointsAttr().Get()]
-        local = skins.seen_from(frame, body_q[bodies], size[0])
+        local = skins.seen_from(frame, body_q[bodies], size)
         animation = UsdSkel.Animation(root.GetChild(ANIMATION))
         animation.GetTranslationsAttr().Set(Vt.Vec3fArray([Gf.Vec3f(*p) for p in local[:, :3]]))
         animation.GetRotationsAttr().Set(

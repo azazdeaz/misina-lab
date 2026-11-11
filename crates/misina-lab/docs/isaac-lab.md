@@ -127,8 +127,8 @@ something poses its skeleton. `drive_skins`, which the spawner calls with
 and the RTX cameras copy the bodies' poses into Fabric just before they
 draw. From then on, every skin whose bodies moved since it was last posed
 has its joints written into Fabric, each its body's pose seen from the
-skeleton's frame, with a scene's uniform `scale` divided out; an uneven one
-raises, since it would shear the skin. A step that draws nothing poses nothing, and Kit re-skins
+skeleton's frame, with a scene's uniform `scale` divided out; one that scales
+unevenly or shears raises, since no one scale undoes it. A step that draws nothing poses nothing, and Kit re-skins
 a mesh only in a frame its skeleton was posed in, as long as its timeline
 stands still, which under Newton it does: a skin at rest is checked before
 each draw, but neither written nor re-skinned.

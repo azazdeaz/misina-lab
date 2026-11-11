@@ -104,14 +104,14 @@ class Skins:
                 continue
             joints = [index[f"{organ}/{name}"] for name in skeleton.GetJointsAttr().Get()]
             # The skeleton's space is its organ's, which nothing moves.
-            frame, scale = frame_of(cache.GetLocalToWorldTransform(skeleton.GetPrim()))
-            if not np.allclose(scale, scale[0], rtol=1e-4):
-                raise ValueError(f"{organ} is scaled unevenly, by {scale}; its skin would shear")
+            frame, size = frame_of(cache.GetLocalToWorldTransform(skeleton.GetPrim()))
+            if size is None:
+                raise ValueError(f"{organ} is scaled unevenly or sheared; its skin would not fit")
             animation = fabric.GetPrimAtPath(f"{organ}/{SKIN}/{ANIMATION}")
             starts.append(len(bodies))
             bodies += joints
             frames += [frame] * len(joints)
-            sizes += [scale[0]] * len(joints)
+            sizes += [size] * len(joints)
             self._poses.append(
                 (animation.GetAttribute("translations"), animation.GetAttribute("rotations"))
             )
@@ -180,12 +180,17 @@ def split(stage, segment: str, at: float) -> bool:
     return True
 
 
-def frame_of(world) -> tuple[np.ndarray, np.ndarray]:
+def frame_of(world) -> tuple[np.ndarray, float | None]:
     """A skeleton's local-to-world matrix `world` as a frame, its position
-    and unit xyzw quaternion, and the scale along each of its axes."""
+    and unit xyzw quaternion, and the uniform scale it is drawn at: None
+    where `world` scales unevenly or shears, which no one scale undoes."""
     turn = world.RemoveScaleShear().ExtractRotationQuat()
     frame = np.array([*world.ExtractTranslation(), *turn.GetImaginary(), turn.GetReal()])
-    return frame, np.array([world.GetRow3(axis).GetLength() for axis in range(3)])
+    # A turn at one scale keeps its axes square to each other and as long.
+    axes = np.array([world.GetRow3(axis) for axis in range(3)])
+    square = axes @ axes.T
+    size = float(np.sqrt(np.trace(square) / 3))
+    return frame, size if np.allclose(square, size**2 * np.eye(3), atol=1e-4 * size**2) else None
 
 
 def seen_from(frames: np.ndarray, poses: np.ndarray, sizes=1.0) -> np.ndarray:
