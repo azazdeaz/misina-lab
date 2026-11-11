@@ -509,10 +509,11 @@ impl FruitConfig {
 
     /// How far below the origin a fruit's body is centred along its axis,
     /// and how far it reaches either way of that: from as high as its stem
-    /// dip is deep down to its blossom end, drawn out by a pointed tip.
+    /// dip is deep down to its blossom end, which a pointed tip draws out and
+    /// a dent draws in, the rim round the dent about as far as its middle.
     fn span(&self) -> (f32, f32) {
         let radius = self.across() / 2.0;
-        let tip = self.blossom_tip.max(0.0) * (1.0 - self.widest);
+        let tip = self.blossom_tip * (1.0 - self.widest);
         let half = radius * self.aspect * (1.0 + tip);
         (half - self.stem_dip * radius, half)
     }
@@ -590,9 +591,10 @@ impl Metric<FruitConfig> for FruitMetric {
 /// shoulders and at its blossom end, its stem scar sunk in a dip and its
 /// blossom end pointed, flat or dented. Every fruit draws its own lobe count,
 /// how wide and how full each lobe is and how deep each groove, its lean, how
-/// its outline strays from the params', and its five or six sepals and how
-/// each curls, within the ranges the research notes give; its flower has a
-/// petal between each two sepals.
+/// far its widest point, its blossom tip and the blockiness of each half
+/// stray from the params', and its five or six sepals and how each curls,
+/// within the ranges the research notes give; its flower has a petal between
+/// each two sepals.
 #[derive(Resource, Reflect, Clone, Debug, PartialEq)]
 #[cfg_attr(
     feature = "python",
@@ -656,8 +658,9 @@ pub struct FruitParams {
     pub rib_reach: f32,
     /// How irregular a fruit is: how far its lobes differ in width and in
     /// fullness and its grooves in depth, how far its blossom end leans, and
-    /// how far its outline strays from the params'. 0 is a regular fruit; at
-    /// 1 about one fruit in five leans visibly, and 2 is lopsided.
+    /// how far its widest point, its blossom tip and its blockiness stray
+    /// from the params'. 0 is a regular fruit; at 1 about one fruit in five
+    /// leans visibly, and 2 is lopsided.
     #[reflect(@Slider { min: 0.0, max: 2.0, step: 0.05 }, @Label("Fruit irregularity"))]
     pub irregularity: f32,
     /// Length of a flower's petals, in meters: an open tomato flower is under
@@ -1645,7 +1648,8 @@ mod tests {
     /// A regular fruit is widest `widest` of its height down from its stem
     /// end, and fills the span its collider is built round, from the top of
     /// its shoulders, as high as its stem dip is deep, down to the end of its
-    /// tip; and a tip pushed in under about -0.075 dents its blossom end.
+    /// tip, or about to the rim round a dent; and a tip pushed in under about
+    /// -0.075 dents its blossom end.
     #[test]
     fn a_fruits_outline_follows_its_knobs() {
         let regular = seeded(7, |p| p.irregularity = 0.0);
@@ -1665,7 +1669,7 @@ mod tests {
             },
             FruitConfig {
                 stem_dip: 0.25,
-                blossom_tip: -0.15,
+                blossom_tip: -0.1,
                 ..regular
             },
         ];
@@ -1682,10 +1686,14 @@ mod tests {
             let (low, high) = (points.iter()).fold((f32::MAX, f32::MIN), |(lo, hi), p| {
                 (lo.min(p[2]), hi.max(p[2]))
             });
-            assert!(high <= top + 1e-6 && low >= bottom - 1e-6, "{config:?}");
-            if config.blossom_tip >= 0.0 {
-                assert!((low - bottom).abs() < 1e-6, "{low} {bottom}");
-            }
+            assert!(high <= top + 1e-6, "{config:?}");
+            // A dent's rim lies a little lower than its middle is drawn in.
+            let slack = if config.blossom_tip < 0.0 {
+                0.005 * half
+            } else {
+                1e-6
+            };
+            assert!((low - bottom).abs() < slack, "{config:?}: {low} {bottom}");
         }
         for (tip, dented) in [(-0.05, false), (-0.1, true)] {
             let body = body(&FruitConfig {

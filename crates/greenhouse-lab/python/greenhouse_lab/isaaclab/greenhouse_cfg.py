@@ -367,9 +367,10 @@ class FruitCfg:
     where it is widest, blocky or round at its shoulders and at its blossom end, its
     stem scar sunk in a dip and its blossom end pointed, flat or dented. Every fruit
     draws its own lobe count, how wide and how full each lobe is and how deep each
-    groove, its lean, how its outline strays from the params', and its five or six
-    sepals and how each curls, within the ranges the research notes give; its flower
-    has a petal between each two sepals.
+    groove, its lean, how far its widest point, its blossom tip and the blockiness of
+    each half stray from the params', and its five or six sepals and how each curls,
+    within the ranges the research notes give; its flower has a petal between each
+    two sepals.
     """
 
     ripe_trusses: float = 1.0
@@ -427,9 +428,9 @@ class FruitCfg:
     """
     irregularity: float = 1.0
     """How irregular a fruit is: how far its lobes differ in width and in fullness and
-    its grooves in depth, how far its blossom end leans, and how far its outline
-    strays from the params'. 0 is a regular fruit; at 1 about one fruit in five leans
-    visibly, and 2 is lopsided.
+    its grooves in depth, how far its blossom end leans, and how far its widest
+    point, its blossom tip and its blockiness stray from the params'. 0 is a regular
+    fruit; at 1 about one fruit in five leans visibly, and 2 is lopsided.
     """
     petal_length: float = 0.011
     """Length of a flower's petals, in meters: an open tomato flower is under 25 mm
