@@ -45,8 +45,8 @@
 //! that understands one turns into bodies of its own. It replaces the mesh
 //! rather than standing in for it, so it is geometry and collider at once.
 //! What the organ is drawn with, and whatever hangs off it, rides a prim per
-//! segment, which the solver drives; see [`spawn_rod`]. Or the organ is drawn
-//! by one skin bending with all of them; see [`spawn_skin`].
+//! segment, which the solver drives, or the organ is drawn by one skin
+//! bending with all of them; see [`spawn_rod`].
 
 pub mod doc;
 pub mod export;
@@ -221,7 +221,7 @@ pub struct Cable(pub doc::Cable);
 /// `points` are in the organ's own frame, held end first, and `widths` gives
 /// the diameter at each of them.
 ///
-/// `skin` is the [`Surface`] of the mesh this curve stands in for, so a
+/// `surface` is the [`Surface`] of the mesh this curve stands in for, so a
 /// flexible organ and a rigid one of the same kind draw alike.
 ///
 /// `loads` is the mass hanging from each point, in kilograms, or empty for an
@@ -236,7 +236,7 @@ pub fn cable(
     points: Vec<[f32; 3]>,
     widths: Vec<f32>,
     loads: Vec<f32>,
-    skin: Surface,
+    surface: Surface,
 ) -> impl Bundle {
     assert_eq!(points.len(), widths.len(), "one width per point");
     assert!(
@@ -257,9 +257,9 @@ pub fn cable(
             normals,
             widths,
             loads,
-            display_color: skin.color,
-            roughness: skin.roughness,
-            reflectance: skin.reflectance,
+            display_color: surface.color,
+            roughness: surface.roughness,
+            reflectance: surface.reflectance,
         }),
     )
 }
@@ -372,26 +372,36 @@ pub fn rebase(frame: &Transform, placement: &Transform) -> Transform {
 }
 
 /// A rod under `organ`: its `cable`, and a prim per segment at that segment's
-/// rest frame in `frames` (see [`segment_frames`]), each holding its tube from
-/// `tubes` as [`STEM`], or none for a rod drawn by a skin (see
-/// [`spawn_skin`]). Returns the segment prims, one per frame, for whatever
+/// rest frame in `frames` (see [`segment_frames`]). It is drawn by `tubes`,
+/// each segment's prim holding its own as [`STEM`], or by `skin`, a mesh
+/// from [`skin_mesh`]: one surface bound to every segment, for a consumer to
+/// move with the segments' bodies, which bends smoothly through the joints
+/// the tubes kink at. Returns the segment prims, one per frame, for whatever
 /// else rides them; place a rider with [`rebase`].
 ///
 /// Every segment gets its prim, carrying something or not, so an index into
 /// `frames` is an index into what comes back. The tube rides its segment
 /// rather than the segment prim carrying the mesh itself, because the solver
 /// drives that prim and a prim holding a reference can have no children.
+///
+/// The skin's prim is [`SKIN`], a `SkelRoot` holding the mesh. It carries
+/// the skeleton as a [`Skin`] for the builder to author: a joint per segment,
+/// named after the segment's prim and bound at its rest frame.
 pub fn spawn_rod(
     organ: &mut EntityCommands,
     cable: impl Bundle,
     frames: &[Transform],
     tubes: &[Geometry],
+    skin: Option<&Geometry>,
 ) -> Vec<Entity> {
     assert!(
-        tubes.is_empty() || tubes.len() == frames.len(),
-        "one tube per segment, or none"
+        tubes.is_empty() || tubes.len() == frames.len() && skin.is_none(),
+        "one tube per segment, or a skin, or neither"
     );
     organ.with_child((Name::new(CABLE), cable));
+    if let Some(skin) = skin {
+        spawn_skin(organ, frames, skin);
+    }
     let mut segments = Vec::with_capacity(frames.len());
     organ.with_children(|organ| {
         segments.extend(frames.iter().enumerate().map(|(index, frame)| {
@@ -410,7 +420,7 @@ pub fn spawn_rod(
 }
 
 /// The prim a rod's skin takes, under the organ: one name for every element,
-/// as [`CABLE`] is. See [`spawn_skin`].
+/// as [`CABLE`] is. See [`spawn_rod`].
 pub const SKIN: &str = "Skin";
 
 /// The vertex attribute of a rod's skin saying where along the rod each
@@ -421,38 +431,40 @@ pub const SKIN: &str = "Skin";
 pub const ATTRIBUTE_ALONG: MeshVertexAttribute =
     MeshVertexAttribute::new("Vertex_Along", 1_416_312_651, VertexFormat::Float32);
 
-/// The skeleton a rod's skin is bound to. See [`spawn_skin`], which is the
+/// The skeleton a rod's skin is bound to. See [`spawn_rod`], which is the
 /// only way one is built.
 #[derive(Component, Clone, Debug)]
 pub struct Skin(pub doc::Skin);
 
-/// `mesh`, the skin of a rod whose points sit at `stations` along it, as the
-/// mesh [`spawn_skin`] draws: each point bound where `along` puts it, in
-/// meters along the rod, as
-/// [`strand_mesh_along`](crate::geometry::strand::strand_mesh_along) gives
-/// them. In the organ's own frame, as the rod's points are.
-pub fn skin_mesh(mesh: &MeshData, along: &[f32], stations: &[f32]) -> Mesh {
-    let bound: Vec<f32> = along
+/// `mesh` as the skin of the rod through `points`, the mesh [`spawn_rod`]
+/// draws one with: each of its points bound where it lies nearest along that
+/// line, one before the rod's first point or past its last at that end. Both
+/// in the organ's own frame.
+pub fn skin_mesh(mesh: &MeshData, points: &[[f32; 3]]) -> Mesh {
+    let rod: Vec<Vec3> = points.iter().copied().map(Vec3::from).collect();
+    let bound: Vec<f32> = mesh
+        .points
         .iter()
-        .map(|s| {
-            let k = segment_of(stations, *s);
-            k as f32 + ((s - stations[k]) / (stations[k + 1] - stations[k])).clamp(0.0, 1.0)
+        .map(|point| {
+            let point = Vec3::from(*point);
+            rod.windows(2)
+                .enumerate()
+                .map(|(k, ends)| {
+                    let run = ends[1] - ends[0];
+                    let t = ((point - ends[0]).dot(run) / run.length_squared()).clamp(0.0, 1.0);
+                    (point.distance_squared(ends[0] + run * t), k as f32 + t)
+                })
+                .min_by(|a, b| a.0.total_cmp(&b.0))
+                .expect("a rod has a segment")
+                .1
         })
         .collect();
     mesh.to_mesh()
         .with_inserted_attribute(ATTRIBUTE_ALONG, bound)
 }
 
-/// A rod's skin under `organ`: `skin`, a mesh from [`skin_mesh`], bound to
-/// the rod's segments at their rest `frames`, for a consumer to move with
-/// the segments' bodies. One surface that bends smoothly through every
-/// joint, drawn in place of the tubes, which kink there: spawn the rod with
-/// none.
-///
-/// The prim is a `SkelRoot` holding the mesh, and carries the skeleton as a
-/// [`Skin`] for the builder to author: a joint per segment, named after the
-/// segment's prim.
-pub fn spawn_skin(organ: &mut EntityCommands, frames: &[Transform], skin: &Geometry) {
+/// The `SkelRoot` of a rod's skin under `organ`; see [`spawn_rod`].
+fn spawn_skin(organ: &mut EntityCommands, frames: &[Transform], skin: &Geometry) {
     let binds = frames
         .iter()
         .map(|frame| doc::Xform {
@@ -863,26 +875,33 @@ mod tests {
         assert!((hung.rotation * Vec3::Y).distance(placement.rotation * Vec3::Y) < 1e-6);
     }
 
-    /// A skin's point is bound to the segment it lies on, as far along it as
-    /// it is, and past either end of the rod to the end it is past.
+    /// A skin's point is bound to the segment it lies nearest, as far along
+    /// it as it is, and past either end of the rod to the end it is past:
+    /// round a rod that runs up and then turns level.
     #[test]
-    fn a_skins_points_are_bound_by_segment() {
-        let triangle = MeshData {
-            points: vec![[0.0; 3]; 3],
+    fn a_skins_points_are_bound_where_they_lie_along_the_rod() {
+        let skin = MeshData {
+            points: vec![
+                [0.01, 0.0, -0.02],
+                [0.01, 0.0, 0.05],
+                [0.05, 0.01, 0.11],
+                [0.2, 0.0, 0.1],
+            ],
             face_vertex_counts: vec![3],
             face_vertex_indices: vec![0, 1, 2],
         };
-        let mesh = skin_mesh(&triangle, &[-0.01, 0.15, 0.3], &[0.0, 0.1, 0.2, 0.3]);
+        let rod = [[0.0; 3], [0.0, 0.0, 0.1], [0.1, 0.0, 0.1]];
         let Some(bevy::mesh::VertexAttributeValues::Float32(along)) =
-            mesh.attribute(ATTRIBUTE_ALONG)
+            skin_mesh(&skin, &rod).attribute(ATTRIBUTE_ALONG).cloned()
         else {
             panic!("no along on a skin");
         };
         assert!(
             along
                 .iter()
-                .zip([0.0, 1.5, 3.0])
-                .all(|(a, b)| (a - b).abs() < 1e-5)
+                .zip([0.0, 0.5, 1.5, 2.0])
+                .all(|(a, b)| (a - b).abs() < 1e-5),
+            "{along:?}"
         );
     }
 

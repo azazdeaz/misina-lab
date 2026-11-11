@@ -64,12 +64,13 @@ Two facts about the collision side decide how a cut has to be made:
 ## Where a cut lands
 
 `cut(body, at)` takes a fraction of the body's capsule, 0 at the end nearer
-the wood. Three cases; each that cuts anything ends with one joint turned off:
+the wood. Four cases; each that cuts anything ends with one joint turned off:
 
 | the cut | what happens |
 | --- | --- |
 | within `SPLINTER` of a joint, a centimetre | made at that joint: a body that short would have no mass to divide by |
 | on a rod's last body, or on the stub an earlier cut left | the whole body goes, since nothing past it could carry the offcut; within `SPLINTER` of the free end, nothing goes |
+| on a body already cut loose | nothing: a piece is not cut again |
 | anywhere else | the joint past the body is moved to the cut first, then turned off |
 
 A rod that passes through the rectangle twice is cut once by `cut_through`,
@@ -109,10 +110,12 @@ flowchart LR
 ```
 
 The rendered organ follows. The tube drawn along a segment is scaled along
-its axis to the capsule's new span, and anything hanging off the shortened
-segment past the cut, a leaf, is hidden, since a prim cannot move to the
-piece that carries on without it; a collider of its own, seated on the body
-by `rods.carry_riders`, is parked far above it, where it meets nothing. The
+its axis to the capsule's new span, or, on a rod drawn by a skin, the skin
+is split at the cut ([isaac-lab.md](isaac-lab.md#skins)). Anything hanging
+off the shortened segment past the cut, a leaf, is hidden, since a prim
+cannot move to the piece that carries on without it; a collider of its own,
+seated on the body by `rods.carry_riders`, is parked far above it, where it
+meets nothing. The
 body's own capsule is found by the label the rod importer gives it, so the
 seated shapes never pass for it. The piece of body i past the cut now
 belongs to body i+1, along body i+1's own axis: on a rod bent at the joint
@@ -156,7 +159,7 @@ radius past the end of its span, so two capsules that meet at a cut overlap
 there by a whole rod thickness, and the first contact between them would
 shove the halves apart. So each is pulled back one radius at its cut face:
 the collider ends a radius short of the span, the round end reaches exactly
-to the cut, and the two touch there. The drawn tube keeps the full span. A
+to the cut, and the two touch there. What is drawn keeps the full span. A
 cut at a joint pulls back the same two faces; a splinter's collider can
 shrink to a sphere and no further.
 

@@ -52,6 +52,7 @@
 //!
 //! ```text
 //! Shoot_00_0
+//!   Skin              with `skinned`, what draws it, in place of each Stem
 //!   Cable             the centerline, simulated; `guide`, so never drawn
 //!   Cable_edge_body_1 one rod segment, its transform driven by the solver
 //!     Stem            the tube this segment is drawn with
@@ -101,18 +102,19 @@ use super::leaf;
 use super::util::{color, material, par_map};
 use super::{Grow, Rng, SceneParams, salt};
 use misina_lab::geometry::mesh::{MeshData, cylinder_mesh};
-use misina_lab::geometry::strand::{Bark, Strand, strand_mesh};
+use misina_lab::geometry::strand::{Bark, Strand, strand_mesh, strand_mesh_ringed};
 use misina_lab::params::{Label, Slider};
 use misina_lab::quantize::{Metric, farthest_first};
 use misina_lab::scene::{
     Geometry, Library, Order, Surface, cable, configs_changed, placed, rebase, segment_frames,
-    segment_of, segment_tubes, spawn_rod,
+    segment_of, segment_tubes, skin_mesh, spawn_rod,
 };
 
 /// The mesh-library prefix this element registers its stems under.
 pub const PART: &str = "Shoot";
 
-/// The mesh-library prefix a flexible shoot's per-segment tubes go under.
+/// The mesh-library prefix a flexible shoot's per-segment tubes go under, or
+/// its skin.
 ///
 /// A layer of its own, because there is one tube per *segment* of every
 /// representative where there is one stem per representative, and
@@ -472,9 +474,16 @@ pub struct ShootParams {
     /// no rods, or to keep a canopy's look without paying for the bodies.
     ///
     /// On, the curve is drawn by a tube on each of the rod segments built
-    /// from it.
+    /// from it, or by one skin: see [`skinned`](Self::skinned).
     #[reflect(@Label("Bendable strays"))]
     pub flexible: bool,
+    /// Whether a shoot that bends is drawn as one skin bending with it, a
+    /// mesh bound to every segment of its rod, rather than as a tube on each
+    /// segment, which kinks at every joint. A skin bends only where a
+    /// consumer poses it from the rod's bodies, as `misina_lab.isaaclab`
+    /// does under Newton; anywhere else it keeps the shape it was built in.
+    #[reflect(@Label("Skinned canes"))]
+    pub skinned: bool,
     /// Length of one segment of a bending shoot's rod, in meters — a stray
     /// shoot's or a dormant cane's.
     ///
@@ -547,6 +556,7 @@ impl Default for ShootParams {
             lean: 0.06,
             stray: 0.0,
             flexible: true,
+            skinned: false,
             segment: 0.09,
             dormant: false,
             internode: 0.07,
@@ -971,12 +981,13 @@ pub fn stray_pitch(params: &ShootParams, seed: u64, order: u64) -> f32 {
 // ─── Building ───────────────────────────────────────────────────────
 
 /// What a representative is drawn with: one stem for a shoot the trellis
-/// holds — or one that strayed with [`ShootParams::flexible`] off — and a tube
-/// on each rod segment for a flexible stray one. Never both: the other would
-/// be authored into the scene and referenced by nothing.
+/// holds — or one that strayed with [`ShootParams::flexible`] off — and for a
+/// flexible stray one, a rod, a tube on each of its segments or one skin
+/// bound to them all with [`ShootParams::skinned`]. Never two: the other
+/// would be authored into the scene and referenced by nothing.
 enum Drawn<G> {
     Stem(G),
-    Tubes(Vec<G>),
+    Rod { tubes: Vec<G>, skin: Option<G> },
 }
 
 /// One representative shoot: the nodes its leaves hang on, the centerline it
@@ -987,25 +998,35 @@ struct ShootBuild {
     drawn: Drawn<Mesh>,
 }
 
-/// `flexible` is [`ShootParams::flexible`]: with it off, a stray shoot is
-/// built as the mesh a held one is, and the centerline is only what its leaves
-/// are placed along.
-fn build_shoot(config: &ShootConfig, seed: u64, flexible: bool) -> anyhow::Result<ShootBuild> {
+/// `flexible` and `skinned` are [`ShootParams`]': with `flexible` off, a
+/// stray shoot is built as the mesh a held one is, and the centerline is only
+/// what its leaves are placed along.
+fn build_shoot(
+    config: &ShootConfig,
+    seed: u64,
+    flexible: bool,
+    skinned: bool,
+) -> anyhow::Result<ShootBuild> {
     let axis = ShootAxis::new(config, &mut Rng::new(seed));
     let centerline = Centerline::new(&axis, config.segment);
-    let drawn = if config.is_simulated() && flexible {
-        Drawn::Tubes(
-            segment_tubes(
-                &centerline.points,
-                &centerline.widths,
-                config.sides as usize,
-            )
-            .iter()
-            .map(MeshData::to_mesh)
-            .collect(),
-        )
-    } else {
+    let drawn = if !(config.is_simulated() && flexible) {
         Drawn::Stem(strand_mesh(&shoot_strand(&axis, config))?.to_mesh())
+    } else if skinned {
+        // The stem itself, ringed often enough to bend smoothly between
+        // joints.
+        let spacing = config.segment as f64 / 4.0;
+        let mesh = strand_mesh_ringed(&shoot_strand(&axis, config), spacing)?;
+        Drawn::Rod {
+            tubes: Vec::new(),
+            skin: Some(skin_mesh(&mesh, &centerline.points)),
+        }
+    } else {
+        let sides = config.sides as usize;
+        let tubes = segment_tubes(&centerline.points, &centerline.widths, sides);
+        Drawn::Rod {
+            tubes: tubes.iter().map(MeshData::to_mesh).collect(),
+            skin: None,
+        }
     };
     Ok(ShootBuild {
         nodes: leaf_nodes(config, &axis, seed),
@@ -1082,7 +1103,7 @@ pub(crate) fn build(
     // The representatives are independent of each other, so they are grown in
     // parallel and registered serially: `Assets<Mesh>` takes one writer.
     let stems = par_map(&representatives, |index, config| {
-        build_shoot(config, stem_seed(index), params.flexible)
+        build_shoot(config, stem_seed(index), params.flexible, params.skinned)
     });
 
     let mut built: Vec<Built> = Vec::with_capacity(representatives.len());
@@ -1100,14 +1121,15 @@ pub(crate) fn build(
         let skin = surface(stem_seed(index), params.dormant);
         let drawn = match drawn {
             Drawn::Stem(stem) => Drawn::Stem(library.part(PART, index, stem, skin)),
-            Drawn::Tubes(tubes) => {
-                let tubes: Vec<Geometry> = tubes
-                    .into_iter()
-                    .enumerate()
-                    .map(|(segment, tube)| library.part(CANE, tubes_built + segment, tube, skin))
-                    .collect();
-                tubes_built += tubes.len();
-                Drawn::Tubes(tubes)
+            Drawn::Rod { tubes, skin: bound } => {
+                let mut part = |mesh| {
+                    tubes_built += 1;
+                    library.part(CANE, tubes_built - 1, mesh, skin)
+                };
+                Drawn::Rod {
+                    tubes: tubes.into_iter().map(&mut part).collect(),
+                    skin: bound.map(&mut part),
+                }
             }
         };
         built.push((nodes, centerline, skin, drawn));
@@ -1122,14 +1144,14 @@ pub(crate) fn build(
         shoot.despawn_children();
 
         // A stray shoot is a curve that is simulated and not drawn, with a
-        // tube on every rod segment the solver builds from it; a held one is a
-        // single mesh.
+        // tube on every rod segment the solver builds from it or one skin over
+        // them all; a held one is a single mesh.
         let (mut frames, mut segments) = (Vec::new(), Vec::new());
         match drawn {
             Drawn::Stem(stem) => {
                 shoot.with_child((Name::new(STEM), stem.clone()));
             }
-            Drawn::Tubes(tubes) => {
+            Drawn::Rod { tubes, skin: bound } => {
                 frames = segment_frames(&centerline.points);
                 let curve = cable(
                     centerline.points.clone(),
@@ -1137,7 +1159,7 @@ pub(crate) fn build(
                     Vec::new(),
                     *skin,
                 );
-                segments = spawn_rod(&mut shoot, curve, &frames, tubes);
+                segments = spawn_rod(&mut shoot, curve, &frames, tubes, bound.as_ref());
             }
         }
 
@@ -1201,7 +1223,7 @@ pub(crate) fn build(
             // On a cane the organ hangs off the segment that carries it, which
             // is a frame of its own; on a held shoot, off the shoot.
             let (host, placement) = match drawn {
-                Drawn::Tubes(_) => {
+                Drawn::Rod { .. } => {
                     let index = segment_of(&centerline.stations, node.station);
                     (segments[index], rebase(&frames[index], &placement))
                 }
@@ -1649,16 +1671,20 @@ mod tests {
             ShootConfig::new(&params(), 0.0, 0.0, 9.0),
             ShootConfig::new(&params(), 4.0, 4.0, 9.0),
         ] {
-            let built = build_shoot(&config, 1, true).expect("builds at the stops");
-            let points: Vec<[f32; 3]> = match &built.drawn {
-                Drawn::Stem(stem) => positions(stem),
-                Drawn::Tubes(tubes) => tubes.iter().flat_map(&positions).collect(),
-            };
-            assert!(!points.is_empty(), "{config:?} came out empty");
-            assert!(
-                points.iter().flatten().all(|c| c.is_finite()),
-                "{config:?} came out with a NaN in it"
-            );
+            for skinned in [false, true] {
+                let built = build_shoot(&config, 1, true, skinned).expect("builds at the stops");
+                let points: Vec<[f32; 3]> = match &built.drawn {
+                    Drawn::Stem(stem) => positions(stem),
+                    Drawn::Rod { tubes, skin } => {
+                        tubes.iter().chain(skin).flat_map(&positions).collect()
+                    }
+                };
+                assert!(!points.is_empty(), "{config:?} came out empty");
+                assert!(
+                    points.iter().flatten().all(|c| c.is_finite()),
+                    "{config:?} came out with a NaN in it"
+                );
+            }
         }
     }
 
@@ -2103,14 +2129,16 @@ mod tests {
     /// A dormant cane is a rod whether or not the trellis holds it, is wood
     /// rather than foliage, and carries a bud at every node in place of a
     /// leaf — a geometry prim of its own, so a pruner can read the buds off
-    /// the stage. With `flexible` off it is the same bare cane as one mesh.
+    /// the stage. With `flexible` off it is the same bare cane as one mesh;
+    /// `skinned`, its rod is drawn by one skin bound from the bud to the tip.
     #[test]
     fn a_dormant_cane_is_a_rod_with_a_bud_at_every_node() {
-        for flexible in [true, false] {
+        for (flexible, skinned) in [(true, false), (true, true), (false, false)] {
             let mut app = testing::grown(VineyardParams {
                 shoot: ShootParams {
                     dormant: true,
                     flexible,
+                    skinned,
                     ..default()
                 },
                 ..default()
@@ -2140,6 +2168,18 @@ mod tests {
                     "{}: a rod iff something bends it, got {children:?}",
                     shoot.path
                 );
+                let segments = children
+                    .iter()
+                    .filter(|(name, _)| name.contains("_edge_body_"))
+                    .count();
+                match testing::skin_span(app.world_mut(), entity) {
+                    Some((reach, bare)) => assert!(
+                        skinned && (reach - segments as f32).abs() < 0.05 && bare < 0.5,
+                        "{}: bound to {reach} of {segments} segments, {bare} of one bare",
+                        shoot.path
+                    ),
+                    None => assert!(!skinned, "{}: no skin", shoot.path),
+                }
                 // On the shoot itself, or on the rod segments a cane hangs
                 // them from.
                 let hosts: Vec<Entity> = children

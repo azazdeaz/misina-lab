@@ -186,9 +186,12 @@ class Shears:
         A cut within `SPLINTER` of a joint is made at that joint. A body at the
         end of a rod -- its last segment, or the stub an earlier cut left --
         has no body past it to carry the offcut: a cut on it takes the whole
-        body, and one within `SPLINTER` of its free end takes nothing.
+        body, and one within `SPLINTER` of its free end takes nothing. A body
+        already cut loose is not cut again.
         """
         i = self._index[body]
+        if self.loose[i]:
+            return False
         tip, root = self._tip_joint.get(body), self._root_joint.get(body)
         length = 2 * self._half[i]
         if tip is None:
@@ -393,15 +396,14 @@ class Shears:
         self._pull[stub, 1], self._pull[piece, 0] = self.radius[stub], self.radius[piece]
         self._reshape(stub)
         self._reshape(piece)
-        # Where the stub's capsule now ends, along the segment it was built on.
-        # ponytail: on a part `_split` handed over from the segment before, off
-        # by the two segments' length ratio; only a `cut` on a loose piece lands
-        # there. Tracking each body's span along the skin would cover it.
+        # Where the stub's capsule now ends, along the segment it was built
+        # on: no stub is a body `_split` stretched, which is loose.
         end = self._center[stub] + self._half[stub]
         skins.split(
             self._stage,
             self.labels[self.bodies[stub]],
             (end + self._drawn[stub]) / (2 * self._drawn[stub]),
+            lambda segment: self.pose(self.labels.index(segment)),
         )
         pair = sorted((int(self._shape[stub]), int(self._shape[piece])))
         for copy in self._pair_copies:

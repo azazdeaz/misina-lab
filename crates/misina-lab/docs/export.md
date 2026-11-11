@@ -101,14 +101,15 @@ since the prim is no rigid body; `rods.carry_riders`, which the rod tuning
 runs, seats it on the segment's body
 ([isaac-lab.md](isaac-lab.md#rods)).
 
-A rod may instead be drawn by one skin (`spawn_skin`, the rod spawned with
-no tubes): a mesh along the whole organ that bends smoothly through every
+A rod may instead be drawn by one skin (`spawn_rod`'s `skin`, in place of
+its tubes): a mesh along the whole organ that bends smoothly through every
 joint, where a tube per segment kinks. Its prim, `Skin`, is a `SkelRoot`
 beside the segment prims, and carries the skeleton as a `Skin`: a joint per
 segment, named after the segment's prim and bound at its frame. Each point
 of the mesh carries `ATTRIBUTE_ALONG`, how far along the rod it is in
-segments (`skin_mesh` measures it from meters along the rod), which the
-builder turns into the point's three joints and their weights. A reference
+segments (`skin_mesh` takes it from where the point lies nearest the line
+through the rod's points), which the builder turns into the point's three
+joints and their weights. A reference
 to a skin is never instanceable, since each deforms on its own. Whatever
 rides the organ still rides the segment prims. A skin bends only where a
 consumer poses its skeleton from the bodies
