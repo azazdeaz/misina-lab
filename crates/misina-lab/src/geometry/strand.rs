@@ -497,7 +497,10 @@ pub fn strand_mesh_along(strand: &Strand, spacing: f64) -> anyhow::Result<(MeshD
         Some(_) => {
             let mean = strand.radii.iter().sum::<f64>() / strand.radii.len() as f64;
             let step = (FINE * mean).min(spacing);
-            let count = ((total / step).ceil() as usize + 1).clamp(MIN_STATIONS, MAX_FINE);
+            // A cast saturates, so too fine a step comes out at the most samples.
+            let count = ((total / step).ceil() as usize)
+                .saturating_add(1)
+                .clamp(MIN_STATIONS, MAX_FINE);
             (0..count)
                 .map(|i| i as f64 / (count - 1) as f64)
                 .chain(anchors.iter().copied())
@@ -1339,6 +1342,8 @@ mod tests {
                 "{spacing} m apart at most: {rings:?}"
             );
         }
+        // Too fine to sample, a spacing is held to the most samples a strand takes.
+        assert!(strand_mesh_along(&plain, 1e-30).is_ok());
     }
 
     #[test]
