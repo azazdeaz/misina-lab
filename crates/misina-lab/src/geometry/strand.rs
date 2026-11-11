@@ -462,6 +462,10 @@ pub fn strand_mesh_along(strand: &Strand, spacing: f64) -> anyhow::Result<(MeshD
         strand.points.len(),
         strand.radii.len()
     );
+    anyhow::ensure!(
+        spacing > 0.0,
+        "a strand's rings need a positive spacing, got {spacing}"
+    );
 
     let sides = strand.sides.clamp(MIN_SIDES, MAX_SIDES);
     let degree = DEGREE.min(strand.points.len() - 1);
@@ -480,9 +484,10 @@ pub fn strand_mesh_along(strand: &Strand, spacing: f64) -> anyhow::Result<(MeshD
         })
         .collect();
 
-    // Evenly along the rail, or for the tolerance to pick from finely and on
-    // every control point, where the radius turns; and across every swelling:
-    // each stop a parameter and how far along the strand it is, as a fraction.
+    // Evenly along the rail, or for the tolerance to pick from finely, no
+    // further apart than `spacing`, and on every control point, where the
+    // radius turns; and across every swelling: each stop a parameter and how
+    // far along the strand it is, as a fraction.
     let mut stops: Vec<(f64, f64)> = match strand.tolerance {
         None => {
             let count = strand.stations.clamp(MIN_STATIONS, MAX_STATIONS);
@@ -491,7 +496,8 @@ pub fn strand_mesh_along(strand: &Strand, spacing: f64) -> anyhow::Result<(MeshD
         }
         Some(_) => {
             let mean = strand.radii.iter().sum::<f64>() / strand.radii.len() as f64;
-            let count = ((total / (FINE * mean)).ceil() as usize + 1).clamp(MIN_STATIONS, MAX_FINE);
+            let step = (FINE * mean).min(spacing);
+            let count = ((total / step).ceil() as usize + 1).clamp(MIN_STATIONS, MAX_FINE);
             (0..count)
                 .map(|i| i as f64 / (count - 1) as f64)
                 .chain(anchors.iter().copied())
@@ -1305,7 +1311,8 @@ mod tests {
     }
 
     /// Meshed for a skin, a straight even tube keeps a ring every `spacing`,
-    /// and each point says how far along the strand its ring is.
+    /// even one finer than the tolerance samples it at, half its radius, and
+    /// each point says how far along the strand its ring is.
     #[test]
     fn a_skins_strand_rings_every_spacing_and_knows_how_far_along_each_point_is() {
         let plain = Strand {
@@ -1313,21 +1320,25 @@ mod tests {
             radii: vec![0.01; 3],
             ..upright(12, 5, Bark::none())
         };
-        let (mesh, along) = strand_mesh_along(&plain, 0.1).unwrap();
-        assert_eq!(along.len(), mesh.points.len());
-        for (point, along) in mesh.points.iter().zip(&along) {
+        for spacing in [0.1, 0.0025] {
+            let (mesh, along) = strand_mesh_along(&plain, spacing).unwrap();
+            assert_eq!(along.len(), mesh.points.len());
+            for (point, along) in mesh.points.iter().zip(&along) {
+                assert!(
+                    (point[2] - along).abs() < 1e-5,
+                    "{} m up, {along} m along",
+                    point[2]
+                );
+            }
+            let rings: Vec<f32> = along.chunks(12).map(|ring| ring[0]).collect();
+            assert_eq!((rings[0], rings[rings.len() - 1]), (0.0, 1.0));
             assert!(
-                (point[2] - along).abs() < 1e-5,
-                "{} m up, {along} m along",
-                point[2]
+                rings
+                    .windows(2)
+                    .all(|w| w[1] - w[0] <= spacing as f32 + 1e-6),
+                "{spacing} m apart at most: {rings:?}"
             );
         }
-        let rings: Vec<f32> = along.chunks(12).map(|ring| ring[0]).collect();
-        assert_eq!((rings[0], rings[rings.len() - 1]), (0.0, 1.0));
-        assert!(
-            rings.windows(2).all(|w| w[1] - w[0] <= 0.1 + 1e-6),
-            "{rings:?}"
-        );
     }
 
     #[test]

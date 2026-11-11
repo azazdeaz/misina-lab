@@ -25,16 +25,16 @@ Scene document format 12.
 ### Added
 
 - **misina-lab**: A rod can be drawn by one skin that bends with it, rather
-  than a tube on each segment, which kinks at every joint. `spawn_skin`
-  spawns it beside a rod spawned with no tubes, from a mesh `skin_mesh`
-  binds along the rod, such as one `strand_mesh_along` meshes; the builder
-  authors it as a UsdSkel `SkelRoot`, with a joint per segment and each
-  point bound to three of them. Under Newton, `drive_skins`, which the
-  spawner calls, poses every skin that moved at its bodies before a frame is
-  drawn, and `Shears` splits a skin where it cuts the rod. Scene document
-  format 12.
-- **greenhouse-lab**: `StemCfg.skinned` draws a truss that bends as one skin
-  bending with it.
+  than a tube on each segment, which kinks at every joint.
+  `strand_mesh_along` meshes a strand and says how far along it each point
+  lies, `skin_mesh` binds that mesh to the rod's segments, and `spawn_skin`
+  spawns it beside a rod spawned with no tubes. The builder authors it as a
+  UsdSkel `SkelRoot`, with a joint per segment and each point bound to three
+  of them. Under Newton, `drive_skins`, which the spawner calls, poses every
+  skin that moved at its bodies before a frame is drawn, and `Shears` splits
+  a skin where it cuts the rod. Scene document format 12.
+- **greenhouse-lab**: `StemCfg.skinned` draws each truss that bends as its
+  rachis mesh, skinned to the truss's rod.
 - **greenhouse-lab**: A truss's fruit are packed. Each is laid out where it
   would hang alone, then moved, its pedicel swinging round the rachis and
   bending at its knuckle, until none lies in another, in the stems or on

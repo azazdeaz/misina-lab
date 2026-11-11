@@ -129,7 +129,8 @@ draw. From then on, every skin whose bodies moved since it was last posed
 has its joints written into Fabric, each its body's pose seen from the
 skeleton's frame. A step that draws nothing poses nothing, and Kit re-skins
 a mesh only in a frame its skeleton was posed in, as long as its timeline
-stands still, which under Newton it does: a skin at rest costs nothing.
+stands still, which under Newton it does: a skin at rest is checked before
+each draw, but neither written nor re-skinned.
 
 `Shears` splits a skin where it cuts the rod (`skins.split`): the points
 before the cut keep to the joints before it, the rest to the joints past
