@@ -680,7 +680,7 @@ struct Body {
     half: f32,
     dip: f32,
     ribbing: f32,
-    lobes: f32,
+    lobes: u32,
     /// Where the blossom end leans to, and the side that bulges and by how
     /// much, as fractions of the radius.
     lean: Vec2,
@@ -703,28 +703,19 @@ impl Body {
         let lean = rng.range(0.0, LEAN) as f32;
         let lean = Vec2::from_angle(rng.unit() as f32 * TAU) * lean;
         let bulge = (rng.range(0.0, BULGE) as f32, rng.unit() as f32 * TAU);
-        // A side strays `r (1 - cos(a / 2))` off the arc it cuts across, an
-        // arc `r` round turning through `a`. Round a lobe's crest the ribbing
-        // curves the body `sharp` times as tightly as a circle `radius` round,
-        // so there each of `n` sides cuts across `sharp TAU / n` of an arc
-        // `radius / sharp` round.
-        let sharp = 1.0 + config.ribbing * (config.lobes * config.lobes) as f32 / 2.0;
-        let sides = sharp * PI / (1.0 - (sharp * tolerance / radius).min(1.0)).acos();
-        // A crest and a groove per lobe at least.
-        let lobes = config.lobes.max(1);
-        let n = lobes * (sides.ceil() as u32).div_ceil(lobes).max(2);
         let mut body = Self {
             radius,
             half: radius * config.aspect,
             dip: DIP * radius,
             ribbing: config.ribbing,
-            lobes: config.lobes as f32,
+            lobes: config.lobes,
             lean,
             bulge,
             rings: Vec::new(),
-            sectors: (0..n).map(|i| TAU * i as f32 / n as f32).collect(),
+            sectors: Vec::new(),
         };
         body.rings = body.rings_within(tolerance);
+        body.sectors = body.sectors_within(tolerance);
         body
     }
 
@@ -743,7 +734,7 @@ impl Body {
     /// The point `theta` from the stem end and `phi` round.
     fn at(&self, theta: f32, phi: f32) -> Vec3 {
         let (profile, down) = self.profile(theta);
-        let rib = 1.0 - self.ribbing * (1.0 - (self.lobes * phi).cos()) / 2.0;
+        let rib = 1.0 - self.ribbing * (1.0 - (self.lobes as f32 * phi).cos()) / 2.0;
         let bulge = 1.0 + self.bulge.0 * (phi - self.bulge.1).cos();
         let r = profile.x * rib * bulge;
         Vec3::new(r * phi.cos(), r * phi.sin(), profile.y)
@@ -769,6 +760,26 @@ impl Body {
         // The blossom end is a pole, not a ring.
         rings.pop();
         rings
+    }
+
+    /// The azimuths of the points round each ring: as many as keep its
+    /// widest ring within `tolerance` of its curve, a whole number per lobe.
+    fn sectors_within(&self, tolerance: f32) -> Vec<f32> {
+        // A side strays `r (1 - cos(a / 2))` off the arc it cuts across, an
+        // arc `r` round turning through `a`. Where the bulge peaks on a
+        // lobe's crest the body is `out` off its axis and curves `sharp`
+        // times as tightly as a circle that far round, so there each of `n`
+        // sides cuts across `sharp TAU / n` of an arc `out / sharp` round.
+        let bulge = self.bulge.0;
+        let out = self.radius * (1.0 + bulge);
+        let ribbing = self.ribbing * (self.lobes * self.lobes) as f32 / 2.0;
+        let sharp = 1.0 + ribbing + bulge / (1.0 + bulge);
+        let sides = sharp * PI / (1.0 - (sharp * tolerance / out).min(1.0)).acos();
+        // A crest and a groove per lobe at least, and no finer than the
+        // meridian is sampled, however fine the tolerance.
+        let lobes = self.lobes.max(1);
+        let n = lobes * (sides.min(TAU / STEP).ceil() as u32).div_ceil(lobes).max(2);
+        (0..n).map(|i| TAU * i as f32 / n as f32).collect()
     }
 
     fn mesh(&self) -> MeshData {
@@ -1318,6 +1329,45 @@ mod tests {
                 "triangles at {details:?}: {full:?}"
             );
         }
+    }
+
+    /// Round its widest ring a fruit keeps within its tolerance at any size,
+    /// plain or fully ribbed, even where it bulges most; and however fine a
+    /// tolerance it is asked for, it is meshed no finer than its meridian is
+    /// sampled.
+    #[test]
+    fn a_fruit_keeps_round_where_it_bulges_and_is_meshed_no_finer_than_sampled() {
+        let tolerance = TOLERANCE as f32 / 8.0;
+        let shapes: [fn(&mut FruitParams); 2] = [|_| {}, |p| p.ribbing = 0.3];
+        for edit in shapes {
+            for mm in 50..70 {
+                let config = FruitConfig {
+                    diameter: mm as f32 / 1000.0,
+                    ..config(8.0, edit)
+                };
+                let mut body = Body::new(
+                    &config,
+                    tolerance,
+                    &mut Rng::new(config.seed ^ CALYX_STREAM),
+                );
+                body.bulge.0 = BULGE as f32;
+                body.sectors = body.sectors_within(tolerance);
+                let round = [&body.sectors[..], &[TAU]].concat();
+                // Its peak swept across a lobe.
+                for k in 0..16 {
+                    body.bulge.1 = TAU * k as f32 / (16 * config.lobes) as f32;
+                    let strayed = strays(&round, |phi| body.at(PI / 2.0, phi));
+                    assert!(strayed <= tolerance, "{mm} mm across: {strayed} m off");
+                }
+            }
+        }
+
+        // A side round it and a ring down it every `STEP`, rounded up to a
+        // whole number of sides per lobe, and the scar's and the rim's rings.
+        let config = config(8.0, |_| {});
+        let finest = Body::new(&config, 0.0, &mut Rng::new(config.seed ^ CALYX_STREAM));
+        assert!(finest.sectors.len() as f32 <= TAU / STEP + LOBES.1 as f32);
+        assert!(finest.rings.len() as f32 <= PI / STEP + 3.0);
     }
 
     /// A bud is closed, its petals within a little of the axis, and swells;
