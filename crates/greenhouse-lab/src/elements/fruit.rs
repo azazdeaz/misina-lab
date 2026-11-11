@@ -573,10 +573,11 @@ pub struct FruitParams {
     /// into each other.
     #[reflect(@Slider { min: 1.0, max: 64.0, step: 1.0 }, @Label("Fruit variations"))]
     pub variations: u32,
-    /// How finely a fruit's skin is meshed, as a multiplier: at 1 it keeps
-    /// within 0.6 mm of its shape, about a pixel to a camera half a meter
-    /// away, as a leaf does at its own detail of 1; at 3 within 0.2 mm,
-    /// which keeps its outline round from close up. A full-grown 60 mm fruit
+    /// How finely a fruit's skin is meshed, as a multiplier: at 1 its rings
+    /// and meridians keep within 0.6 mm of its shape, about a pixel to a
+    /// camera half a meter away, as a leaf's margin does at its own detail of
+    /// 1, and its faces within twice that; at 3 all within a third as far,
+    /// which leaves its outline round from close up. A full-grown 60 mm fruit
     /// comes to about 1250 triangles with its calyx at 3, about 450 at 1 and
     /// 3700 at 8; each fruit is meshed for its own size, so a young one
     /// costs less.
@@ -692,7 +693,8 @@ struct Body {
 }
 
 impl Body {
-    /// Meshed to keep within `tolerance` of its surface: its rings where its
+    /// Meshed for its rings and meridians to keep within `tolerance` of its
+    /// surface, and so its faces within twice that: its rings where its
     /// meridian needs them, and as many sides round it as its widest ring
     /// needs, a whole number per lobe.
     ///
@@ -1224,10 +1226,59 @@ mod tests {
         farthest
     }
 
+    /// The farthest the body strays from the triangles its mesh lays over
+    /// it: two per face between rings, fanned from the face's first corner
+    /// as `MeshData::to_mesh` fans it, and one per face at a pole.
+    fn faces_stray(body: &Body) -> f32 {
+        let thetas = [&[0.0][..], &body.rings, &[PI]].concat();
+        let phis = [&body.sectors[..], &[TAU]].concat();
+        let last = thetas.len() - 2;
+        let mut farthest = 0.0f32;
+        for (j, t) in thetas.windows(2).enumerate() {
+            for f in phis.windows(2) {
+                let [a, b, c, d] = [(t[0], f[0]), (t[1], f[0]), (t[1], f[1]), (t[0], f[1])]
+                    .map(|(theta, phi)| body.at(theta, phi));
+                let fan = match j {
+                    0 => vec![[a, b, c]],
+                    _ if j == last => vec![[a, b, d]],
+                    _ => vec![[a, b, c], [a, c, d]],
+                };
+                for k in 0..81 {
+                    let (u, v) = ((k / 9) as f32 / 8.0, (k % 9) as f32 / 8.0);
+                    let p = body.at(t[0] + (t[1] - t[0]) * u, f[0] + (f[1] - f[0]) * v);
+                    let off = fan.iter().map(|abc| off_triangle(p, *abc));
+                    farthest = farthest.max(off.fold(f32::MAX, f32::min));
+                }
+            }
+        }
+        farthest
+    }
+
+    /// How far `p` is from the triangle `abc`.
+    fn off_triangle(p: Vec3, [a, b, c]: [Vec3; 3]) -> f32 {
+        let n = (b - a).cross(c - a).normalize();
+        let q = p - n * (p - a).dot(n);
+        let edges = [(a, b), (b, c), (c, a)];
+        if edges
+            .iter()
+            .all(|(u, v)| (*v - *u).cross(q - *u).dot(n) >= 0.0)
+        {
+            return p.distance(q);
+        }
+        edges
+            .iter()
+            .map(|(u, v)| {
+                let t = ((p - *u).dot(*v - *u) / (*v - *u).length_squared()).clamp(0.0, 1.0);
+                p.distance(u.lerp(*v, t))
+            })
+            .fold(f32::MAX, f32::min)
+    }
+
     /// At any detail the body is closed and wound outward: every edge is
     /// walked once each way, and the volume it encloses is positive; and it
     /// keeps within its tolerance of its surface down every meridian and
-    /// round every ring. It hangs from its stem scar at the fruit's origin,
+    /// round every ring, and within twice that across every face, where the
+    /// two add up. It hangs from its stem scar at the fruit's origin,
     /// its shoulders rising round it no higher than the dip is deep; it
     /// carries a sheet per sepal, and grows from set to mature green while
     /// its calyx stays the size it was, meshed the finer the bigger it gets.
@@ -1268,6 +1319,8 @@ mod tests {
                         )
                         .fold(0.0, f32::max);
                     assert!(strayed <= 1.05 * tolerance, "{at}: {strayed} m off");
+                    let faced = faces_stray(&body);
+                    assert!(faced <= 2.0 * tolerance, "{at}: a face {faced} m off");
 
                     let mesh = body.mesh();
                     let mut edges: HashMap<(i32, i32), i32> = HashMap::new();
