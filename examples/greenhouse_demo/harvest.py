@@ -50,7 +50,9 @@ the arm works, and the trusses a cut can drop."""
 
 GREENHOUSE_CFG = GreenhouseCfg(
     layout=LayoutCfg(rows=2, row_length=4.0),
-    stem=StemCfg(flexible_below=BELOW),
+    # Skinned: each rod is drawn by one mesh bending with it, which keeps the
+    # rachis's zigzag and its knots, where a tube per segment runs straight.
+    stem=StemCfg(flexible_below=BELOW, skinned=True),
 )
 
 GREENHOUSE_PATH = "/World/Greenhouse"
@@ -141,8 +143,9 @@ within this. One they have as the shear shuts is held there until it
 opens."""
 TIP = 1.2
 """How far the blades are turned down about the peduncle, in radians, to
-tip out a truss the open finger still bears: one lying across it slides
-off once it slopes past the rubber's 45 degrees."""
+tip out a truss the open finger still bears, as it does where the shear is
+tilted up: one lying across it slides off once it slopes past the 27
+degrees of `harvester.HAND_FRICTION`."""
 PATIENCE = 300
 """Control ticks a stage may wait on the robot before its job is given up
 on: 6 s."""

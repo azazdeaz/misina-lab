@@ -442,6 +442,15 @@ fn merge_coincident(points: Vec<Point3<f64>>, radii: Vec<f64>) -> (Vec<Point3<f6
 /// Skins `strand` into a closed tube: rings of `sides` vertices, stitched into
 /// quad bands and capped at both ends.
 pub fn strand_mesh(strand: &Strand) -> anyhow::Result<MeshData> {
+    Ok(strand_mesh_along(strand, f64::INFINITY)?.0)
+}
+
+/// [`strand_mesh`] for a strand that bends once it is meshed, such as a rod's
+/// skin, and how far along the strand each of its points is, in meters along
+/// its control points: the measure a [`Bulge`] sits at. Meshed to a
+/// [`tolerance`](Strand::tolerance), it keeps a ring at least every `spacing`
+/// meters, since a straight run bends only where it has rings.
+pub fn strand_mesh_along(strand: &Strand, spacing: f64) -> anyhow::Result<(MeshData, Vec<f32>)> {
     anyhow::ensure!(
         strand.points.len() >= 2,
         "a strand needs at least two control points, got {}",
@@ -452,6 +461,10 @@ pub fn strand_mesh(strand: &Strand) -> anyhow::Result<MeshData> {
         "a strand needs one radius per control point, got {} and {}",
         strand.points.len(),
         strand.radii.len()
+    );
+    anyhow::ensure!(
+        spacing > 0.0,
+        "a strand's rings need a positive spacing, got {spacing}"
     );
 
     let sides = strand.sides.clamp(MIN_SIDES, MAX_SIDES);
@@ -471,9 +484,10 @@ pub fn strand_mesh(strand: &Strand) -> anyhow::Result<MeshData> {
         })
         .collect();
 
-    // Evenly along the rail, or for the tolerance to pick from finely and on
-    // every control point, where the radius turns; and across every swelling:
-    // each stop a parameter and how far along the strand it is, as a fraction.
+    // Evenly along the rail, or for the tolerance to pick from finely, no
+    // further apart than `spacing`, and on every control point, where the
+    // radius turns; and across every swelling: each stop a parameter and how
+    // far along the strand it is, as a fraction.
     let mut stops: Vec<(f64, f64)> = match strand.tolerance {
         None => {
             let count = strand.stations.clamp(MIN_STATIONS, MAX_STATIONS);
@@ -482,7 +496,11 @@ pub fn strand_mesh(strand: &Strand) -> anyhow::Result<MeshData> {
         }
         Some(_) => {
             let mean = strand.radii.iter().sum::<f64>() / strand.radii.len() as f64;
-            let count = ((total / (FINE * mean)).ceil() as usize + 1).clamp(MIN_STATIONS, MAX_FINE);
+            let step = (FINE * mean).min(spacing);
+            // A cast saturates, so too fine a step comes out at the most samples.
+            let count = ((total / step).ceil() as usize)
+                .saturating_add(1)
+                .clamp(MIN_STATIONS, MAX_FINE);
             (0..count)
                 .map(|i| i as f64 / (count - 1) as f64)
                 .chain(anchors.iter().copied())
@@ -513,11 +531,11 @@ pub fn strand_mesh(strand: &Strand) -> anyhow::Result<MeshData> {
             ring(strand, &lobes, frame, t * total, radius, *fraction, sides)
         })
         .collect();
+    let along: Vec<f64> = parameters.iter().map(|t| t * total).collect();
     let kept: Vec<usize> = match strand.tolerance {
         Some(tolerance) => {
-            let along: Vec<f64> = parameters.iter().map(|t| t * total).collect();
             let tangents: Vec<Vector3<f64>> = frames.iter().map(|f| *f.tangent()).collect();
-            decimate(&rings, &along, &tangents, tolerance)
+            decimate(&rings, &along, &tangents, tolerance, spacing)
         }
         None => (0..rings.len()).collect(),
     };
@@ -533,11 +551,18 @@ pub fn strand_mesh(strand: &Strand) -> anyhow::Result<MeshData> {
     );
 
     let (face_vertex_counts, face_vertex_indices) = tube_faces(kept.len(), sides);
-    Ok(MeshData {
-        points,
-        face_vertex_counts,
-        face_vertex_indices,
-    })
+    let along = kept
+        .iter()
+        .flat_map(|k| std::iter::repeat_n(along[*k] as f32, sides))
+        .collect();
+    Ok((
+        MeshData {
+            points,
+            face_vertex_counts,
+            face_vertex_indices,
+        },
+        along,
+    ))
 }
 
 /// The parameters at which the interpolated rail passes through each of its
@@ -687,13 +712,15 @@ fn ring(
 /// Which of `rings` to keep: the first and the last, and between them the
 /// fewest, picked greedily from the start, that hold every ring dropped within
 /// `tolerance` of the band the kept ones either side of it span, measured
-/// across the strand. `along` is where each ring is along the strand and
-/// `tangents` the way the strand heads there.
+/// across the strand, and no two kept ones further than `spacing` apart.
+/// `along` is where each ring is along the strand and `tangents` the way the
+/// strand heads there.
 fn decimate(
     rings: &[Vec<Point3<f64>>],
     along: &[f64],
     tangents: &[Vector3<f64>],
     tolerance: f64,
+    spacing: f64,
 ) -> Vec<usize> {
     let fits = |a: usize, b: usize| {
         (a + 1..b).all(|k| {
@@ -714,7 +741,7 @@ fn decimate(
     let mut a = 0;
     while a < last {
         let mut b = a + 1;
-        while b < last && b - a < MAX_SPAN && fits(a, b + 1) {
+        while b < last && b - a < MAX_SPAN && along[b + 1] - along[a] <= spacing && fits(a, b + 1) {
             b += 1;
         }
         kept.push(b);
@@ -1284,6 +1311,39 @@ mod tests {
             bulge * 4.0 < beyond,
             "{bulge} m apart at the bulge, {beyond} m past it"
         );
+    }
+
+    /// Meshed for a skin, a straight even tube keeps a ring every `spacing`,
+    /// even one finer than the tolerance samples it at, half its radius, and
+    /// each point says how far along the strand its ring is.
+    #[test]
+    fn a_skins_strand_rings_every_spacing_and_knows_how_far_along_each_point_is() {
+        let plain = Strand {
+            tolerance: Some(2e-4),
+            radii: vec![0.01; 3],
+            ..upright(12, 5, Bark::none())
+        };
+        for spacing in [0.1, 0.0025] {
+            let (mesh, along) = strand_mesh_along(&plain, spacing).unwrap();
+            assert_eq!(along.len(), mesh.points.len());
+            for (point, along) in mesh.points.iter().zip(&along) {
+                assert!(
+                    (point[2] - along).abs() < 1e-5,
+                    "{} m up, {along} m along",
+                    point[2]
+                );
+            }
+            let rings: Vec<f32> = along.chunks(12).map(|ring| ring[0]).collect();
+            assert_eq!((rings[0], rings[rings.len() - 1]), (0.0, 1.0));
+            assert!(
+                rings
+                    .windows(2)
+                    .all(|w| w[1] - w[0] <= spacing as f32 + 1e-6),
+                "{spacing} m apart at most: {rings:?}"
+            );
+        }
+        // Too fine to sample, a spacing is held to the most samples a strand takes.
+        assert!(strand_mesh_along(&plain, 1e-30).is_ok());
     }
 
     #[test]

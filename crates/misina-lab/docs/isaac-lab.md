@@ -119,6 +119,24 @@ piece lands on the stub it was cut from. Newton allows no new body once the
 model is built; [cutting.md](cutting.md) is how a cut is made from the
 bodies the model already has.
 
+## Skins
+
+A rod drawn by a skin ([export.md](export.md#colliders)) bends only where
+something poses its skeleton. `drive_skins`, which the spawner calls with
+`tune_rods`, wraps `FabricBackend.update_transforms`, where Kit's viewport
+and the RTX cameras copy the bodies' poses into Fabric just before they
+draw. From then on, every skin whose bodies moved since it was last posed
+has its joints written into Fabric, each its body's pose seen from the
+skeleton's frame, with a scene's uniform `scale` divided out; one that scales
+unevenly or shears raises, since no one scale undoes it. A step that draws nothing poses nothing, and Kit re-skins
+a mesh only in a frame its skeleton was posed in, as long as its timeline
+stands still, which under Newton it does: a skin at rest is checked before
+each draw, but neither written nor re-skinned.
+
+`Shears` splits a skin where it cuts the rod (`skins.split`): the points
+before the cut keep to the joints before it, the rest to the joints past
+it, and the faces across it go, leaving both ends open.
+
 ## Moving a collider
 
 `Shears.colliders(body)` lists a body's collision shapes with their poses in
@@ -200,7 +218,8 @@ as SubRip. The module's docstring has the loop a script runs.
 - [`misina_lab/isaaclab/spawn.py`](../../../python/misina-lab/misina_lab/isaaclab/spawn.py): `GeneratedSceneCfg`, `spawn_generated`, `resolve_usd_path`, `to_params`, and the cache key
 - [`misina_lab/isaaclab/rods.py`](../../../python/misina-lab/misina_lab/isaaclab/rods.py): `make_physics_cfg_newton`, `tune_rods`, `carry_riders`, `let_rods_out_of_their_wood`, and the numbers
 - [`misina_lab/isaaclab/cutting.py`](../../../python/misina-lab/misina_lab/isaaclab/cutting.py): `Shears.colliders` and `Shears.place` for a collider that moves; the cut itself is [cutting.md](cutting.md)
+- [`misina_lab/isaaclab/skins.py`](../../../python/misina-lab/misina_lab/isaaclab/skins.py): `drive_skins`, `Skins` and `split`
 - [`misina_lab/isaaclab/colliders.py`](../../../python/misina-lab/misina_lab/isaaclab/colliders.py): `ColliderView`
 - [`misina_lab/isaaclab/shots.py`](../../../python/misina-lab/misina_lab/isaaclab/shots.py): the shot file, `sensor` and `finish`
 - [`misina_lab/isaaclab/film.py`](../../../python/misina-lab/misina_lab/isaaclab/film.py): `sensor`, `Rig`, `develop` and `Film`
-- [`src/scene/mod.rs`](../src/scene/mod.rs): `cable`, `spawn_rod` and `segment_frames`, what the Rust side authors
+- [`src/scene/mod.rs`](../src/scene/mod.rs): `cable`, `spawn_rod`, `spawn_skin` and `segment_frames`, what the Rust side authors

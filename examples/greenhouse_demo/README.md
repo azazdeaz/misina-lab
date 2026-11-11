@@ -140,15 +140,13 @@ The tally counts the trusses due on the paths worked, how many the arm
 reaches, how many of those only by brushing a truss, how many it cuts,
 holds and lets go, how many end in the crate, and the seconds per truss
 cut.
-On the demo's two 4 m rows, 36 trusses are due on the three paths. The
-robot reaches four in five, a third of those only by brushing a truss; the
-stems of the plants beside the rest keep the arm off them. It cuts all but
-a few of those it reaches, and four in five of the trusses it cuts ride in
-the jaws to the crate and land in it; the rest slip out of the jaws on the
-way, or are let go in the path where the shoulder cannot turn far enough
-to swing them round (see [Cutting and holding](#cutting-and-holding)).
-That is about 5 s of simulated time a cut and 290 s for the whole run,
-which takes about seven minutes on an RTX 5070 Ti.
+On the demo's two 4 m rows, 25 trusses are due on the three paths. The
+robot reaches and cuts every one, one only by brushing a truss, and all
+but two ride in the jaws to the crate and land in it: one is let go in the
+path where the shoulder cannot turn far enough to swing it round (see
+[Cutting and holding](#cutting-and-holding)), and one comes to rest partly
+outside the crate. That is about 6 s of simulated time a cut and 240 s for
+the whole run, which takes about six minutes on an RTX 5070 Ti.
 
 ## Cutting and holding
 
@@ -180,9 +178,12 @@ every step. So once the shear is shut, the segment of the cut peduncle
 between the jaws is held where it lies in them and carried with the hand,
 `Shears.hold`, the rest of the truss hanging from it. The shear opening
 lets it go and swings the finger down and away from under the peduncle,
-and the truss drops; one the rubber still holds up on the finger's slope
-is tipped off by turning the blades down about the peduncle, as the
-pruning demo tips out a piece of cane.
+and the truss slides off the finger's slope and drops: nothing grips by
+friction, so the hand's colliders, the shear's among them, slip, with a
+friction coefficient of 0.25, 0.5 against a peduncle. One still lying on
+the finger, where the shear was tilted up for the cut, is tipped off by
+turning the blades down about the peduncle, as the pruning demo tips out a
+piece of cane.
 
 The blade crosses the peduncle half a centimetre past its rod's first
 joint, and `Shears.cut` makes the cut at the joint. Now and then the
