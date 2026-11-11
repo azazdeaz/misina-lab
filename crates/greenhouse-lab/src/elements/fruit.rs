@@ -509,12 +509,26 @@ impl FruitConfig {
 
     /// How far below the origin a fruit's body is centred along its axis,
     /// and how far it reaches either way of that: from as high as its stem
-    /// dip is deep down to its blossom end, which a pointed tip draws out and
-    /// a dent draws in, the rim round the dent about as far as its middle.
+    /// dip is deep down to its blossom end, which a pointed tip draws out, or
+    /// to the rim round a dent.
     fn span(&self) -> (f32, f32) {
         let radius = self.across() / 2.0;
-        let tip = self.blossom_tip * (1.0 - self.widest);
-        let half = radius * self.aspect * (1.0 + tip);
+        // How far below the girth the blossom half reaches, as a share of its
+        // height. A dent fades out over the tip's reach, so the rim round it
+        // lies a little lower than its middle, and is found on the profile.
+        let tip = self.blossom_tip;
+        let reach = if tip >= 0.0 {
+            1.0 + tip
+        } else {
+            let square = 1.0 - BLOCKY * self.blossom_blockiness;
+            (0..=64)
+                .map(|k| {
+                    let u = TIP * k as f32 / 64.0;
+                    u.cos().powf(square) + tip * (1.0 - smooth(u / TIP))
+                })
+                .fold(0.0, f32::max)
+        };
+        let half = radius * self.aspect * (self.widest + (1.0 - self.widest) * reach);
         (half - self.stem_dip * radius, half)
     }
 
@@ -1648,14 +1662,14 @@ mod tests {
     /// A regular fruit is widest `widest` of its height down from its stem
     /// end, and fills the span its collider is built round, from the top of
     /// its shoulders, as high as its stem dip is deep, down to the end of its
-    /// tip, or about to the rim round a dent; and a tip pushed in under about
-    /// -0.075 dents its blossom end.
+    /// tip or to the rim round a dent, at the sliders' extremes too; and a
+    /// tip pushed in under about -0.075 dents its blossom end.
     #[test]
     fn a_fruits_outline_follows_its_knobs() {
         let regular = seeded(7, |p| p.irregularity = 0.0);
-        let body = |config: &FruitConfig| {
-            Body::new(config, TOLERANCE as f32, &mut Rng::new(7 ^ CALYX_STREAM))
-        };
+        let tolerance = TOLERANCE as f32;
+        let body =
+            |config: &FruitConfig| Body::new(config, tolerance, &mut Rng::new(7 ^ CALYX_STREAM));
         let shapes = [
             FruitConfig {
                 widest: 0.4,
@@ -1670,6 +1684,13 @@ mod tests {
             FruitConfig {
                 stem_dip: 0.25,
                 blossom_tip: -0.1,
+                ..regular
+            },
+            // Where the rim lies furthest below the dent's middle.
+            FruitConfig {
+                blossom_tip: -0.15,
+                blossom_blockiness: 1.0,
+                aspect: 1.8,
                 ..regular
             },
         ];
@@ -1687,13 +1708,17 @@ mod tests {
                 (lo.min(p[2]), hi.max(p[2]))
             });
             assert!(high <= top + 1e-6, "{config:?}");
-            // A dent's rim lies a little lower than its middle is drawn in.
+            // A pole is a point of the mesh, and a dent's rim may fall between
+            // two of its rings.
             let slack = if config.blossom_tip < 0.0 {
-                0.005 * half
+                tolerance
             } else {
                 1e-6
             };
-            assert!((low - bottom).abs() < slack, "{config:?}: {low} {bottom}");
+            assert!(
+                low >= bottom - 1e-6 && low - bottom < slack,
+                "{config:?}: {low} {bottom}"
+            );
         }
         for (tip, dented) in [(-0.05, false), (-0.1, true)] {
             let body = body(&FruitConfig {

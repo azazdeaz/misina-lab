@@ -33,8 +33,8 @@ Scene document format 12.
   `irregularity` says. The defaults grow a round truss tomato, its shoulders
   a little blockier than its blossom end, and the greenhouse README gives
   the settings for a cherry, a plum and a beefsteak tomato. A fruit's
-  collider follows `blossom_tip`: it reaches a pointed blossom end and stops
-  short of a dented one.
+  collider follows `blossom_tip`, down to a pointed blossom end or to the rim
+  round a dented one.
 - **misina-lab**: A rod can be drawn by one skin that bends with it, rather
   than a tube on each segment, which kinks at every joint.
   `strand_mesh_along` meshes a strand and says how far along it each point
