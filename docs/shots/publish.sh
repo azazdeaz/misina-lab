@@ -19,14 +19,19 @@ raw=https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/
 remote=https://github.com/azazdeaz/misina-lab-docs-assets.git
 
 cd "$repo"
+# Kept pictures are fetched at the commit main is on now: main's own URL
+# serves a copy cached for minutes, which can predate the last publish.
+published=${raw%main/}$(git ls-remote "$remote" refs/heads/main | cut -f1)/
 missing= kept=
 # Every picture the Markdown links: link targets, `](...)`, and not the
 # example URLs the docs show in code.
 while read -r link; do
     path=${link#*"$raw"}
+    # A path in the assets repository, so one inside the folder.
+    [[ $path != *..* ]] || { echo "not a picture's path: $path" >&2; exit 1; }
     [[ -f $assets/$path ]] && continue
     # Not rendered here: the pages keep the copy they show now.
-    if curl -fsSL --create-dirs -o "$assets/$path" "$raw$path"; then
+    if curl -fsSL --create-dirs -o "$assets/$path" "$published$path"; then
         kept+=" $path"
     else
         rm -f "$assets/$path"
