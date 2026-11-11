@@ -34,9 +34,10 @@ Scene document format 11.
   meshes it about as coarsely as before. The skin's colour is sampled at
   every ring, so the shoulders' last band of colour shows with the crisper
   edge its stage gives it.
-- **misina-lab**: `geometry::shapes::simplify_by` is `simplify` over items
-  that each stand at a point of the polyline, so whatever a kept point
-  stands for comes through with it.
+- **misina-lab**: `geometry::shapes::simplify_with` is `simplify` over any
+  items, told how far one strays from the chord between two others: points
+  that carry more than a position, or whole rows of points kept or dropped
+  together.
 - **greenhouse-lab**: A truss's fruit are packed. Each is laid out where it
   would hang alone, then moved, its pedicel swinging round the rachis and
   bending at its knuckle, until none lies in another, in the stems or on
@@ -255,6 +256,18 @@ Scene document format 11.
 
 ### Changed
 
+- **greenhouse-lab** (**cfg**): A fruit has a lobe per locule, each its own
+  width and fullness, where its lobes were one even ripple. The groove over
+  each wall between two is deepest round the shoulders, where it pleats out
+  from the calyx, and fades toward the blossom end. New:
+  `FruitCfg.locules`, which each fruit draws up to one either side of;
+  `FruitCfg.rib_reach`, the grooves' depth at the girth as a share of
+  their depth round the shoulders; and `FruitCfg.irregularity`, how far a
+  fruit's lobes differ and how far it leans, a few fruit far, where every
+  fruit bulged a little to one side. `FruitCfg.ribbing` is now the depth
+  round the shoulders, 0.08 by default. The body is rounder and its stem dip
+  shallower, as on a round truss tomato, and a sepal over a groove lifts its
+  edges clear of the lobes either side.
 - **vinery-lab**, **greenhouse-lab**: The web playgrounds start on a scene
   just big enough to hold everything: the vineyard on a 24 by 18 m parcel
   of three rows, the greenhouse on one 5 m row. The panel grows
