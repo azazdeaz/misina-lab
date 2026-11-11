@@ -477,10 +477,10 @@ class FruitParams:
     """How finely a fruit's skin is meshed, as a multiplier: at 1 its rings and
     meridians keep within 0.6 mm of its shape, about a pixel to a camera half a meter
     away, as a leaf's margin does at its own detail of 1, and its faces within twice
-    that; at 3 all within a third as far, which leaves its outline round from close
-    up. A full-grown 60 mm fruit comes to about 1250 triangles with its calyx at 3,
-    about 450 at 1 and 3700 at 8; each fruit is meshed for its own size, so a young
-    one costs less.
+    that; at 3 its rings and meridians keep within 0.2 mm and its faces within 0.4
+    mm, which leaves its outline round from close up. A full-grown 60 mm fruit comes
+    to about 1250 triangles with its calyx at 3, about 450 at 1 and 3700 at 8; each
+    fruit is meshed for its own size, so a young one costs less.
     """
 
     def __init__(
