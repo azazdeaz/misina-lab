@@ -441,9 +441,12 @@ class FruitParams:
     old enough. A truss is due once its tip fruit is turning. Every stem runs a
     little ahead of or behind the rest.
 
-    Every fruit draws its own lobe count, its five or six sepals and how each curls,
-    and a slight lean, within the ranges the research notes give; its flower has a
-    petal between each two sepals.
+    A fruit has a lobe per locule, the chambers its seeds grow in, and a groove over
+    each wall between two: deepest round its shoulders, where it pleats out from the
+    calyx, and fading toward its blossom end. Every fruit draws its own lobe count,
+    how wide and how full each lobe is and how deep each groove, its lean, and its
+    five or six sepals and how each curls, within the ranges the research notes give;
+    its flower has a petal between each two sepals.
     """
 
     ripe_trusses: float
@@ -461,9 +464,24 @@ class FruitParams:
     beefsteaks are, and over 1 elongated, as plum tomatoes are. Each fruit draws a
     little either side.
     """
+    locules: float
+    """How many locules a fruit has, and so lobes: 2 in a cherry or a plum tomato, 3 to
+    6 in a round or a truss tomato, and more in a beefsteak. Each fruit draws up to
+    one either side.
+    """
     ribbing: float
-    """Depth of the grooves between a fruit's lobes, as a fraction of its radius: 0 is
-    smooth, and a beefsteak's are about 0.15.
+    """Depth of the grooves between a fruit's lobes round its shoulders, where they are
+    deepest, as a fraction of its radius: 0 is smooth, and a beefsteak's are about
+    0.2.
+    """
+    rib_reach: float
+    """How far down a fruit its grooves reach: their depth at its girth, as a share of
+    their depth round its shoulders. Below that they fade out before the blossom end.
+    """
+    irregularity: float
+    """How irregular a fruit is: how far its lobes differ in width and in fullness and
+    its grooves in depth, and how far its blossom end leans. 0 is a regular fruit; at
+    1 about one fruit in five leans visibly, and 2 is lopsided.
     """
     petal_length: float
     """Length of a flower's petals, in meters: an open tomato flower is under 25 mm
@@ -487,7 +505,7 @@ class FruitParams:
     away, as a leaf's margin does at its own detail of 1, and its faces within twice
     that; at 3 its rings and meridians keep within 0.2 mm and its faces within 0.4
     mm, which leaves its outline round from close up. A full-grown 60 mm fruit comes
-    to about 1250 triangles with its calyx at 3, about 450 at 1 and 3700 at 8; each
+    to about 1250 triangles with its calyx at 3, about 400 at 1 and 3700 at 8; each
     fruit is meshed for its own size, so a young one costs less.
     """
 
@@ -498,7 +516,10 @@ class FruitParams:
         spread: float = 0.2,
         color: FruitColor = "red",
         aspect: float = 0.9,
-        ribbing: float = 0.03,
+        locules: float = 4.0,
+        ribbing: float = 0.08,
+        rib_reach: float = 0.35,
+        irregularity: float = 1.0,
         petal_length: float = 0.011,
         petal_reflex: float = 125.0,
         variations: int = 32,

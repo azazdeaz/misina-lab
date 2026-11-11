@@ -51,9 +51,12 @@ docs/shots/publish.sh
 
 It force-pushes `target/docs-assets` as the one commit on `main` of the assets
 repository, which so holds the current set and nothing older; pages show it
-within about five minutes. It refuses while the folder lacks a picture this
-checkout's Markdown links, since publishing would take that picture down: render
-every shot first. A picture changes at once on every page that links its
+within about five minutes. A shot's picture, or one this checkout's Markdown
+links, that the folder lacks is kept as published, so render only the shots a
+change affects, into an emptied folder: whatever the folder holds is
+published. It refuses while one is neither rendered nor published, as a new
+shot's is until it is rendered, and when another publish has landed since it
+started; run it again then. A picture changes at once on every page that links its
 path, `main`'s README and the docs of older versions alike, so publish when
 the change that needs it is about to merge. Publishing replaces what is there
 and needs push access to the assets repository: run it only when asked.
