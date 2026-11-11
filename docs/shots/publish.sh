@@ -25,10 +25,10 @@ cd "$repo"
 # URL serves a copy cached for minutes, and the push expects it, so a publish
 # started from an older set fails rather than undoing a newer one.
 base=$(git ls-remote "$remote" refs/heads/main | cut -f1)
-missing= kept= tmp=
+missing= tmp= kept=()
 # A fetched copy left behind would pass for a render on the next run.
 cleanup() {
-    for path in $kept; do rm -f "$assets/$path"; done
+    for path in "${kept[@]}"; do rm -f "$assets/$path"; done
     [[ -z $tmp ]] || rm -rf "$tmp"
 }
 trap cleanup EXIT
@@ -38,7 +38,7 @@ while read -r path; do
     [[ -f $assets/$path ]] && continue
     # Not rendered here: the pages keep the copy they show now.
     if curl -fsSL --create-dirs -o "$assets/$path" "${raw%main/}$base/$path"; then
-        kept+=" $path"
+        kept+=("$path")
     else
         rm -f "$assets/$path"
         missing+=$path$'\n'
@@ -59,5 +59,5 @@ export GIT_DIR=$tmp GIT_WORK_TREE=$assets
 cd "$assets"
 git init -q -b main
 git add -A
-git commit -q -m "Rendered from misina-lab $source" ${kept:+-m "Kept as published:$kept"}
+git commit -q -m "Rendered from misina-lab $source" ${kept[*]:+-m "Kept as published: ${kept[*]}"}
 git push --force-with-lease="refs/heads/main:$base" "$remote" main
