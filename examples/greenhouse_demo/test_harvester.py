@@ -111,11 +111,12 @@ def test_the_crates_boxes_are_its_mesh():
     assert corners.max(axis=0) == pytest.approx(points.max(axis=0), abs=0.001)
 
 
-def test_newton_reads_the_hand_friction_on_every_collider_on_the_hand_alone():
+def test_newton_reads_the_hand_material_on_every_collider_on_the_hand_alone():
     """On a stage laid out as the URDF importer lays out the robot, links
     nested in their parents and their pieces instances of a prototype,
     Newton's importer gives every collider on the hand, the shear's links
-    under it included, `HAND_FRICTION`, and the arm's the default."""
+    under it included, `HAND_FRICTION` and `HAND_STIFFNESS`, and the arm's
+    the defaults."""
     from newton import ModelBuilder
     from pxr import Usd, UsdGeom, UsdPhysics
 
@@ -128,15 +129,20 @@ def test_newton_reads_the_hand_friction_on_every_collider_on_the_hand_alone():
         piece.GetReferences().AddInternalReference("/Piece")
         piece.SetInstanceable(True)
     UsdPhysics.CollisionAPI.Apply(UsdGeom.Cube.Define(stage, f"{hand}/head").GetPrim())
-    harvester.bind_hand_friction(stage.GetPrimAtPath("/Robot"))
+    harvester.bind_hand_material(stage.GetPrimAtPath("/Robot"))
     builder = ModelBuilder()
     builder.add_usd(stage, root_path="/Robot")
-    assert dict(zip(builder.shape_label, builder.shape_material_mu, strict=True)) == {
-        "/Robot/forearm_link/elbow/mesh": ModelBuilder.ShapeConfig().mu,
-        f"{hand}/jaw/mesh": harvester.HAND_FRICTION,
-        f"{hand}/blade_link/finger/mesh": harvester.HAND_FRICTION,
-        f"{hand}/head": harvester.HAND_FRICTION,
-    }
+    default = ModelBuilder.ShapeConfig()
+    for values, arm, on_hand in (
+        (builder.shape_material_mu, default.mu, harvester.HAND_FRICTION),
+        (builder.shape_material_ke, default.ke, harvester.HAND_STIFFNESS),
+    ):
+        assert dict(zip(builder.shape_label, values, strict=True)) == {
+            "/Robot/forearm_link/elbow/mesh": arm,
+            f"{hand}/jaw/mesh": on_hand,
+            f"{hand}/blade_link/finger/mesh": on_hand,
+            f"{hand}/head": on_hand,
+        }
 
 
 @pytest.mark.parametrize(("way", "clear"), [(MACHINE.way_in, True), ((0.0, 0.0, 1.0), False)])

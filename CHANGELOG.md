@@ -322,6 +322,10 @@ Scene document format 12.
   a friction coefficient of 0.25, where every one had the default 1.0. A
   truss let go slides off the open finger as the shear opens, where it lay
   on it until the blades were tipped down.
+- The harvest demo's hand is stiff to the touch: its colliders have a
+  contact stiffness of 50 000 N/m, where every one had Isaac Lab's default
+  2500. A fruit borne on the shear's head sinks 0.6 mm into it, where it
+  sank about a centimetre.
 - The harvest demo's video shows a truss giving way to the arm: before the
   first cut, the open shear pushes the truss from the side and brushes its
   lowest fruit, filmed close up. `harvest.run` makes the `Gesture`s it is

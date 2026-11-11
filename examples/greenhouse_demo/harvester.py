@@ -104,6 +104,13 @@ contact's as the geometric mean of the two shapes', so against a peduncle at
 the default 1.0 it is 0.5, a friction angle of 27 degrees, and a truss let
 go slides off the open finger, sloped about 30 degrees under it, as the
 shear opens. Nothing grips by friction: `harvest` holds a cut truss by rule."""
+HAND_STIFFNESS = 50_000.0
+"""The contact stiffness of every collider on the last wrist, in N/m. The rods'
+solver takes a contact's as the mean of the two shapes', and every other
+shape has Isaac Lab's default 2500 N/m, so it is 26 250 N/m against a fruit
+or a peduncle. At the default, a fruit borne on the head sinks into it about
+half a millimetre for every newton; at this, 0.6 mm under 28 N. At twice
+this, the closing shear stalls on a peduncle."""
 
 AIM = (0.5, 0.0045)
 """Where the mouth brings a peduncle: half the blade's length out from the
@@ -572,28 +579,34 @@ def harvester_cfg(machine: Harvester, prim_path: str, position) -> ArticulationC
 
 
 def spawn_harvester(prim_path: str, cfg: sim_utils.UrdfFileCfg, *args, **kwargs):
-    """Spawn the robot's URDF as `UrdfFileCfg` does, then `bind_hand_friction`.
+    """Spawn the robot's URDF as `UrdfFileCfg` does, then `bind_hand_material`.
     It has to be done here: the scene builds the Newton model's robot from
     the stage as soon as the robot is spawned, and an edit after that never
     reaches the model."""
     robot = sim_utils.spawn_from_urdf(prim_path, cfg, *args, **kwargs)
-    bind_hand_friction(robot)
+    bind_hand_material(robot)
     return robot
 
 
-def bind_hand_friction(robot) -> None:
-    """Give every collider on `HAND` under the prim `robot` `HAND_FRICTION`,
-    which URDF cannot say: a physics material bound to each. USD's physics
-    parser reads a collider's own binding only, not one on the link above
-    it, and the importer makes most of the link's pieces instances, which
-    cannot be edited inside, so those under the hand are made plain prims
-    first. Raises if it finds no collider there to bind."""
-    from pxr import Usd, UsdPhysics, UsdShade
+def bind_hand_material(robot) -> None:
+    """Give every collider on `HAND` under the prim `robot` `HAND_FRICTION`
+    and `HAND_STIFFNESS`, which URDF cannot say: a physics material bound to
+    each. USD's physics parser reads a collider's own binding only, not one
+    on the link above it, and the importer makes most of the link's pieces
+    instances, which cannot be edited inside, so those under the hand are
+    made plain prims first. Raises if it finds no collider there to bind."""
+    from pxr import Sdf, Usd, UsdPhysics, UsdShade
 
-    material = UsdShade.Material.Define(robot.GetStage(), robot.GetPath().AppendChild("Friction"))
+    material = UsdShade.Material.Define(
+        robot.GetStage(), robot.GetPath().AppendChild("HandMaterial")
+    )
     api = UsdPhysics.MaterialAPI.Apply(material.GetPrim())
     api.CreateStaticFrictionAttr(HAND_FRICTION)
     api.CreateDynamicFrictionAttr(HAND_FRICTION)
+    stiffness = material.GetPrim().CreateAttribute(
+        "newton:contactStiffness", Sdf.ValueTypeNames.Float
+    )
+    stiffness.Set(HAND_STIFFNESS)
     bound = 0
     for hand in [p for p in Usd.PrimRange(robot) if p.GetName() == HAND]:
         for instance in [p for p in Usd.PrimRange(hand) if p.IsInstance()]:
