@@ -481,6 +481,15 @@ class FruitParams:
     representative's size, so on a small budget a truss's fruit, packed to touch at
     their own sizes, are drawn into each other.
     """
+    detail: float
+    """How finely a fruit's skin is meshed, as a multiplier: at 1 its rings and
+    meridians keep within 0.6 mm of its shape, about a pixel to a camera half a meter
+    away, as a leaf's margin does at its own detail of 1, and its faces within twice
+    that; at 3 its rings and meridians keep within 0.2 mm and its faces within 0.4
+    mm, which leaves its outline round from close up. A full-grown 60 mm fruit comes
+    to about 1250 triangles with its calyx at 3, about 450 at 1 and 3700 at 8; each
+    fruit is meshed for its own size, so a young one costs less.
+    """
 
     def __init__(
         self,
@@ -493,6 +502,7 @@ class FruitParams:
         petal_length: float = 0.011,
         petal_reflex: float = 125.0,
         variations: int = 32,
+        detail: float = 3.0,
     ) -> None: ...
     def __repr__(self) -> str: ...
 

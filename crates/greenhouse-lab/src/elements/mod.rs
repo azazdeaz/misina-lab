@@ -263,6 +263,7 @@ mod tests {
             ("peduncle", edited(|p| p.truss.peduncle_length = 0.1)),
             ("bent trusses", edited(|p| p.stem.flexible_below = 1.8)),
             ("ripeness", edited(|p| p.fruit.ripe_trusses = 2.5)),
+            ("fruit detail", edited(|p| p.fruit.detail = 1.0)),
             ("seed", edited(|p| p.scene.seed = 7)),
         ] {
             let mut app = grown(small());
