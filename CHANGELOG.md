@@ -289,6 +289,10 @@ Scene document format 11.
   on.
 - The harvest demo finds its contacts with the sweep-and-prune broad phase: cut
   trusses pile up in the crate instead of lying through each other in one layer.
+- The harvest demo's hand slips: its colliders, the shear's among them, have
+  a friction coefficient of 0.25, where every one had the default 1.0. A
+  truss let go slides off the open finger as the shear opens, where it lay
+  on it until the blades were tipped down.
 - The pruning demo's vineyard grows bending weeds, and its robot's chassis
   and wheels push them aside as it drives the alley. Its video is filmed
   with them.
