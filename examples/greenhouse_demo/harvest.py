@@ -1004,8 +1004,11 @@ class Harvest:
             print(f"[INFO]: {self.job.prim}: gave up at the {self.stage}")
             self._touch()
         elif self.ticks > PATIENCE and self.stage == "lower":
-            # Held up on the way down, it lets go where it is.
+            # Held up on the way down, it lets go where it is, the arm held
+            # there too: freed of the truss, it would go on down as the shear
+            # opens.
             print(f"[INFO]: {self.job.prim}: let go on the way down")
+            self.target[3:] = self.q[3:]
             self._release(hand)
         elif self.ticks > PATIENCE:
             print(f"[INFO]: {getattr(self.job, 'prim', 'a run')}: gave up at {self.stage}")
