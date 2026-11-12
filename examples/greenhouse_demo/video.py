@@ -68,7 +68,7 @@ it, so the shear comes in from behind it, toward the camera, and the truss
 hangs below it in frame. Half a meter ahead, the lift column stands between
 it and a cut the arm reaches back for."""
 
-CRATE = Shot(eye=(0.0, -0.45, 0.6), look=(0.0, 0.0, 0.1), lens=18.0)
+CRATE = Shot(eye=(0.0, -0.45, 0.7), look=(0.0, 0.0, 0.1), lens=18.0)
 """The crate, from above the path across from the side the truss is cut on,
 as the arm carries the truss to it and lets it go: the point it frames is
 the crate's middle, at its underside. Any higher, the camera stands among
