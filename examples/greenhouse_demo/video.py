@@ -68,10 +68,10 @@ it, so the shear comes in from behind it, toward the camera, and the truss
 hangs below it in frame. Half a meter ahead, the lift column stands between
 it and a cut the arm reaches back for."""
 
-CRATE = Shot(eye=(0.0, -0.45, 0.6), look=(0.0, 0.0, 0.1), lens=18.0)
+CRATE = Shot(eye=(0.0, -0.45, 0.7), look=(0.0, 0.0, 0.1), lens=18.0)
 """The crate, from above the path across from the side the truss is cut on,
 as the arm carries the truss to it and lets it go: the point it frames is
-the crate's middle, at its underside. Any higher, the camera stands among
+the crate's middle, at its underside. 10 cm higher, the camera stands among
 the leaves of the row across the path when the lift is up for a high cut."""
 
 TOUCH = Shot(
@@ -175,6 +175,7 @@ PACE = {
     "close": 2.0,
     "outward": 1.5,
     "pull": 1.5,
+    "lower": 1.5,
     "open": 3.0,
     "drop": 3.0,
     "rest": 0.25,
@@ -263,7 +264,13 @@ def main():
                     swung.add(truss.prim)
                 filmed = None
                 gone = left_at is not None and now - left_at < DROP
-                carried = harvest.severed and harvest.stage in ("carry", "open", "tip")
+                carried = harvest.severed and harvest.stage in (
+                    "carry",
+                    "lower",
+                    "open",
+                    "leave",
+                    "tip",
+                )
                 if truss and truss.prim in captions and truss.prim in swung and carried:
                     shot, filmed, pace = CRATE, truss, harvest.stage
                 elif last is not None and last.prim in captions and last.prim in swung and gone:

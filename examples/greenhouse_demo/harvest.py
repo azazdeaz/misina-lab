@@ -5,7 +5,7 @@ Two short rows whose lowest trusses are rods Newton's VBD bends, and the
 turn and works down it and back: every due truss on its left going in, every
 one on its right coming out. Each is cut at its peduncle, by its stem, held
 by it, pulled out of the crop into the path, carried to the crate on the
-lift and let go over its middle.
+lift and lowered into it where what lies there is lowest, then let go.
 
 What is due and where to cut it come from the scene's own ground truth, not
 from a camera. A truss is due once its least ripe fruit is turning, as the
@@ -39,7 +39,17 @@ from isaaclab.utils import instantiate
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
 from greenhouse_lab.isaaclab import GreenhouseCfg, LayoutCfg, StemCfg
-from harvester import AISLE, ARM_HOME, HAND, LIFT, RAIL, Harvester, arm_joints, harvester_cfg
+from harvester import (
+    AISLE,
+    ARM_HOME,
+    HAND,
+    LIFT,
+    RAIL,
+    Crate,
+    Harvester,
+    arm_joints,
+    harvester_cfg,
+)
 from kinematics import frames, rotation, solve, transform
 from misina_lab.isaaclab import ColliderView, rods
 from shear import SHEAR_JOINT, Stroke
@@ -130,14 +140,30 @@ PULL = 0.2
 """How far a truss cut and held is pulled out across the path, from the
 stand-off, before it is carried to the crate: out of the crop wall, and
 short of the trolley."""
-DROP = 0.42
-"""How high above the crate's floor the jaws carry a truss and let it go,
-over its middle, in meters: the truss hanging from them clears the crate's
-rim."""
-ASIDE = 0.12
-"""How far along the crate from its middle the jaws let a truss go where
-the middle is out of the arm's reach, in meters: the middle is straight
-behind the shoulder, at the end of its range."""
+CARRY = 0.42
+"""How high above the crate's floor the jaws carry a truss to it, in
+meters: the truss hanging from them clears the crate's rim."""
+SPOTS = (0.0, 0.12, -0.12)
+"""Where along the crate from its middle the jaws may lower a truss, in
+meters, the middle first. The middle is straight behind the shoulder, at
+the end of its range, and now and then out of reach. A truss let go falls
+over from about 15 cm up, which from a spot off the crate's middle line
+across it would reach past the 18.5 cm to the side wall."""
+LOWER = 0.15
+"""How fast the jaws lower a truss into the crate, in m/s."""
+SINK = 0.03
+"""How far the jaws go on down past where the truss's lowest fruit meets
+what lies under it, in meters, so the truss rests its weight there before
+the shear opens."""
+CLEAR = 0.1
+"""How far above the crate's rim the jaws stay as they lower a truss, in
+meters: the mouth is level, so the wrist behind it rides at about the
+jaws' height, and further down it meets the rim. A truss hangs about 15 cm
+below the jaws, so one lowered into the empty crate stops about 6 cm short
+of its floor."""
+LEAVE = 0.06
+"""How far the open mouth backs off a truss it lowered, in meters: from
+the hook's crook out past the claw's tip."""
 HELD = 0.015
 """How near the middle of the jaws, in meters, a truss's rod cut free
 passes for the jaws to have it: a peduncle anywhere between them passes
@@ -442,12 +468,8 @@ def gesture_poses(gesture: Gesture, truss: Truss, shears, machine: Harvester) ->
     across = np.cross(up, level)
     if across @ truss.side < 0:
         across = -across
-    placed = []
-    for body, offset, _, _ in truss.fruit:
-        pose = shears.pose(body)
-        placed.append(frame_of(pose[:3], pose[3:]) @ offset)
-    middles, axes = np.array([f[:3, 3] for f in placed]), np.array([f[:3, 2] for f in placed])
-    radii, halves = np.array([f[2] for f in truss.fruit]), np.array([f[3] for f in truss.fruit])
+    fruit = placed_fruit(truss.fruit, shears)
+    middles, axes, radii, halves = fruit
     # How far each fruit reaches from its middle toward the arm, level with
     # its middle: out through its side, or through a round end where the
     # side ends first. And how far it reaches down.
@@ -458,7 +480,7 @@ def gesture_poses(gesture: Gesture, truss: Truss, shears, machine: Harvester) ->
         radii / sin,
         halves * cos + np.sqrt(np.maximum(radii**2 - (halves * sin) ** 2, 0.0)),
     )
-    under = radii + halves * np.abs(axes[:, 2])
+    _, under = reaches(fruit)
     back, low = np.argmin(middles @ level - behind), np.argmin(middles[:, 2] - under)
     anchors = {
         "back": middles[back] - behind[back] * level,
@@ -478,6 +500,54 @@ def gesture_poses(gesture: Gesture, truss: Truss, shears, machine: Harvester) ->
         pose[:3, 3] = anchors[point.anchor] + offset - tip
         poses.append(pose)
     return poses
+
+
+Fruit = tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+"""Fruit colliders where they lie: each one's middle, its +Z, its radius and
+how far it is drawn out along its +Z either way."""
+
+
+def placed_fruit(fruit: list, shears) -> Fruit:
+    """Fruit colliders, listed as `Truss.fruit` lists them, where they lie
+    now in the world."""
+    placed = np.zeros((len(fruit), 4, 4))
+    for i, (body, offset, _, _) in enumerate(fruit):
+        pose = shears.pose(body)
+        placed[i] = frame_of(pose[:3], pose[3:]) @ offset
+    radii, halves = np.array([each[2:] for each in fruit]).reshape(-1, 2).T
+    return placed[:, :3, 3], placed[:, :3, 2], radii, halves
+
+
+def moved(fruit: Fruit, frame: np.ndarray) -> Fruit:
+    """`fruit` moved by the transform `frame`."""
+    middles, axes, radii, halves = fruit
+    return middles @ frame[:3, :3].T + frame[:3, 3], axes @ frame[:3, :3].T, radii, halves
+
+
+def reaches(fruit: Fruit) -> tuple[np.ndarray, np.ndarray]:
+    """How far each of `fruit` reaches from its middle level, and up or down."""
+    _, axes, radii, halves = fruit
+    upright = np.abs(axes[:, 2])
+    return radii + halves * np.sqrt(np.maximum(1.0 - upright**2, 0.0)), radii + halves * upright
+
+
+def room(held: Fruit, pile: Fruit, crate: Crate) -> float:
+    """How far the fruit `held` can come straight down before one of them
+    meets one of `pile`, `crate`'s floor, or its rim where it reaches out
+    over a wall. Both are in the crate's frame, each fruit taken as the
+    upright cylinder round it: it meets the highest it overlaps seen from
+    above that reaches below its bottom."""
+    (low, *_), (high, *_) = held, pile
+    (wide, under), (broad, over) = reaches(held), reaches(pile)
+    inside = np.array([crate.length, crate.width]) / 2 - crate.rib - crate.wall
+    out = (np.abs(low[:, :2]) + wide[:, None] > inside).any(axis=1)
+    floor = np.where(out, crate.height, crate.floor)
+    bottoms = low[:, 2] - under
+    below = np.linalg.norm(low[:, None, :2] - high[None, :, :2], axis=2) < wide[:, None] + broad
+    below &= high[None, :, 2] - over < bottoms[:, None]
+    tops = np.where(below, high[:, 2] + over, -np.inf).max(axis=1, initial=-np.inf)
+    # With no fruit held, nothing stops it.
+    return float((bottoms - np.maximum(floor, tops)).min(initial=np.inf))
 
 
 def station(machine: Harvester, cut: np.ndarray, way: np.ndarray, aisle: float) -> np.ndarray:
@@ -529,8 +599,10 @@ class Harvest:
     from there: the move to a stand-off and the straight line in, holding
     still until the mouth is at the cut, the shear closing, cutting and
     taking the truss, the line back out, a straight line `PULL` out across
-    the path, a swing round to over the crate, and the shear opening there,
-    letting the truss go, and tipped down if it still lies on the finger. A
+    the path, a swing round to over the crate, a straight line down until
+    the truss rests on what lies there, and the shear opening there, letting
+    the truss go, and backing off it; a truss let fall instead, short of
+    the crate, is tipped out if it still lies on the finger. A
     shear that cut nothing opens and backs out, and the cut is planned
     afresh, `TRIES` times in all. `stroke` is the shear. The robot's base is
     at `base` in the world.
@@ -578,6 +650,9 @@ class Harvest:
         """The body of the rod cut free that the jaws hold, from the shut until
         the shear opens or the job is given up: `run` has `Shears.hold` carry
         it with the hand."""
+        self.lowered = False
+        """Whether the job's truss was lowered into the crate, for the open
+        shear to back off it (`_leave`)."""
         self.time = 0.0
         self.soft: set[int] = set()
         """The rod bodies the arm may brush, those the last cut was planned through."""
@@ -602,7 +677,7 @@ class Harvest:
 
     def _next(self) -> None:
         """Start on the next job, or finish."""
-        self.held = None
+        self.held, self.lowered = None, False
         while self.jobs:
             self.job = self.jobs.pop(0)
             if not isinstance(self.job, Truss):
@@ -752,19 +827,21 @@ class Harvest:
             self._play("pull", pulling)
 
     def _carry(self, hand: np.ndarray) -> None:
-        """Swing the truss held round the arm's base to over the crate's
-        middle, or `ASIDE` off it either way, the jaws `DROP` above its floor,
-        or let it go where it is if the arm can get to none of them. The mouth
-        ends turned about the upright alone, so the truss hangs in the jaws as
-        it did when cut, its weight pulling away from the mouth's entrance. On
-        the way the arm may brush any truss, which leaves `planner` fewer to
-        keep off and the mouth less to turn."""
-        platform = self.platform()
+        """Swing the truss held round the arm's base to over the crate, the
+        jaws `CARRY` above its floor, at the one of `SPOTS` where the truss
+        would come down furthest before it meets what lies in the crate
+        (`room`), or let it go where it is if the arm can get over none of
+        them. The mouth ends turned about the upright alone, so the truss
+        hangs in the jaws as it did when cut, its weight pulling away from the
+        mouth's entrance. On the way the arm may brush any truss, which leaves
+        `planner` fewer to keep off and the mouth less to turn."""
+        platform, crate = self.platform(), self.machine.crate_frame
         mouth = np.linalg.inv(platform) @ hand @ self.machine.tool
         hold = np.array([self.machine.shear.hold, 0.0, 0.0, 1.0])
         jaws = (mouth @ hold)[:3]
-        carrying = None
-        for along in (0.0, ASIDE, -ASIDE):
+        held, pile = self._crated()
+        spots = []
+        for along in SPOTS:
             there = self._over_crate(along)
             # Round the shoulder's axis, the platform's upright: the short
             # way, unless that takes the shoulder past its range.
@@ -777,9 +854,15 @@ class Harvest:
             # Unsolved where even the long way round takes the shoulder past
             # its range.
             if distance < 0.005 and angle < 0.02:
-                carrying = self.planner.move(
-                    self.q[3:], drop, platform, set(self.shears.bodies), self.beside
-                )
+                # The truss swung there with the mouth, in the crate's frame.
+                swung = np.linalg.inv(crate) @ over @ np.linalg.inv(mouth) @ crate
+                spots.append((round(room(moved(held, swung), pile, self.machine.crate), 2), drop))
+        carrying = None
+        # Furthest down first; of spots as far to the centimetre, the first.
+        for _, drop in sorted(spots, key=lambda spot: -spot[0]):
+            carrying = self.planner.move(
+                self.q[3:], drop, platform, set(self.shears.bodies), self.beside
+            )
             if carrying is not None:
                 break
         if carrying is None:
@@ -788,10 +871,81 @@ class Harvest:
         else:
             self._play("carry", carrying)
 
+    def _lower(self, hand: np.ndarray) -> None:
+        """Lower the truss held straight down at `LOWER` until its lowest
+        fruit is `SINK` past where it meets what lies under it in the crate,
+        the jaws `CLEAR` above the rim at the lowest; three quarters or half
+        as far where the arm would meet the crate or itself (`_clear`); or
+        let it go where it is if none of those will do."""
+        start = hand @ self.machine.tool
+        crate = np.linalg.inv(self.platform() @ self.machine.crate_frame)
+        jaws = (crate @ start @ [self.machine.shear.hold, 0.0, 0.0, 1.0])[2]
+        down = room(*self._crated(), self.machine.crate) + SINK
+        down = np.clip(down, 0.0, jaws - self.machine.crate.height - CLEAR)
+        # Less far where the arm would meet the crate or itself.
+        for depth in down * np.array([1.0, 0.75, 0.5]):
+            end = start.copy()
+            end[2, 3] -= depth
+            lowering = self.planner.line(self.q[3:], self.platform(), start, end, LOWER)
+            if self._clear(lowering):
+                self.lowered = True
+                self._play("lower", lowering)
+                return
+        print(f"[INFO]: {self.job.prim}: let go over the crate")
+        self._release(hand)
+
+    def _leave(self, hand: np.ndarray) -> None:
+        """Back the open mouth `LEAVE` off the truss it lowered, the way it
+        came in to the cut, so the peduncle passes out under the hook's claw:
+        the truss rests in the crate, so tipping the blades about the
+        peduncle would not free it. Where the arm would meet the crate or
+        itself, move on from where it is. Neither way does the mouth get
+        `_fallen`'s check: `Stroke.fouled` counts every piece cut free,
+        those in the crate under the lowered mouth too, and tipping turns
+        the blades down into them."""
+        start = hand @ self.machine.tool
+        end = start @ transform(-LEAVE * self.machine.way_in)
+        leaving = self.planner.line(self.q[3:], self.platform(), start, end)
+        if self._clear(leaving):
+            self._play("leave", leaving)
+        else:
+            self._opened()
+
+    def _fallen(self, hand: np.ndarray) -> None:
+        """Tip out a truss let go that still lies on the finger, or move on."""
+        if self.severed and self.stroke.fouled(hand):
+            self._tip(hand)
+        else:
+            self._opened()
+
+    def _clear(self, line: tuple[np.ndarray, np.ndarray] | None) -> bool:
+        """Whether the arm can follow a straight `line` of the mouth's, and
+        `planner` finds the arm at its end clear of everything but the
+        trusses: `Planner.line` solves its points alone, so it passes the
+        arm through the crate and the robot's own links as readily. Only the
+        end is checked: a line down into the crate is deepest there, the
+        wrist nearest the rim."""
+        return (
+            line is not None
+            and self.planner.move(
+                self.q[3:], line[0][-1], self.platform(), set(self.shears.bodies), self.beside
+            )
+            is not None
+        )
+
+    def _crated(self) -> tuple[Fruit, Fruit]:
+        """The job's truss's fruit and those of the trusses cut before it,
+        where they lie now in the crate's frame."""
+        inverse = np.linalg.inv(self.platform() @ self.machine.crate_frame)
+        before = [fruit for truss in self.cut if truss is not self.job for fruit in truss.fruit]
+        return tuple(
+            moved(placed_fruit(fruit, self.shears), inverse) for fruit in (self.job.fruit, before)
+        )
+
     def _over_crate(self, along: float = 0.0) -> np.ndarray:
-        """Where the jaws let a truss go, in the platform's frame: `DROP` over
-        the crate's floor, `along` its length from its middle."""
-        return (self.machine.crate_frame @ [along, 0.0, self.machine.crate.floor + DROP, 1.0])[:3]
+        """Where the jaws are carried to, in the platform's frame: `CARRY`
+        over the crate's floor, `along` its length from its middle."""
+        return (self.machine.crate_frame @ [along, 0.0, self.machine.crate.floor + CARRY, 1.0])[:3]
 
     def _between(self, hand: np.ndarray) -> tuple[float, int]:
         """How near the middle of the jaws the job's rod cut free passes, and
@@ -849,6 +1003,13 @@ class Harvest:
             # A gesture the arm cannot finish is left, not the truss.
             print(f"[INFO]: {self.job.prim}: gave up at the {self.stage}")
             self._touch()
+        elif self.ticks > PATIENCE and self.stage == "lower":
+            # Held up on the way down, it lets go where it is, the arm held
+            # there too: freed of the truss, it would go on down as the shear
+            # opens.
+            print(f"[INFO]: {self.job.prim}: let go on the way down")
+            self.target[3:] = self.q[3:]
+            self._release(hand)
         elif self.ticks > PATIENCE:
             print(f"[INFO]: {getattr(self.job, 'prim', 'a run')}: gave up at {self.stage}")
             self.tally.missed += isinstance(self.job, Truss)
@@ -871,11 +1032,10 @@ class Harvest:
                 self._shut(hand)
         elif self.stage == "open":
             if self.stroke.tick(hand, angle, closing=False):
-                # A truss let go still lying on the finger is tipped out.
-                if self.severed and self.stroke.fouled(hand):
-                    self._tip(hand)
+                if self.lowered:
+                    self._leave(hand)
                 else:
-                    self._opened()
+                    self._fallen(hand)
         else:
             # A planned stretch, played on the simulation's clock, its end
             # held still until the robot is there and still.
@@ -901,7 +1061,11 @@ class Harvest:
                 elif settled and self.stage == "pull":
                     self._carry(hand)
                 elif settled and self.stage == "carry":
+                    self._lower(hand)
+                elif settled and self.stage == "lower":
                     self._release(hand)
+                elif settled and self.stage == "leave":
+                    self._opened()
                 elif settled and self.stage == "tip" and not self.stroke.fouled(hand):
                     self._opened()
                 elif settled and self.stage in ("fold", "inward", "outward"):

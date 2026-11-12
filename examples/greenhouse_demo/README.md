@@ -83,8 +83,9 @@ The crate, `harvester.Crate`, is a solid-walled Euro stacking crate,
 it, under the folded shear and within the arm's reach. It is
 drawn with the ribs down its walls, the rim round its top and the foot it
 stacks on, and collides as five boxes: the floor, and each wall out to the
-ribs' faces. The arm carries every truss it cuts to the crate and lets
-it go over its middle.
+ribs' faces. The arm carries every truss it cuts to the crate and
+lowers it in, at one of three spots along it; one it cannot carry there,
+it lets go where it is.
 
 The plan comes from the scene's own ground truth, not from a camera:
 
@@ -126,12 +127,26 @@ The plan comes from the scene's own ground truth, not from a camera:
 5. **The release.** Held by its peduncle, the truss rides out on the line
    back to the stand-off and 20 cm across the path, clear of the crop
    wall, rising as it goes until the jaws are 42 cm above the crate's
-   floor. The arm swings it round its base from there to over the crate's
-   middle, or 12 cm along the crate from it where the middle is past the
-   shoulder's range, the mouth turning about the upright alone, so the
-   truss hangs in the jaws as it did when cut, its weight pulling away
-   from the mouth's entrance. The shear opens over the crate and the truss
-   drops into it. One still lying on the open finger is tipped off it. The
+   floor. The arm swings it round its base from there to over the crate,
+   the mouth turning about the upright alone, so the truss hangs in the
+   jaws as it did when cut, its weight pulling away from the mouth's
+   entrance. Of three spots, the crate's middle and 12 cm along it either
+   way, the truss goes to the one the arm reaches where
+   it would come down furthest before a fruit of it meets a fruit already
+   in the crate, the floor, or the rim where it reaches out over a wall,
+   each fruit taken as the upright cylinder round it. The arm lowers it
+   there, straight down at 15 cm/s, until it is 3 cm past that meeting, so
+   the truss rests its weight on what lies under it, but with the jaws no
+   lower than 10 cm above the rim: the wrist rides at about their height,
+   and further down it meets the rim. A truss hangs about 15 cm below the
+   jaws, so one lowered into the empty crate stops about 6 cm short of the
+   floor. Where cuRobo finds the arm at the end of that line meeting the
+   crate or its own links, it tries three quarters as far, then half, and
+   failing those lets the truss go where it is. The shear opens and, where
+   cuRobo finds the arm clear at the end of that line too, backs 6 cm off
+   the truss the way it came in to the cut, so the peduncle passes out
+   under the hook's claw. A truss let go short of the crate and still
+   lying on the open finger is tipped off it. The
    forearm, the wrists, the shear and the crate collide with the trusses
    they meet, and the arm, the shear, the crate, the platform's deck and
    the trolley's chassis and mast with each other.
@@ -141,12 +156,14 @@ reaches, how many of those only by brushing a truss, how many it cuts,
 holds and lets go, how many end in the crate, and the seconds per truss
 cut.
 On the demo's two 4 m rows, 25 trusses are due on the three paths. The
-robot reaches and cuts every one, one only by brushing a truss, and 21 to
-23 ride in the jaws to the crate and land in it, two runs differing by a
-truss or two. The rest are let go at the stand-off, where the arm cannot
-follow the line out across the path, or come to rest partly outside the
-crate. That is about 5.5 s of simulated time a cut and 235 s for the whole
-run, which takes about six minutes on an RTX 5070 Ti.
+robot reaches and cuts every one, one only by brushing a truss, and 22 or
+23 ride in the jaws to the crate and are lowered into it, runs differing
+by a truss or two. The rest are let go at the stand-off, where the arm
+cannot follow the line out across the path, or fall over the crate's rim
+as they settle. A truss lowered into the crate is let go with its lowest
+fruit 2 cm, in the median, over what lies under it. That is about 5.8 s of
+simulated time a cut and 280 s for the whole run, which takes about seven
+minutes on an RTX 5070 Ti.
 
 ## Cutting and holding
 
@@ -239,7 +256,11 @@ the trolley, the rails, the floor or any other stretch of stem. The
 straight lines in, out and across the path are solved point by point, not
 planned, so they stay on the branch of the arm cuRobo reached the stand-off
 on, and within the joint range cuRobo plans in, so the fold that follows
-plans from where they end. The swing to the crate may brush any truss,
+plans from where they end. Being solved point by point, a line keeps the
+arm off nothing, and the lines down into the crate and back off a truss
+let go there run by the crate's walls: each is made only where cuRobo
+finds a move to where it ends, the trusses left out. The swing to the
+crate may brush any truss,
 which leaves cuRobo fewer to keep the arm off and the mouth less to turn
 on the way. Where the arm already touches what cuRobo keeps it off, such as a
 stem, cuRobo finds no fold, and the arm folds on straight lines in joint
