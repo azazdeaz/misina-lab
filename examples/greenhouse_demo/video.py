@@ -170,6 +170,7 @@ PACE = {
     "close": 2.0,
     "outward": 1.5,
     "pull": 1.5,
+    "lower": 1.5,
     "open": 3.0,
     "drop": 3.0,
     "rest": 0.25,
@@ -261,7 +262,13 @@ def main():
                     swung.add(truss.prim)
                 filmed = None
                 gone = left_at is not None and now - left_at < DROP
-                carried = harvest.severed and harvest.stage in ("carry", "open", "tip")
+                carried = harvest.severed and harvest.stage in (
+                    "carry",
+                    "lower",
+                    "open",
+                    "leave",
+                    "tip",
+                )
                 if truss and truss.prim in captions and truss.prim in swung and carried:
                     shot, filmed, pace = CRATE, truss, harvest.stage
                 elif last is not None and last.prim in captions and last.prim in swung and gone:

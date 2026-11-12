@@ -294,6 +294,36 @@ def test_a_gestures_tip_lands_on_its_points(fruit, back, low, middle):
             assert pose[:3, 2] @ up == pytest.approx(np.sin(tilt))
 
 
+def test_a_truss_is_lowered_onto_the_highest_fruit_under_it():
+    """A truss comes down until a fruit of it meets the highest fruit it
+    overlaps seen from above, the crate's floor, or the rim for one reaching
+    out over a wall; a fruit lying level reaches out along its length."""
+    harvest = pytest.importorskip("harvest")
+    crate = MACHINE.crate
+    up, level = [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]
+
+    def fruit(*placed):
+        """Fruit of radius 0.03, each a middle, a +Z and a half-length."""
+        middles, axes, halves = (np.array([p[i] for p in placed], dtype=float) for i in range(3))
+        return middles.reshape(-1, 3), axes.reshape(-1, 3), np.full(len(placed), 0.03), halves
+
+    held = fruit(([0.0, 0.0, 0.3], up, 0.01), ([0.0, 0.1, 0.33], up, 0.0))
+    empty = fruit()
+    assert harvest.room(held, empty, crate) == pytest.approx(0.3 - 0.04 - crate.floor)
+    # The first overlaps the first held by a centimetre, seen from above;
+    # the higher second overlaps neither.
+    pile = fruit(([0.05, 0.0, 0.05], up, 0.0), ([0.15, 0.0, 0.2], up, 0.0))
+    assert harvest.room(held, pile, crate) == pytest.approx(0.26 - 0.08)
+    # Lying level, it reaches 5 cm along, under the second held: as a
+    # sphere it would reach 3.
+    pile = fruit(([0.07, 0.1, 0.05], level, 0.02))
+    assert harvest.room(held, pile, crate) == pytest.approx(0.3 - 0.08)
+    # Out over the wall along the crate, the second comes down on the rim.
+    out = crate.length / 2 - crate.rib - crate.wall - 0.02
+    held = fruit(([0.0, 0.0, 0.3], up, 0.0), ([out, 0.0, 0.33], up, 0.0))
+    assert harvest.room(held, empty, crate) == pytest.approx(0.3 - crate.height)
+
+
 def test_a_turned_approach_cuts_as_far_off_the_stem():
     """Every cut pose keeps the blades' plane along the stem and the hook
     up, and the fixed blade as far off the stem's axis as coming in along
