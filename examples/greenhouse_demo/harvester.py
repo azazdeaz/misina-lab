@@ -8,7 +8,7 @@ row heads to a path, `RAIL` down it and `LIFT` up. The trolley and the lift
 are primitives, every dimension a field of `Harvester`; the arm
 is MuJoCo Menagerie's model of Universal Robots' UR5e, fetched from `ASSETS`
 on first use and read out of its MJCF, so its links are drawn and weighed
-as Menagerie has them. `urdf` writes the robot, and `Harvester.chain` is the
+as Menagerie has them, shaded smooth. `urdf` writes the robot, and `Harvester.chain` is the
 same joints for `kinematics`.
 
 The cutter is the pruning demo's bypass shear, `shear.Shear`, made to cut
@@ -41,6 +41,7 @@ import tempfile
 import xml.etree.ElementTree as ElementTree
 
 import numpy as np
+import trimesh
 
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
@@ -678,7 +679,8 @@ def _ur5e() -> _Arm:
             spec = attrs(geom, cls)
             xyz, rpy = _placed(geom)
             if spec.get("type") == "mesh":
-                mesh = f'<mesh filename="{meshes / spec["mesh"]}.obj"/>'
+                obj = _smoothed(meshes / f"{spec['mesh']}.obj")
+                mesh = f'<mesh filename="{obj}"/>'
                 material = spec["material"]
                 parts.append(
                     _tagged("visual", _origin(xyz, rpy), mesh, (material, colours[material]))
@@ -707,6 +709,32 @@ def _ur5e() -> _Arm:
         transform(*_placed(site)),
         _placed(base)[1],
     )
+
+
+CREASE = math.radians(40.0)
+"""Where two faces of an arm mesh meet at more than this, the edge between
+them is drawn sharp; under it, shaded smooth."""
+
+
+def _smoothed(path: pathlib.Path) -> str:
+    """Menagerie's mesh at `path` with smooth normals, written once to
+    `_CACHE` named for its contents; its path. Menagerie's OBJ files give
+    every triangle its own three corners and its face's normal, which draws
+    each facet: here the corners are welded and each takes the normal
+    averaged over its faces, split along every edge sharper than `CREASE`."""
+    mesh = trimesh.load(path, process=False, force="mesh")
+    # A new mesh is processed, which welds the corners that share a point.
+    smooth = trimesh.graph.smooth_shade(trimesh.Trimesh(mesh.vertices, mesh.faces), CREASE)
+    text = trimesh.exchange.obj.export_obj(smooth, include_normals=True, header=None)
+    out = _CACHE / f"{path.stem}_{hashlib.sha256(text.encode()).hexdigest()[:16]}.obj"
+    if not out.exists():
+        _CACHE.mkdir(parents=True, exist_ok=True)
+        # Written to a new file beside it and swapped in, so a write cut short
+        # never leaves a truncated mesh under the name.
+        with tempfile.NamedTemporaryFile("w", dir=_CACHE, suffix=".part", delete=False) as draft:
+            draft.write(text)
+        pathlib.Path(draft.name).replace(out)
+    return str(out)
 
 
 def _bodies(body: ElementTree.Element, cls: str):
