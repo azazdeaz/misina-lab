@@ -344,9 +344,10 @@ Scene document format 12.
   contact stiffness of 50 000 N/m, where every one had Isaac Lab's default
   2500. A fruit borne on the shear's head sinks 0.6 mm into it, where it
   sank about a centimetre.
-- The harvest demo's video shows a truss giving way to the arm: before the
-  first cut, the open shear pushes the truss from the side and brushes its
-  lowest fruit, filmed close up. `harvest.run` makes the `Gesture`s it is
+- The harvest demo's video opens on a truss giving way to the arm: before
+  the first cut, the open shear pushes the truss from the side, brushes its
+  lowest fruit and lifts it, filmed close up. The demo's crop is deleafed up
+  to the truss above the one picked, so leaves hang in the video's view. `harvest.run` makes the `Gesture`s it is
   given at the first truss, its points placed about the truss's fruit, and
   passes over one the arm cannot plan or finish.
 - The pruning demo's vineyard grows bending weeds, and its robot's chassis

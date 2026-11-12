@@ -52,7 +52,9 @@ GREENHOUSE_CFG = GreenhouseCfg(
     layout=LayoutCfg(rows=2, row_length=4.0),
     # Skinned: each rod is drawn by one mesh bending with it, which keeps the
     # rachis's zigzag and its knots, where a tube per segment runs straight.
-    stem=StemCfg(flexible_below=BELOW, skinned=True),
+    # Deleafed up to the truss above the one picked: the lowest leaves join
+    # the stem about 40 cm above a due truss, where the camera sees them.
+    stem=StemCfg(flexible_below=BELOW, skinned=True, deleafed_to_truss=2),
 )
 
 GREENHOUSE_PATH = "/World/Greenhouse"
