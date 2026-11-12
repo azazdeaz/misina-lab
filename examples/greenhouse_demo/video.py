@@ -83,8 +83,9 @@ TOUCH = Shot(
 """The first take's `GESTURES`, close up: from the path a little ahead of the
 truss and level with its fruit, so a push along the row reads across the
 picture. The video opens on it once the arm has reached the first
-gesture's first point, under `TITLE` until the next gesture: on its way
-there from the folded arm, the shear swings past where this shot stands."""
+gesture's first point, under `TITLE` until that gesture is made: on its
+way there from the folded arm, the shear swings past where this shot
+stands."""
 
 TITLE = "Harvesting tomato trusses with a pipe-rail robot, in Isaac Sim"
 """The caption the video opens on."""
@@ -236,18 +237,16 @@ def main():
         due, last, left_at, shown = 0.0, None, None, None
         ridden, row = None, np.array([0.0, 1.0, 0.0])
         share = 1.0 - np.exp(-1.0 / (LAG * FPS))
-        # The gestures begun, by their place in `GESTURES`: one the arm could
-        # not plan is passed over. Nothing is filmed before the first.
-        begun: set[int] = set()
+        # Whether a gesture has begun: nothing is filmed before the first.
+        touched = False
         try:
             for step, harvest in enumerate(
                 demo.run(sim, robot, machine, PATHS, render=False, gestures=GESTURES)
             ):
                 now = step * demo.SIM_DT
                 truss = harvest.job if isinstance(harvest.job, demo.Truss) else None
-                if harvest.stage == "touch":
-                    begun.add(len(GESTURES) - len(harvest.gestures) - 1)
-                touched, gesturing = bool(begun), harvest.stage in ("reach", "touch")
+                touched = touched or harvest.stage == "touch"
+                gesturing = harvest.stage in ("reach", "touch")
                 if truss and harvest.stage == "approach":
                     planned.add(truss.prim)
                 # A take's truss out of reach passes its caption on.
@@ -298,7 +297,7 @@ def main():
                     way = demo.heading(filmed.cut[:3, 0], filmed.side)
                     point, side = filmed.cut[:3, 3], filmed.side
                     if gesturing:
-                        caption = TITLE if begun == {0} else TOUCH.caption
+                        caption = TITLE if harvest.made == 0 else TOUCH.caption
                     else:
                         caption = captions[filmed.prim]
                     if shot is CRATE:

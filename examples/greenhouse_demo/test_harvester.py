@@ -313,3 +313,15 @@ def test_a_turned_approach_cuts_as_far_off_the_stem():
         assert x @ (pose[:3, 3] - truss.axis) == pytest.approx(0.016 - MACHINE.shear.bypass)
         assert z @ truss.side == pytest.approx(np.sin(yaw) * np.cos(tilt))
         assert y[2] > 0.0
+
+
+def test_a_truss_with_no_fruit_passes_every_gesture_over(monkeypatch):
+    """Gestures are made at the first truss or not at all: none is left over
+    for the next truss, where the video would film them as the first's."""
+    harvest = pytest.importorskip("harvest")
+    run = object.__new__(harvest.Harvest)
+    run.job = harvest.Truss("/Truss", np.eye(4), True, side=np.array([0.0, 1.0, 0.0]))
+    run.gestures = [harvest.Gesture("push", (harvest.Point("back"),))]
+    monkeypatch.setattr(run, "_plan", lambda: None)
+    run._touch()
+    assert run.job.fruit == [] and run.gestures == []

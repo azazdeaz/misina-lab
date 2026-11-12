@@ -666,10 +666,11 @@ class Harvest:
 
     def _touch(self) -> None:
         """Make the next of `gestures` at the truss the trolley stands for, or
-        plan its cut once none is left."""
-        while self.gestures and self.job.fruit:
+        plan its cut once none is left. A truss with no fruit to place them
+        about passes every one over, so none is left for a later truss."""
+        while self.gestures:
             gesture = self.gestures.pop(0)
-            if (planned := self._gesture(gesture)) is not None:
+            if self.job.fruit and (planned := self._gesture(gesture)) is not None:
                 reach, self.touching = planned
                 self._play("reach", reach)
                 return
