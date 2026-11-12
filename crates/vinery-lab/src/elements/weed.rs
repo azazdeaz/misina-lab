@@ -26,6 +26,7 @@
 //! Weed_0017               the placed plant, carrying its WeedConfig
 //!   Crown                 -> parts/Weed_<rep>: everything that stays rigid
 //!   Stalk_0               one bending stem
+//!     Skin                with `skinned`, what draws it, in place of each Stem
 //!     Cable               its centerline, simulated, never drawn
 //!     Cable_edge_body_0   one rod segment, its transform driven by the solver
 //!       Stem              the tube this segment is drawn with
@@ -64,21 +65,22 @@ use super::{Grow, Rng, SceneParams, salt};
 use misina_lab::geometry::mesh::{MeshData, merge_meshes};
 use misina_lab::geometry::scatter::jittered_grid;
 use misina_lab::geometry::shapes::{self, bent, lying, standing};
-use misina_lab::geometry::strand::{Bark, Strand, strand_mesh};
+use misina_lab::geometry::strand::{Bark, Strand, strand_mesh, strand_mesh_ringed};
 use misina_lab::params::{Choices, Label, Slider};
 use misina_lab::quantize::{Metric, farthest_first};
 use misina_lab::scene::{
     Geometry, Library, Order, PrimRoot, Surface, UsdType, cable, configs_changed, placed, rebase,
-    segment_frames, segment_tubes, spawn_rod,
+    segment_frames, segment_tubes, skin_mesh, spawn_rod,
 };
 
 /// The mesh-library prefix the plants are registered under: a whole plant, or
 /// the crown of one with bending stems.
 pub const PART: &str = "Weed";
 
-/// The mesh-library prefixes of a bending stem's per-segment tubes and of the
-/// leaves riding each segment. Numbered across the layer, since how many a
-/// representative needs depends on how long its stems came out.
+/// The mesh-library prefixes of a bending stem's per-segment tubes, or its
+/// skin, and of the leaves riding each segment. Numbered across the layer,
+/// since how many a representative needs depends on how long its stems came
+/// out.
 pub const STALK_TUBE: &str = "WeedStalk";
 pub const STALK_LEAVES: &str = "WeedLeaves";
 
@@ -403,6 +405,13 @@ pub struct WeedParams {
     /// clear as the simulation starts.
     #[reflect(@Label("Bendable stems"))]
     pub flexible: bool,
+    /// Whether a stem that bends is drawn as one skin bending with it, a
+    /// mesh bound to every segment of its rod, rather than as a tube on each
+    /// segment, which kinks at every joint. A skin bends only where a
+    /// consumer poses it from the rod's bodies, as `misina_lab.isaaclab`
+    /// does under Newton; anywhere else it keeps the shape it was built in.
+    #[reflect(@Label("Skinned stems"))]
+    pub skinned: bool,
     /// How many distinct plant meshes the scene may hold. A budget, not a
     /// count.
     ///
@@ -423,6 +432,7 @@ impl Default for WeedParams {
             alley_pressure: 0.5,
             tall: 0.3,
             flexible: false,
+            skinned: false,
             variations: 24,
             detail: 16,
         }
@@ -634,10 +644,10 @@ pub(crate) fn build(
         &WeedMetric,
     );
 
-    let flexible = params.flexible;
+    let (flexible, skinned) = (params.flexible, params.skinned);
     let built = par_map(&book.representatives, |index, config| {
         grow(config, index as u64)
-            .and_then(|plant| plant.build(flexible))
+            .and_then(|plant| plant.build(flexible, skinned))
             .with_context(|| {
                 format!(
                     "weed {} could not be built",
@@ -654,9 +664,9 @@ pub(crate) fn build(
         let Built { rigid, rods } = built?;
         let skin = surface(index as u64);
         let rigid = rigid.map(|mesh| library.part(PART, index, mesh.to_mesh(), skin));
-        let mut register = |prefix: &str, count: &mut usize, mesh: MeshData| {
+        let mut register = |prefix: &str, count: &mut usize, mesh: Mesh| {
             *count += 1;
-            library.part(prefix, *count - 1, mesh.to_mesh(), skin)
+            library.part(prefix, *count - 1, mesh, skin)
         };
         let rods = rods
             .into_iter()
@@ -666,6 +676,7 @@ pub(crate) fn build(
                     .into_iter()
                     .map(|tube| register(STALK_TUBE, &mut tubes, tube))
                     .collect(),
+                skin: rod.skin.map(|mesh| register(STALK_TUBE, &mut tubes, mesh)),
                 leaves: rod
                     .leaves
                     .into_iter()
@@ -700,7 +711,13 @@ pub(crate) fn build(
                 ChildOf(*entity),
             ));
             let curve = cable(rod.points.clone(), rod.widths.clone(), Vec::new(), *skin);
-            let segments = spawn_rod(&mut stalk, curve, &rod.frames, &rod.tubes);
+            let segments = spawn_rod(
+                &mut stalk,
+                curve,
+                &rod.frames,
+                &rod.tubes,
+                rod.skin.as_ref(),
+            );
             for (segment, leaves) in segments.iter().zip(&rod.leaves) {
                 if let Some(leaves) = leaves {
                     commands
@@ -727,29 +744,31 @@ struct Plant {
 /// everything hangs on a rod, and its rods.
 struct Built {
     rigid: Option<MeshData>,
-    rods: Vec<Rod<MeshData>>,
+    rods: Vec<Rod<Mesh>>,
 }
 
 /// A bending stem: the curve a solver bends, and per segment its frame, its
-/// tube and the leaves it carries, both in that frame.
+/// tube and the leaves it carries, both in that frame. A skinned stem has no
+/// tubes but its skin, in the plant's frame.
 struct Rod<M> {
     points: Vec<[f32; 3]>,
     widths: Vec<f32>,
     frames: Vec<Transform>,
     tubes: Vec<M>,
+    skin: Option<M>,
     /// `None` on a segment that carries no leaf.
     leaves: Vec<Option<M>>,
 }
 
 impl Plant {
     /// One mesh for whatever stays rigid, and a rod for every stem at least
-    /// [`LONG_STEM`] long if `flexible`.
-    fn build(self, flexible: bool) -> anyhow::Result<Built> {
+    /// [`LONG_STEM`] long if `flexible`, drawn by a skin if `skinned`.
+    fn build(self, flexible: bool, skinned: bool) -> anyhow::Result<Built> {
         let mut rigid = self.parts;
         let mut rods = Vec::new();
         for stem in self.stems {
             if flexible && stem.length() >= LONG_STEM {
-                rods.push(stem.rod()?);
+                rods.push(stem.rod(skinned)?);
             } else {
                 rigid.push(stem.mesh()?);
                 rigid.extend(
@@ -829,7 +848,8 @@ impl Stem {
     /// even segments as near [`ROD_SEGMENT`] long as fit, with the taper at
     /// each cut. The first segment is the held one, so the stem is held at
     /// its base. Each leaf rides the segment nearest where it attaches.
-    fn rod(self) -> anyhow::Result<Rod<MeshData>> {
+    /// `skinned`, the rod is drawn by the stem itself, skinned to it.
+    fn rod(self, skinned: bool) -> anyhow::Result<Rod<Mesh>> {
         let count = (self.length() / ROD_SEGMENT).round() as usize;
         let (points, widths): (Vec<[f32; 3]>, Vec<f32>) = self
             .strand()
@@ -859,11 +879,20 @@ impl Stem {
                 .expect("a rod has segments");
             carried[k].push(leaf.transformed(&rebase(&frames[k], placement)));
         }
+        let (tubes, skin) = if skinned {
+            let mesh = strand_mesh_ringed(&self.strand(), ROD_SEGMENT / 4.0)?;
+            let skin = skin_mesh(&mesh.transformed(&self.frame), &points);
+            (Vec::new(), Some(skin))
+        } else {
+            let tubes = segment_tubes(&points, &widths, SIDES);
+            (tubes.iter().map(MeshData::to_mesh).collect(), None)
+        };
         Ok(Rod {
-            tubes: segment_tubes(&points, &widths, SIDES),
+            tubes,
+            skin,
             leaves: carried
                 .iter()
-                .map(|leaves| (!leaves.is_empty()).then(|| merge_meshes(leaves)))
+                .map(|leaves| (!leaves.is_empty()).then(|| merge_meshes(leaves).to_mesh()))
                 .collect(),
             points,
             widths,
@@ -1118,9 +1147,12 @@ fn surface(index: u64) -> Surface {
 mod tests {
     use super::*;
     use crate::elements::VineyardParams;
-    use crate::elements::util::testing::{bounds, grown, named_children, organs, prim, prim_path};
+    use crate::elements::util::testing::{
+        bounds, grown, named_children, organs, prim, prim_path, skin_span,
+    };
+    use bevy::mesh::VertexAttributeValues;
     use misina_lab::geometry::mesh::box_mesh;
-    use misina_lab::scene::{Cable, Prototypes, UsdReference};
+    use misina_lab::scene::{Cable, Prototypes, STEM, UsdReference};
 
     /// A parcel small enough to grow in a test and wide enough for three rows.
     fn small() -> VineyardParams {
@@ -1133,7 +1165,7 @@ mod tests {
     /// The plant `config` grows with nothing bending: one mesh.
     fn whole(config: WeedConfig, index: u64) -> MeshData {
         let built = grow(&config, index)
-            .and_then(|plant| plant.build(false))
+            .and_then(|plant| plant.build(false, false))
             .unwrap_or_else(|e| panic!("{e:#}"));
         assert!(built.rods.is_empty());
         built.rigid.expect("every plant grows something")
@@ -1341,7 +1373,7 @@ mod tests {
         assert!(!stems.is_empty());
         for stem in stems {
             let (base, radii) = (stem.at(0.0), stem.radii.clone());
-            let rod = stem.rod().unwrap();
+            let rod = stem.rod(false).unwrap();
             let spans: Vec<f32> = rod
                 .points
                 .windows(2)
@@ -1380,7 +1412,7 @@ mod tests {
             let at = stem.at(t);
             let placement = leaf_at(at, 1.0, 0.5, 0.8);
             stem.hang(&leaf, placement);
-            let rod = stem.rod().unwrap();
+            let rod = stem.rod(false).unwrap();
 
             let carriers: Vec<usize> = (0..rod.leaves.len())
                 .filter(|k| rod.leaves[*k].is_some())
@@ -1394,9 +1426,14 @@ mod tests {
                 "the leaf at {} rides {from}..{to}",
                 at.z
             );
-            let back = rod.leaves[k].as_ref().unwrap().transformed(&rod.frames[k]);
+            let back = rod.leaves[k].clone().unwrap().transformed_by(rod.frames[k]);
+            let Some(VertexAttributeValues::Float32x3(back)) =
+                back.attribute(Mesh::ATTRIBUTE_POSITION)
+            else {
+                panic!("a leaf has points");
+            };
             let hung = leaf.transformed(&placement);
-            for (a, b) in back.points.iter().zip(&hung.points) {
+            for (a, b) in back.iter().zip(&hung.points) {
                 assert!(Vec3::from(*a).abs_diff_eq(Vec3::from(*b), 1e-5));
             }
         }
@@ -1455,6 +1492,43 @@ mod tests {
         }
         assert_eq!(curves(&mut app), rods);
         assert!(rods > 20, "only {rods} rods");
+    }
+
+    /// Skinned, every bending stem is drawn by one skin bound from its base
+    /// to its tip, and its segments carry no tube.
+    #[test]
+    fn a_skinned_weed_draws_each_rod_with_a_skin() {
+        let mut params = small();
+        (params.weed.tall, params.weed.flexible, params.weed.skinned) = (1.0, true, true);
+        let mut app = grown(params);
+        let mut skins = 0;
+        for plant in organs::<WeedConfig>(app.world_mut()) {
+            let path: Vec<&str> = plant.path.split('/').collect();
+            let entity = prim(app.world_mut(), &path).unwrap();
+            for (name, stalk) in named_children(app.world_mut(), entity) {
+                if !name.starts_with(STALK) {
+                    continue;
+                }
+                let segments: Vec<Entity> = named_children(app.world_mut(), stalk)
+                    .into_iter()
+                    .filter(|(name, _)| name.contains("_edge_body_"))
+                    .map(|(_, segment)| segment)
+                    .collect();
+                let (reach, bare) = skin_span(app.world_mut(), stalk).expect("a skin");
+                assert!(
+                    (reach - segments.len() as f32).abs() < 1e-3 && bare < 0.5,
+                    "{}/{name}: bound to {reach} of {} segments, {bare} of one bare",
+                    plant.path,
+                    segments.len()
+                );
+                for segment in segments {
+                    let drawn = named_children(app.world_mut(), segment);
+                    assert!(drawn.iter().all(|(name, _)| name != STEM), "{}", plant.path);
+                }
+                skins += 1;
+            }
+        }
+        assert!(skins > 20, "only {skins} skins");
     }
 
     #[test]

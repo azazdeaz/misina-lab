@@ -24,17 +24,33 @@ Scene document format 12.
 
 ### Added
 
+- **greenhouse-lab**: A fruit's outline has knobs of its own:
+  `FruitCfg.widest`, where it is widest; `FruitCfg.stem_dip`, how deep its
+  stem scar is sunk; `FruitCfg.stem_blockiness` and
+  `FruitCfg.blossom_blockiness`, how blocky either half is; and
+  `FruitCfg.blossom_tip`, a blossom end drawn out to a point or dented. Each
+  fruit strays a little from all but the stem dip, as far as its
+  `irregularity` says. The defaults grow a round truss tomato, its shoulders
+  a little blockier than its blossom end, and the greenhouse README gives
+  the settings for a cherry, a plum and a beefsteak tomato. A fruit's
+  collider follows `blossom_tip`, down to a pointed blossom end or to the rim
+  round a dented one.
 - **misina-lab**: A rod can be drawn by one skin that bends with it, rather
   than a tube on each segment, which kinks at every joint.
-  `strand_mesh_along` meshes a strand and says how far along it each point
-  lies, `skin_mesh` binds that mesh to the rod's segments, and `spawn_skin`
-  spawns it beside a rod spawned with no tubes. The builder authors it as a
-  UsdSkel `SkelRoot`, with a joint per segment and each point bound to three
-  of them. Under Newton, `drive_skins`, which the spawner calls, poses every
-  skin that moved at its bodies before a frame is drawn, and `Shears` splits
-  a skin where it cuts the rod. Scene document format 12.
+  `strand_mesh_ringed` meshes a strand with rings close enough to bend,
+  `skin_mesh` binds a mesh to the rod's segments by where its points lie
+  along the rod, and `spawn_rod` takes it in place of the tubes. The builder
+  authors it as a UsdSkel `SkelRoot`, with a joint per segment and each
+  point bound to three of them. Under Newton, `drive_skins`, which the
+  spawner calls, poses every skin that moved at its bodies before a frame is
+  drawn, and `Shears` splits a skin where it cuts the rod: the two parts
+  end on the cut, each closed by a cap, and the skin stays where it was
+  drawn. Scene document format 12.
 - **greenhouse-lab**: `StemCfg.skinned` draws each truss that bends as its
   rachis mesh, skinned to the truss's rod.
+- **vinery-lab**: `ShootCfg.skinned` and `WeedCfg.skinned` draw each cane
+  and each weed stem that bends as its stem mesh, skinned to its rod. The
+  pruning demo draws both so.
 - **greenhouse-lab**: `FruitCfg.detail` sets how finely a fruit's skin is
   meshed, as a multiplier, each fruit for its own size: its rings go where
   its outline curves and its sides follow its girth, so a young fruit costs
@@ -284,6 +300,8 @@ Scene document format 12.
   round the shoulders, 0.08 by default. The body is rounder and its stem dip
   shallower, as on a round truss tomato, and a sepal over a groove lifts its
   edges clear of the lobes either side.
+- **misina-lab**: `Shears.cut` leaves a body already cut loose as it is,
+  and returns False.
 - **vinery-lab**, **greenhouse-lab**: The web playgrounds start on a scene
   just big enough to hold everything: the vineyard on a 24 by 18 m parcel
   of three rows, the greenhouse on one 5 m row. The panel grows
@@ -326,9 +344,10 @@ Scene document format 12.
   contact stiffness of 50 000 N/m, where every one had Isaac Lab's default
   2500. A fruit borne on the shear's head sinks 0.6 mm into it, where it
   sank about a centimetre.
-- The harvest demo's video shows a truss giving way to the arm: before the
-  first cut, the open shear pushes the truss from the side and brushes its
-  lowest fruit, filmed close up. `harvest.run` makes the `Gesture`s it is
+- The harvest demo's video opens on a truss giving way to the arm: before
+  the first cut, the open shear pushes the truss from the side, brushes its
+  lowest fruit and lifts it, filmed close up. The demo's crop is deleafed up
+  to the truss above the one picked, so leaves hang in the video's view. `harvest.run` makes the `Gesture`s it is
   given at the first truss, its points placed about the truss's fruit, and
   passes over one the arm cannot plan or finish.
 - The harvest demo lowers a truss into its crate before it lets go, where
@@ -475,6 +494,10 @@ Scene document format 12.
 
 ### Fixed
 
+- The harvest demo's arm is shaded smooth, where every facet of its meshes
+  showed: Menagerie's UR5e meshes give each triangle its own corners and its
+  face's normal. The demo draws a copy of each with the corners welded and
+  the normals averaged across every edge but those sharper than 40 degrees.
 - **misina-lab**: A `{PACKAGE}_RECORD` video keeps every frame in its place.
   A frame whose readback landed more than 8 frames late, as one does while a
   slide rebuilds the scene, was skipped, and written once it landed in the

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+from types import SimpleNamespace
 
 import pytest
 
@@ -24,10 +25,12 @@ except ImportError:
     pytest.skip("Isaac Lab or greenhouse_lab is not installed", allow_module_level=True)
 
 import numpy as np  # noqa: E402
+import warp as wp  # noqa: E402
+from isaaclab_newton.physics import NewtonManager  # noqa: E402
 from newton import ModelBuilder  # noqa: E402
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdSkel, Vt  # noqa: E402
 
-from misina_lab.isaaclab import rods, skins  # noqa: E402
+from misina_lab.isaaclab import cutting, rods, skins  # noqa: E402
 from misina_lab.usd.build import ALONG, ANIMATION, SKELETON, build_usd  # noqa: E402
 
 BELOW = 1.8
@@ -136,6 +139,34 @@ def skin_roots(stage: Usd.Stage) -> list[Usd.Prim]:
     return [prim for prim in stage.Traverse() if prim.IsA(UsdSkel.Root)]
 
 
+def drawn(root: Usd.Prim, pose) -> np.ndarray:
+    """Where USD's own skinning puts the points of the skin under `root`, in
+    its skeleton's space, with each joint at `pose` of its segment's path:
+    the world pose of the body that segment's prim is driven by."""
+    organ = str(root.GetParent().GetPath())
+    _, segments, frame, size = skins.rig(root.GetStage(), organ)
+    local = skins.seen_from(frame, np.array([pose(each) for each in segments]), size)
+    animation = UsdSkel.Animation(root.GetChild(ANIMATION))
+    animation.GetTranslationsAttr().Set(Vt.Vec3fArray([Gf.Vec3f(*p) for p in local[:, :3]]))
+    animation.GetRotationsAttr().Set(
+        Vt.QuatfArray([Gf.Quatf(w, x, y, z) for x, y, z, w in local[:, 3:]])
+    )
+    cache = UsdSkel.Cache()
+    cache.Populate(UsdSkel.Root(root), Usd.PrimDefaultPredicate)
+    (binding,) = cache.ComputeSkelBindings(UsdSkel.Root(root), Usd.PrimDefaultPredicate)
+    joints = cache.GetSkelQuery(binding.GetSkeleton()).ComputeSkinningTransforms(
+        Usd.TimeCode.Default()
+    )
+    (target,) = binding.GetSkinningTargets()
+    skinned = Vt.Vec3fArray(UsdGeom.Mesh(target.GetPrim()).GetPointsAttr().Get())
+    assert target.ComputeSkinnedPoints(joints, skinned, Usd.TimeCode.Default())
+    return np.array(skinned)
+
+
+def skin_mesh(root: Usd.Prim) -> Usd.Prim:
+    return next(prim for prim in Usd.PrimRange(root) if prim.IsA(UsdGeom.Mesh))
+
+
 def test_a_skeleton_is_framed_at_a_uniform_scale_only():
     """A turned skeleton at one scale is framed with it; one turned under an
     uneven scale is not, even where its axes come out as long as each other."""
@@ -165,46 +196,97 @@ def test_a_skin_posed_at_its_bodies_starts_where_it_was_built(greenhouse, tmp_pa
     stage = Usd.Stage.Open(str(path))
     index = {label: body for body, label in enumerate(builder.body_label)}
     body_q = np.array(builder.body_q, dtype=float)
-    xforms, cache = UsdGeom.XformCache(), UsdSkel.Cache()
     worst, posed = 0.0, 0
     for root in skin_roots(stage):
-        skeleton = UsdSkel.Skeleton(root.GetChild(SKELETON))
-        frame, size = skins.frame_of(xforms.GetLocalToWorldTransform(skeleton.GetPrim()))
-        organ = root.GetParent().GetPath()
-        bodies = [index[f"{organ}/{joint}"] for joint in skeleton.GetJointsAttr().Get()]
-        local = skins.seen_from(frame, body_q[bodies], size)
-        animation = UsdSkel.Animation(root.GetChild(ANIMATION))
-        animation.GetTranslationsAttr().Set(Vt.Vec3fArray([Gf.Vec3f(*p) for p in local[:, :3]]))
-        animation.GetRotationsAttr().Set(
-            Vt.QuatfArray([Gf.Quatf(w, x, y, z) for x, y, z, w in local[:, 3:]])
-        )
-        cache.Populate(UsdSkel.Root(root), Usd.PrimDefaultPredicate)
-        (binding,) = cache.ComputeSkelBindings(UsdSkel.Root(root), Usd.PrimDefaultPredicate)
-        joints = cache.GetSkelQuery(binding.GetSkeleton()).ComputeSkinningTransforms(
-            Usd.TimeCode.Default()
-        )
-        (target,) = binding.GetSkinningTargets()
-        points = UsdGeom.Mesh(target.GetPrim()).GetPointsAttr().Get()
-        skinned = Vt.Vec3fArray(points)
-        assert target.ComputeSkinnedPoints(joints, skinned, Usd.TimeCode.Default())
-        worst = max(worst, float(np.abs(np.array(skinned) - np.array(points)).max()))
+        built = np.array(UsdGeom.Mesh(skin_mesh(root)).GetPointsAttr().Get())
+        now = drawn(root, lambda segment: body_q[index[segment]])
+        worst = max(worst, float(np.abs(now - built).max()))
         posed += 1
     assert posed > 5 and worst < 1e-4, f"{posed} skins, {worst} m off"
 
 
-def test_a_cut_splits_a_skin_where_it_splits_the_rod(greenhouse):
-    """Past a cut halfway along a segment, a skin's points follow only the
-    bodies past it and the rest only those before it, and no face spans it."""
-    _, path, _ = greenhouse
-    stage = Usd.Stage.Open(str(path))
-    root = skin_roots(stage)[0]
-    mesh = next(prim for prim in Usd.PrimRange(root) if prim.IsA(UsdGeom.Mesh))
-    faces = len(UsdGeom.Mesh(mesh).GetFaceVertexIndicesAttr().Get()) // 3
-    assert skins.split(stage, f"{root.GetParent().GetPath()}/Cable_edge_body_2", 0.5)
+@pytest.fixture
+def shears(greenhouse, monkeypatch):
+    """`Shears` over the greenhouse's model, as the running simulation has
+    them, on a copy of its stage, with the model's state to set poses in."""
+    _, path, builder = greenhouse
+    model = builder.finalize()
+    state = model.state()
+    monkeypatch.setattr(NewtonManager, "backend", SimpleNamespace(model=model, state_0=state))
+    monkeypatch.setattr(NewtonManager, "_solver", None)
+    monkeypatch.setattr(NewtonManager, "_model_changes", set())
+    stage = Usd.Stage.Open(Sdf.Layer.OpenAsAnonymous(str(path)))
+    return cutting.Shears(stage), stage, state
 
-    before = np.array(UsdGeom.PrimvarsAPI(mesh).GetPrimvar(ALONG).Get()) < 2.5
-    joints = np.array(UsdSkel.BindingAPI(mesh).GetJointIndicesPrimvar().Get()).reshape(-1, 3)
-    assert joints[before].max() == 2 and joints[~before].min() == 3
-    kept = np.array(UsdGeom.Mesh(mesh).GetFaceVertexIndicesAttr().Get()).reshape(-1, 3)
-    assert (before[kept].all(axis=1) | ~before[kept].any(axis=1)).all()
-    assert faces - 40 < len(kept) < faces, f"{len(kept)} of {faces} faces kept"
+
+@pytest.mark.parametrize(
+    ("at", "cut"),
+    [(0.5, 2.5), (0.05, 2.0), (0.95, 3.0)],
+    ids=["along a segment", "at the joint before", "at the joint after"],
+)
+def test_a_cut_splits_a_skin_where_it_splits_the_rod_and_leaves_it_as_drawn(shears, at, cut):
+    """Past a cut on the third segment of a bent truss, made `cut` segments
+    along the rod, the skin's points follow only the bodies past it and the
+    rest only those before it. No face spans the cut: the two parts end on
+    it, where the stub's capsule ends, each closed by a cap facing the other,
+    of points of its own whose normals face that way too. And but for those
+    ends, moved onto the cut, every point is drawn where it was."""
+    shears, stage, state = shears
+    root = skin_roots(stage)[0]
+    mesh = skin_mesh(root)
+    organ = str(root.GetParent().GetPath())
+    bodies = [shears.labels.index(each) for each in skins.rig(stage, organ)[1]]
+    # Each body turned at the joint it hangs from, and with the bodies before
+    # it: bent, as no cut finds a rod at rest.
+    body_q = state.body_q.numpy()
+    joints, bend = shears.capsules()[0], wp.transform_identity()
+    for body in bodies[1:]:
+        joint = wp.vec3(*joints[list(shears.bodies).index(body)])
+        turn = wp.transform(joint, wp.quat_from_axis_angle(wp.vec3(1.0, 0.0, 0.0), 0.08))
+        bend = bend * turn * wp.transform(-joint, wp.quat_identity())
+        body_q[body] = np.array(bend * wp.transform(*body_q[body]))
+    state.body_q.assign(body_q)
+
+    def read():
+        along = np.array(UsdGeom.PrimvarsAPI(mesh).GetPrimvar(ALONG).Get())
+        faces = np.array(UsdGeom.Mesh(mesh).GetFaceVertexIndicesAttr().Get()).reshape(-1, 3)
+        return along, faces, drawn(root, lambda segment: body_q[shears.labels.index(segment)])
+
+    along, faces, was = read()
+    assert shears.cut(bodies[2], at)
+    moved, kept, now = read()
+    # The points past the first `count` are the caps'.
+    count = len(along)
+    ends, before = moved[:count] != along, along < cut
+    stub = int(np.ceil(cut)) - 1
+    bound = np.array(UsdSkel.BindingAPI(mesh).GetJointIndicesPrimvar().Get()).reshape(-1, 3)
+    assert bound[:count][before].max() == stub and bound[:count][~before].min() == stub + 1
+    side = bound.max(axis=1) <= stub
+    assert (side[kept].all(axis=1) | ~side[kept].any(axis=1)).all()
+    assert np.abs(now[:count] - was)[~ends].max() < 1e-5, "a point off the cut moved"
+
+    # The two parts end together, where the stub's capsule now does.
+    world = np.array(UsdGeom.XformCache().GetLocalToWorldTransform(root.GetChild(SKELETON)))
+    end = shears.capsules()[1][list(shears.bodies).index(bodies[stub])]
+    for part in (ends & before, ends & ~before):
+        assert part.sum() > 2
+        middle = np.append(now[:count][part].mean(axis=0), 1.0) @ world
+        assert np.linalg.norm(middle[:3] - end) < 2e-3
+
+    # A cap is the faces between its own points only, and faces the cut, as
+    # their normals, at rest, face out of it.
+    caps = kept[(kept >= count).all(axis=1)]
+    gap = np.linalg.norm(now[count:, None] - now[:count][ends], axis=2).min(axis=1)
+    assert gap.max() < 1e-6, "a cap's point is not drawn on an end's"
+    corners = now[caps]
+    out = np.cross(corners[:, 1] - corners[:, 0], corners[:, 2] - corners[:, 0])
+    onward = now[~side].mean(axis=0) - now[side].mean(axis=0)
+    assert len(caps) > 2 and ((out @ onward > 0) == side[caps[:, 0]]).all()
+    points = np.array(UsdGeom.Mesh(mesh).GetPointsAttr().Get())
+    extent = np.array(UsdGeom.Mesh(mesh).GetExtentAttr().Get())
+    assert np.allclose(extent, [points.min(axis=0), points.max(axis=0)])
+    rest = points[caps]
+    normals = np.array(UsdGeom.Mesh(mesh).GetNormalsAttr().Get())[caps]
+    for cap in (side[caps[:, 0]], ~side[caps[:, 0]]):
+        face = np.cross(rest[cap, 1] - rest[cap, 0], rest[cap, 2] - rest[cap, 0]).sum(axis=0)
+        assert (normals[cap] @ face / np.linalg.norm(face) > 0.999).all()

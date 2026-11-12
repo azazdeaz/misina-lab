@@ -278,11 +278,12 @@ films the harvester cutting Path_01's due trusses, the first three close up
 and the rest from a camera riding along with the trolley, in Isaac Sim's RTX
 renderer and headless, and writes
 `target/video/harvest.mp4` at the repo root, captioned and small enough to
-upload, and a contact sheet beside it. Before the first cut the open shear
-pushes the truss from the side and brushes its lowest fruit, to show the
-trusses giving way to the arm. Its storyboard -- the shots, the takes, those
-gestures, the pacing -- is the top of `video.py`, and the run fails if a
-take's truss was not cut or a gesture was not made.
+upload, and a contact sheet beside it. It opens on the first truss, close
+up, as the open shear pushes it from the side, brushes its lowest fruit and
+lifts it, to show the trusses giving way to the arm, then cuts it. Its
+storyboard -- the shots, the takes, those gestures, the pacing -- is the
+top of `video.py`, and the run fails if a take's truss was not cut or a
+gesture was not made.
 `docs/video/publish.sh target/video/harvest.mp4 examples/greenhouse_demo/README.md`,
 run from the repo root on the branch whose pull request changes the video,
 uploads it and points the video line above at it.
@@ -297,7 +298,7 @@ uploads it and points the video line above at it.
 | `harvester.py` | the robot: its dimensions, the UR5e read out of Menagerie's MJCF, its colliders, the shear on its flange, the URDF built from them and cuRobo's model of it, the actuators |
 | `shear.py` | the cut-and-hold shear: its blades' geometry, their meshes and colliders, and `Stroke`, the blade closing through a peduncle, and the jaw and the sprung finger that hold the truss; the pruning demo's module, kept the same |
 | `planner.py` | cuRobo: the world it plans in, read off the running simulation, the moves to joint positions, folded or over the crate, the reach to a cut or to any pose of the mouth, and its straight lines |
-| `video.py`, `record.sh` | the video: Path_01 harvested, the first truss pushed and brushed before it is cut, filmed headless, and its encoding |
+| `video.py`, `record.sh` | the video: Path_01 harvested, the first truss pushed, brushed and lifted before it is cut, filmed headless, and its encoding |
 | `kinematics.py` | forward and inverse kinematics of the trolley and the arm, for the URDF, the stations and the straight line in; the pruning demo's module, kept the same |
 
 [`examples/isaaclab_demo/DEVELOPMENT.md`](../isaaclab_demo/DEVELOPMENT.md)

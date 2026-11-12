@@ -1,7 +1,7 @@
-"""Record a short video of the harvest demo: the harvester drives into a path
-and cuts its due trusses, the first few filmed close up and the rest by a
-camera riding along with the trolley, in Isaac Sim's RTX renderer by a
-camera this script moves. It runs headless.
+"""Record a short video of the harvest demo: the harvester cuts a path's due
+trusses, the first few filmed close up and the rest by a camera riding
+along with the trolley, in Isaac Sim's RTX renderer by a camera this
+script moves. It runs headless.
 
     uv run video.py OUT.mp4
 
@@ -10,11 +10,12 @@ writes the frames to `OUT.mp4`, near-lossless, and the captions beside it as
 make a gesture. `record.sh` runs it and encodes the two into the video to
 upload.
 
-The storyboard is the constants below: the shots, the `TAKES` filmed close
-up, the `GESTURES` the arm makes at the first take's truss before it cuts
-it, and `PACE`, how fast each part plays. Frames are sampled on the
-simulation's clock, one every so many physics steps however long those take
-to compute, so the video plays in simulated time.
+The storyboard is the constants below: the shots, the `GESTURES` the arm
+makes at the first take's truss before it cuts it, which the video opens
+on, the `TAKES` filmed close up, and `PACE`, how fast each part plays.
+Frames are sampled on the simulation's clock, one every so many physics
+steps however long those take to compute, so the video plays in simulated
+time.
 """
 
 import argparse
@@ -42,10 +43,6 @@ PATHS = [1]
 """The path harvested: Path_01, between the two rows, straight down the rail
 from where the trolley starts."""
 
-SETTLE = 1.5
-"""Seconds of simulated time not filmed at the start, while the trusses
-settle under their fruit."""
-
 
 @dataclasses.dataclass(frozen=True)
 class Shot:
@@ -71,39 +68,54 @@ it, so the shear comes in from behind it, toward the camera, and the truss
 hangs below it in frame. Half a meter ahead, the lift column stands between
 it and a cut the arm reaches back for."""
 
-CRATE = Shot(eye=(0.0, -0.45, 0.8), look=(0.0, 0.0, 0.1), lens=18.0)
+CRATE = Shot(eye=(0.0, -0.45, 0.6), look=(0.0, 0.0, 0.1), lens=18.0)
 """The crate, from above the path across from the side the truss is cut on,
 as the arm carries the truss to it and lets it go: the point it frames is
-the crate's middle, at its underside."""
+the crate's middle, at its underside. Any higher, the camera stands among
+the leaves of the row across the path when the lift is up for a high cut."""
 
 TOUCH = Shot(
     eye=(0.15, -0.6, 0.02),
     look=(0.0, -0.03, -0.11),
     lens=28.0,
-    caption="Pushed and brushed by the shear, the truss bends on its stalk and springs back",
+    caption="Pushed, brushed and lifted by the shear, the truss bends on its stalk and springs back",
 )
 """The first take's `GESTURES`, close up: from the path a little ahead of the
 truss and level with its fruit, so a push along the row reads across the
-picture. It takes over from `CLOSE` once the arm has reached the first
-gesture's first point: on its way there from the folded arm, the shear
-swings past where this shot stands."""
+picture. The video opens on it once the arm has reached the first
+gesture's first point, under `TITLE` until that gesture is made: on its
+way there from the folded arm, the shear swings past where this shot
+stands."""
+
+TITLE = "Harvesting tomato trusses with a pipe-rail robot, in Isaac Sim"
+"""The caption the video opens on."""
 
 GESTURES = (
     demo.Gesture(
         "push",
         (
-            demo.Point("back", (-0.06, 0.0, 0.0), hold=0.3),
+            demo.Point("back", (-0.06, 0.0, 0.0)),
             demo.Point("back", (0.085, 0.0, 0.0), speed=0.06, hold=0.5),
-            demo.Point("back", (-0.06, 0.0, 0.0), speed=0.3, hold=1.0),
+            demo.Point("back", (-0.06, 0.0, 0.0), speed=0.3),
         ),
         yaw=math.radians(25.0),
     ),
     demo.Gesture(
         "brush",
         (
-            demo.Point("low", (-0.14, 0.0, -0.011), hold=0.3),
-            demo.Point("low", (0.07, 0.0, -0.011), speed=0.15),
-            demo.Point("low", (0.07, 0.0, -0.07), speed=0.15, hold=1.0),
+            demo.Point("low", (-0.14, 0.0, 0.015)),
+            demo.Point("low", (0.07, 0.0, 0.015), speed=0.2),
+            demo.Point("low", (0.07, 0.0, -0.06), speed=0.15),
+        ),
+        yaw=math.radians(25.0),
+    ),
+    demo.Gesture(
+        "lift",
+        (
+            demo.Point("low", (0.038, -0.005, -0.08)),
+            demo.Point("low", (0.038, -0.005, -0.016), speed=0.06),
+            demo.Point("low", (0.038, -0.005, 0.025), speed=0.03, hold=0.8),
+            demo.Point("low", (0.038, -0.005, -0.08), speed=0.4),
         ),
         yaw=math.radians(25.0),
     ),
@@ -114,10 +126,12 @@ row, slowly: the shear's tip from 6 cm short of the fruit furthest back to
 8.5 cm past it, which moves the fruit about 6 cm; and draws back fast, so
 the truss springs back by itself. Then it brushes the lowest fruit from
 back to front, the way the shear comes in to cut: the backs of the hook and
-the jaw, 2.5 cm above the tip, pass a centimetre and a half into the bottom
-of the lowest fruit, and drop away. Both are turned toward the path, as a
-cut may be (`harvest.YAWS`), the arm out of the line of stems along the
-row."""
+the jaw, 2.5 cm above the tip, pass 4 cm into the bottom of the lowest
+fruit, and drop away. Last, the shear's head comes up under the lowest
+fruit, rises 4 cm slowly, lifting it, and drops away fast. None waits at
+its ends, so the truss springs back as the arm moves on to the next. All
+are turned toward the path, as a cut may be (`harvest.YAWS`), the arm out
+of the line of stems along the row."""
 
 TAKES = (
     "A truss is due once its least ripe fruit is turning",
@@ -126,16 +140,6 @@ TAKES = (
 )
 """The captions of the cuts filmed close up: the first the trolley makes, in
 order."""
-
-OPENING = Shot(
-    eye=(-3.2, -2.8, 1.8),
-    look=(-0.2, 0.0, 0.8),
-    lens=20.0,
-    caption="Harvesting tomato trusses with a pipe-rail robot, in Isaac Sim",
-)
-"""From the main path, behind the trolley and to its right, as it drives
-into the path with the arm folded. Points along the path count from its
-mouth, where the rows start."""
 
 REST = Shot(
     eye=(1.6, -0.25, 0.7),
@@ -152,14 +156,15 @@ lift holds it as far under every cut, so each is framed alike. From behind,
 the lift column would hide the arm."""
 
 CLOSING = Shot(
-    eye=(1.4, -0.3, 1.2),
+    eye=(1.4, 0.0, 0.9),
     look=(0.0, 0.0, 0.0),
     lens=20.0,
     caption="The path harvested into the crate",
 )
-"""Riding along with the trolley as it drives out, from above the path
-ahead of it, looking down into the crate: the point it frames is the
-crate's middle, at its underside."""
+"""Riding along with the trolley as it drives out, from above the path's
+centre line ahead of it, looking down into the crate: the point it frames
+is the crate's middle, at its underside. Higher or off the centre line, the
+camera passes through the leaves of the plants at the rows' ends."""
 
 LAG = 0.4
 """Seconds of video a shot riding along with the trolley lags it by,
@@ -218,7 +223,6 @@ def main():
         camera = sensor(SIZE)
         stage = sim_utils.get_current_stage()
         y = demo.path_ys(stage, demo.GREENHOUSE_PATH)[PATHS[0]]
-        entrance, left = np.array([0.0, y, 0.0]), np.array([0.0, 1.0, 0.0])
         rig, film = Rig(stage, FPS, EASE, CUT), Film(out, SIZE, FPS)
         # The takes' captions, by the prim of the truss each films, the
         # trusses a cut was planned for and those swung round to the crate.
@@ -232,20 +236,18 @@ def main():
         # along stood, `row` the side it was across from, and a frame riding
         # along closes `share` of the gap to its shot.
         due, last, left_at, shown = 0.0, None, None, None
-        ridden, row = None, left
+        ridden, row = None, np.array([0.0, 1.0, 0.0])
         share = 1.0 - np.exp(-1.0 / (LAG * FPS))
-        # The gestures begun, by their place in `GESTURES`: one the arm could
-        # not plan is passed over.
-        begun: set[int] = set()
+        # Whether a gesture has begun: nothing is filmed before the first.
+        touched = False
         try:
             for step, harvest in enumerate(
                 demo.run(sim, robot, machine, PATHS, render=False, gestures=GESTURES)
             ):
                 now = step * demo.SIM_DT
                 truss = harvest.job if isinstance(harvest.job, demo.Truss) else None
-                if harvest.stage == "touch":
-                    begun.add(len(GESTURES) - len(harvest.gestures))
-                touched, gesturing = bool(begun), harvest.stage in ("reach", "touch")
+                touched = touched or harvest.stage == "touch"
+                gesturing = harvest.stage in ("reach", "touch")
                 if truss and harvest.stage == "approach":
                     planned.add(truss.prim)
                 # A take's truss out of reach passes its caption on.
@@ -284,22 +286,16 @@ def main():
                     shot, pace = REST, harvest.stage
                 elif truss and truss.prim in captions and touched and gesturing:
                     shot, filmed, pace = TOUCH, truss, harvest.stage
-                elif (
-                    truss
-                    and truss.prim in captions
-                    and not (last is None and harvest.stage in ("fold", "run"))
-                ):
-                    # The first take starts as the arm reaches out at the
-                    # end of the drive in.
+                elif truss and truss.prim in captions:
                     shot, filmed, pace = CLOSE, truss, harvest.stage
-                elif last is None:
-                    shot, pace = OPENING, None
                 elif truss or any(isinstance(job, demo.Truss) for job in harvest.jobs):
                     shot, pace = REST, "rest"
                 else:
                     shot, pace = CLOSING, None
+                if not touched:
+                    continue
                 due += PACE.get(pace, 1.0) * FPS * demo.SIM_DT
-                if now < SETTLE or due < 1:
+                if due < 1:
                     continue
                 due -= 1
                 riding = shot is REST or shot is CLOSING
@@ -307,13 +303,14 @@ def main():
                     # Ahead is the way the shear comes in.
                     way = demo.heading(filmed.cut[:3, 0], filmed.side)
                     point, side = filmed.cut[:3, 3], filmed.side
-                    # The gestures' caption is up from the first reach, a
-                    # shot before their close-up takes over from `CLOSE`.
-                    caption = TOUCH.caption if gesturing else captions[filmed.prim]
+                    if gesturing:
+                        caption = TITLE if harvest.made == 0 else TOUCH.caption
+                    else:
+                        caption = captions[filmed.prim]
                     if shot is CRATE:
                         point = (harvest.platform() @ machine.crate_frame)[:3, 3]
                     pose = framing(shot, point, side, float(np.sign(way[0])))
-                elif riding:
+                else:
                     # Along with the trolley, across from the row it last cut from.
                     row = truss.side if truss else row
                     platform = harvest.platform()
@@ -323,9 +320,6 @@ def main():
                     goal = framing(shot, point, row)
                     caption = captions.get(truss.prim, shot.caption) if truss else shot.caption
                     pose = goal if ridden is None else ridden + share * (goal - ridden)
-                else:
-                    point, side, caption = entrance, left, shot.caption
-                    pose = framing(shot, point, side)
                 # A shot riding along eases itself: the rig cuts to each frame of it.
                 rig.aim(pose, cut=riding or filmed is not shown)
                 shown, ridden = filmed, pose if riding else None

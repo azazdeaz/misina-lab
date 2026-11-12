@@ -62,7 +62,9 @@ GREENHOUSE_CFG = GreenhouseCfg(
     layout=LayoutCfg(rows=2, row_length=4.0),
     # Skinned: each rod is drawn by one mesh bending with it, which keeps the
     # rachis's zigzag and its knots, where a tube per segment runs straight.
-    stem=StemCfg(flexible_below=BELOW, skinned=True),
+    # Deleafed up to the truss above the one picked: the lowest leaves join
+    # the stem about 40 cm above a due truss, where the camera sees them.
+    stem=StemCfg(flexible_below=BELOW, skinned=True, deleafed_to_truss=2),
 )
 
 GREENHOUSE_PATH = "/World/Greenhouse"
@@ -739,10 +741,11 @@ class Harvest:
 
     def _touch(self) -> None:
         """Make the next of `gestures` at the truss the trolley stands for, or
-        plan its cut once none is left."""
-        while self.gestures and self.job.fruit:
+        plan its cut once none is left. A truss with no fruit to place them
+        about passes every one over, so none is left for a later truss."""
+        while self.gestures:
             gesture = self.gestures.pop(0)
-            if (planned := self._gesture(gesture)) is not None:
+            if self.job.fruit and (planned := self._gesture(gesture)) is not None:
                 reach, self.touching = planned
                 self._play("reach", reach)
                 return
