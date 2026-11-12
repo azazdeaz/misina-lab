@@ -296,8 +296,9 @@ def test_a_gestures_tip_lands_on_its_points(fruit, back, low, middle):
 
 def test_a_truss_is_lowered_onto_the_highest_fruit_under_it():
     """A truss comes down until a fruit of it meets the highest fruit it
-    overlaps seen from above, the crate's floor, or the rim for one reaching
-    out over a wall; a fruit lying level reaches out along its length."""
+    overlaps seen from above that reaches below it, the crate's floor, or
+    the rim for one reaching out over a wall; a fruit lying level reaches
+    out along its length, and with none held nothing stops it."""
     harvest = pytest.importorskip("harvest")
     crate = MACHINE.crate
     up, level = [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]
@@ -311,9 +312,10 @@ def test_a_truss_is_lowered_onto_the_highest_fruit_under_it():
     empty = fruit()
     assert harvest.room(held, empty, crate) == pytest.approx(0.3 - 0.04 - crate.floor)
     # The first overlaps the first held by a centimetre, seen from above;
-    # the higher second overlaps neither.
-    pile = fruit(([0.05, 0.0, 0.05], up, 0.0), ([0.15, 0.0, 0.2], up, 0.0))
+    # the higher second overlaps neither, and the third lies above it.
+    pile = fruit(([0.05, 0.0, 0.05], up, 0.0), ([0.15, 0.0, 0.2], up, 0.0), ([0, 0, 0.4], up, 0.0))
     assert harvest.room(held, pile, crate) == pytest.approx(0.26 - 0.08)
+    assert harvest.room(empty, pile, crate) == np.inf
     # Lying level, it reaches 5 cm along, under the second held: as a
     # sphere it would reach 3.
     pile = fruit(([0.07, 0.1, 0.05], level, 0.02))

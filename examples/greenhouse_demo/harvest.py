@@ -533,16 +533,19 @@ def room(held: Fruit, pile: Fruit, crate: Crate) -> float:
     """How far the fruit `held` can come straight down before one of them
     meets one of `pile`, `crate`'s floor, or its rim where it reaches out
     over a wall. Both are in the crate's frame, each fruit taken as the
-    upright cylinder round it: it meets the highest below it that it
-    overlaps seen from above."""
+    upright cylinder round it: it meets the highest it overlaps seen from
+    above that reaches below its bottom."""
     (low, *_), (high, *_) = held, pile
     (wide, under), (broad, over) = reaches(held), reaches(pile)
     inside = np.array([crate.length, crate.width]) / 2 - crate.rib - crate.wall
     out = (np.abs(low[:, :2]) + wide[:, None] > inside).any(axis=1)
     floor = np.where(out, crate.height, crate.floor)
+    bottoms = low[:, 2] - under
     below = np.linalg.norm(low[:, None, :2] - high[None, :, :2], axis=2) < wide[:, None] + broad
+    below &= high[None, :, 2] - over < bottoms[:, None]
     tops = np.where(below, high[:, 2] + over, -np.inf).max(axis=1, initial=-np.inf)
-    return float((low[:, 2] - under - np.maximum(floor, tops)).min())
+    # With no fruit held, nothing stops it.
+    return float((bottoms - np.maximum(floor, tops)).min(initial=np.inf))
 
 
 def station(machine: Harvester, cut: np.ndarray, way: np.ndarray, aisle: float) -> np.ndarray:
@@ -893,7 +896,10 @@ class Harvest:
         came in to the cut, so the peduncle passes out under the hook's claw:
         the truss rests in the crate, so tipping the blades about the
         peduncle would not free it. Where the arm would meet the crate or
-        itself, move on from where it is."""
+        itself, move on from where it is. Neither way does the mouth get
+        `_fallen`'s check: `Stroke.fouled` counts every piece cut free,
+        those in the crate under the lowered mouth too, and tipping turns
+        the blades down into them."""
         start = hand @ self.machine.tool
         end = start @ transform(-LEAVE * self.machine.way_in)
         leaving = self.planner.line(self.q[3:], self.platform(), start, end)
@@ -902,11 +908,20 @@ class Harvest:
         else:
             self._opened()
 
+    def _fallen(self, hand: np.ndarray) -> None:
+        """Tip out a truss let go that still lies on the finger, or move on."""
+        if self.severed and self.stroke.fouled(hand):
+            self._tip(hand)
+        else:
+            self._opened()
+
     def _clear(self, line: tuple[np.ndarray, np.ndarray] | None) -> bool:
         """Whether the arm can follow a straight `line` of the mouth's, and
         `planner` finds the arm at its end clear of everything but the
         trusses: `Planner.line` solves its points alone, so it passes the
-        arm through the crate and the robot's own links as readily."""
+        arm through the crate and the robot's own links as readily. Only the
+        end is checked: a line down into the crate is deepest there, the
+        wrist nearest the rim."""
         return (
             line is not None
             and self.planner.move(
@@ -1013,11 +1028,8 @@ class Harvest:
             if self.stroke.tick(hand, angle, closing=False):
                 if self.lowered:
                     self._leave(hand)
-                # A truss let fall still lying on the finger is tipped out.
-                elif self.severed and self.stroke.fouled(hand):
-                    self._tip(hand)
                 else:
-                    self._opened()
+                    self._fallen(hand)
         else:
             # A planned stretch, played on the simulation's clock, its end
             # held still until the robot is there and still.

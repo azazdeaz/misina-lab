@@ -331,11 +331,12 @@ Scene document format 12.
   lowest fruit, filmed close up. `harvest.run` makes the `Gesture`s it is
   given at the first truss, its points placed about the truss's fruit, and
   passes over one the arm cannot plan or finish.
-- The harvest demo lowers each truss into its crate before it lets go,
-  where it opened the shear with the jaws 42 cm over the floor: onto the
-  trusses already there, or to about 6 cm over the empty floor, at
-  whichever of three spots along the crate lets it come down furthest. The
-  open shear then backs off the truss.
+- The harvest demo lowers a truss into its crate before it lets go, where
+  it opened the shear with the jaws 42 cm over the floor: onto the trusses
+  already there, or to about 6 cm over the empty floor, at whichever of
+  three spots along the crate lets it come down furthest. The open shear
+  then backs off the truss. One the arm cannot carry to the crate or lower
+  into it is let go where it is, as before.
 - The pruning demo's vineyard grows bending weeds, and its robot's chassis
   and wheels push them aside as it drives the alley. Its video is filmed
   with them.

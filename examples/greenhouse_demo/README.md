@@ -83,8 +83,9 @@ The crate, `harvester.Crate`, is a solid-walled Euro stacking crate,
 it, under the folded shear and within the arm's reach. It is
 drawn with the ribs down its walls, the rim round its top and the foot it
 stacks on, and collides as five boxes: the floor, and each wall out to the
-ribs' faces. The arm carries every truss it cuts to the crate and lets
-it go over its middle.
+ribs' faces. The arm carries every truss it cuts to the crate and
+lowers it in, at one of three spots along it; one it cannot carry there,
+it lets go where it is.
 
 The plan comes from the scene's own ground truth, not from a camera:
 
@@ -139,13 +140,13 @@ The plan comes from the scene's own ground truth, not from a camera:
    lower than 10 cm above the rim: the wrist rides at about their height,
    and further down it meets the rim. A truss hangs about 15 cm below the
    jaws, so one lowered into the empty crate stops about 6 cm short of the
-   floor. Where cuRobo finds
-   the arm at the end of that line meeting the crate or its own links, the
-   truss is lowered three quarters as far, or half. The shear opens and
-   backs 6 cm off the
-   truss the way it came in to the cut, so the peduncle passes out under
-   the hook's claw. A truss let go short of the crate and
-   still lying on the open finger is tipped off it. The
+   floor. Where cuRobo finds the arm at the end of that line meeting the
+   crate or its own links, it tries three quarters as far, then half, and
+   failing those lets the truss go where it is. The shear opens and, where
+   cuRobo finds the arm clear at the end of that line too, backs 6 cm off
+   the truss the way it came in to the cut, so the peduncle passes out
+   under the hook's claw. A truss let go short of the crate and still
+   lying on the open finger is tipped off it. The
    forearm, the wrists, the shear and the crate collide with the trusses
    they meet, and the arm, the shear, the crate, the platform's deck and
    the trolley's chassis and mast with each other.
