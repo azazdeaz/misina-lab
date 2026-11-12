@@ -473,6 +473,10 @@ Scene document format 12.
 
 ### Fixed
 
+- The harvest demo's arm is shaded smooth, where every facet of its meshes
+  showed: Menagerie's UR5e meshes give each triangle its own corners and its
+  face's normal. The demo draws a copy of each with the corners welded and
+  the normals averaged across every edge but those sharper than 40 degrees.
 - **misina-lab**: A `{PACKAGE}_RECORD` video keeps every frame in its place.
   A frame whose readback landed more than 8 frames late, as one does while a
   slide rebuilds the scene, was skipped, and written once it landed in the
