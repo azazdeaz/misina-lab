@@ -36,7 +36,6 @@ import functools
 import hashlib
 import itertools
 import math
-import os
 import pathlib
 import tempfile
 import xml.etree.ElementTree as ElementTree
@@ -730,11 +729,11 @@ def _smoothed(path: pathlib.Path) -> str:
     out = _CACHE / f"{path.stem}_{hashlib.sha256(text.encode()).hexdigest()[:16]}.obj"
     if not out.exists():
         _CACHE.mkdir(parents=True, exist_ok=True)
-        # Written beside it and swapped in, so a write cut short never leaves
-        # a truncated mesh under the name; one draft per process.
-        draft = out.with_suffix(f".{os.getpid()}.part")
-        draft.write_text(text)
-        draft.replace(out)
+        # Written to a new file beside it and swapped in, so a write cut short
+        # never leaves a truncated mesh under the name.
+        with tempfile.NamedTemporaryFile("w", dir=_CACHE, suffix=".part", delete=False) as draft:
+            draft.write(text)
+        pathlib.Path(draft.name).replace(out)
     return str(out)
 
 
