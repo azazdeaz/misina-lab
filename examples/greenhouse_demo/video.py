@@ -71,7 +71,7 @@ it and a cut the arm reaches back for."""
 CRATE = Shot(eye=(0.0, -0.45, 0.7), look=(0.0, 0.0, 0.1), lens=18.0)
 """The crate, from above the path across from the side the truss is cut on,
 as the arm carries the truss to it and lets it go: the point it frames is
-the crate's middle, at its underside. Any higher, the camera stands among
+the crate's middle, at its underside. 10 cm higher, the camera stands among
 the leaves of the row across the path when the lift is up for a high cut."""
 
 TOUCH = Shot(
