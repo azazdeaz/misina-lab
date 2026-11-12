@@ -111,11 +111,12 @@ def test_the_crates_boxes_are_its_mesh():
     assert corners.max(axis=0) == pytest.approx(points.max(axis=0), abs=0.001)
 
 
-def test_newton_reads_the_hand_friction_on_every_collider_on_the_hand_alone():
+def test_newton_reads_the_hand_material_on_every_collider_on_the_hand_alone():
     """On a stage laid out as the URDF importer lays out the robot, links
     nested in their parents and their pieces instances of a prototype,
     Newton's importer gives every collider on the hand, the shear's links
-    under it included, `HAND_FRICTION`, and the arm's the default."""
+    under it included, `HAND_FRICTION` and `HAND_STIFFNESS`, and the arm's
+    the defaults."""
     from newton import ModelBuilder
     from pxr import Usd, UsdGeom, UsdPhysics
 
@@ -128,15 +129,20 @@ def test_newton_reads_the_hand_friction_on_every_collider_on_the_hand_alone():
         piece.GetReferences().AddInternalReference("/Piece")
         piece.SetInstanceable(True)
     UsdPhysics.CollisionAPI.Apply(UsdGeom.Cube.Define(stage, f"{hand}/head").GetPrim())
-    harvester.bind_hand_friction(stage.GetPrimAtPath("/Robot"))
+    harvester.bind_hand_material(stage.GetPrimAtPath("/Robot"))
     builder = ModelBuilder()
     builder.add_usd(stage, root_path="/Robot")
-    assert dict(zip(builder.shape_label, builder.shape_material_mu, strict=True)) == {
-        "/Robot/forearm_link/elbow/mesh": ModelBuilder.ShapeConfig().mu,
-        f"{hand}/jaw/mesh": harvester.HAND_FRICTION,
-        f"{hand}/blade_link/finger/mesh": harvester.HAND_FRICTION,
-        f"{hand}/head": harvester.HAND_FRICTION,
-    }
+    default = ModelBuilder.ShapeConfig()
+    for values, arm, on_hand in (
+        (builder.shape_material_mu, default.mu, harvester.HAND_FRICTION),
+        (builder.shape_material_ke, default.ke, harvester.HAND_STIFFNESS),
+    ):
+        assert dict(zip(builder.shape_label, values, strict=True)) == {
+            "/Robot/forearm_link/elbow/mesh": arm,
+            f"{hand}/jaw/mesh": on_hand,
+            f"{hand}/blade_link/finger/mesh": on_hand,
+            f"{hand}/head": on_hand,
+        }
 
 
 @pytest.mark.parametrize(("way", "clear"), [(MACHINE.way_in, True), ((0.0, 0.0, 1.0), False)])
@@ -205,6 +211,89 @@ def test_a_stems_fin_runs_from_its_front_back_to_its_rows_middle():
     assert front[1] < poses[0, 1, 3] < 0.1 < back[1]
 
 
+@pytest.mark.parametrize(
+    "fruit, back, low, middle",
+    [
+        (
+            [
+                # Set off its turned body along the body's x, which is the world's y.
+                (2, kinematics.transform((0.01, 0.0, 0.0)), 0.02, 0.0),
+                # A capsule standing upright: the lowest, by its length.
+                (3, np.eye(4), 0.01, 0.03),
+                # The one reaching furthest back, by its radius.
+                (4, np.eye(4), 0.055, 0.0),
+            ],
+            (0.055, -0.07, -0.12),
+            (-0.03, -0.05, -0.18),
+            (0.0, -0.17 / 3, -0.12),
+        ),
+        (
+            # A capsule leaning 45 degrees toward the arm: level with its
+            # middle, its side is r / sin 45 toward the arm, and its bottom
+            # lies under its lower round end, away from the arm.
+            [(4, kinematics.transform(rpy=(0.0, np.pi / 4, 0.0)), 0.02, 0.03)],
+            (0.02 * np.sqrt(2), -0.07, -0.12),
+            (-0.03 * np.sqrt(0.5), -0.07, -0.12 - 0.03 * np.sqrt(0.5) - 0.02),
+            (0.0, -0.07, -0.12),
+        ),
+    ],
+)
+def test_a_gestures_tip_lands_on_its_points(fruit, back, low, middle):
+    """The shear's tip lands on each point of a gesture, offset from the near
+    side of the fruit furthest back toward the arm, level with its middle,
+    the bottom of the lowest, or the middle of them all, on the fruit's
+    capsule however it leans; the mouth turned as the level cut pose, then
+    `tilt` up about its pivot."""
+    harvest = pytest.importorskip("harvest")
+
+    class Rod:
+        """Two bodies running out along -y from a stem at the origin, the
+        path toward -y, then a body for each fruit: the first turned a
+        quarter about z, as a position and (x, y, z, w) rotation."""
+
+        bodies = np.arange(5)
+        poses = {
+            2: [0.03, -0.06, -0.10, 0.0, 0.0, np.sin(np.pi / 4), np.cos(np.pi / 4)],
+            3: [-0.03, -0.05, -0.14, 0.0, 0.0, 0.0, 1.0],
+            4: [0.0, -0.07, -0.12, 0.0, 0.0, 0.0, 1.0],
+        }
+
+        def capsules(self):
+            return np.array([[0.0, 0.0, 0.0], [0.0, -0.03, 0.0]]), np.array(
+                [[0.0, -0.03, 0.0], [0.0, -0.06, 0.0]]
+            )
+
+        def pose(self, body):
+            return np.array(self.poses[body])
+
+    rod = Rod()
+    cut = np.eye(4)
+    cut[:3, 0] = [0.0, -1.0, 0.0]
+    truss = harvest.Truss("", cut, True, side=np.array([0.0, 1.0, 0.0]), bodies=[0, 1])
+    truss.fruit = fruit
+    ahead = harvest.heading(cut[:3, 0], truss.side)
+    up = np.array([0.0, 0.0, 1.0])
+    s = MACHINE.shear
+    tip = np.linalg.inv(MACHINE.tool) @ MACHINE.shear_frame
+    tip = tip @ [0.0, s.edge(s.blade + s.claw), s.blade + s.claw, 1.0]
+    # The shear comes in toward -x, so the arm is toward +x.
+    points = [
+        (harvest.Point("back", (-0.03, 0.0, 0.01)), np.array(back)),
+        (harvest.Point("low", (0.0, 0.01, -0.02)), np.array(low)),
+        (harvest.Point("middle"), np.array(middle)),
+    ]
+    across = np.cross(up, ahead) * np.sign(np.cross(up, ahead) @ truss.side)
+    for yaw, tilt in ((0.0, 0.0), (0.0, 0.5), (0.4, -0.3)):
+        gesture = harvest.Gesture("", tuple(p for p, _ in points), yaw=yaw, tilt=tilt)
+        poses = harvest.gesture_poses(gesture, truss, rod, MACHINE)
+        for pose, (point, anchor) in zip(poses, points, strict=True):
+            wanted = anchor + np.column_stack([ahead, across, up]) @ point.offset
+            assert (pose @ tip)[:3] == pytest.approx(wanted)
+            # Turned toward the path, it points into the row.
+            assert pose[:3, 2] @ truss.side == pytest.approx(np.sin(yaw) * np.cos(tilt))
+            assert pose[:3, 2] @ up == pytest.approx(np.sin(tilt))
+
+
 def test_a_turned_approach_cuts_as_far_off_the_stem():
     """Every cut pose keeps the blades' plane along the stem and the hook
     up, and the fixed blade as far off the stem's axis as coming in along
@@ -224,3 +313,15 @@ def test_a_turned_approach_cuts_as_far_off_the_stem():
         assert x @ (pose[:3, 3] - truss.axis) == pytest.approx(0.016 - MACHINE.shear.bypass)
         assert z @ truss.side == pytest.approx(np.sin(yaw) * np.cos(tilt))
         assert y[2] > 0.0
+
+
+def test_a_truss_with_no_fruit_passes_every_gesture_over(monkeypatch):
+    """Gestures are made at the first truss or not at all: none is left over
+    for the next truss, where the video would film them as the first's."""
+    harvest = pytest.importorskip("harvest")
+    run = object.__new__(harvest.Harvest)
+    run.job = harvest.Truss("/Truss", np.eye(4), True, side=np.array([0.0, 1.0, 0.0]))
+    run.gestures = [harvest.Gesture("push", (harvest.Point("back"),))]
+    monkeypatch.setattr(run, "_plan", lambda: None)
+    run._touch()
+    assert run.job.fruit == [] and run.gestures == []

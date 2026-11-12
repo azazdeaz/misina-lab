@@ -189,18 +189,9 @@ class Planner:
         back = -standoff * self._machine.way_in
         moved = transform((0.0, back[1], 0.0))
         for chosen in (poses, *([pose] for pose in poses)):
-            goals = np.array(
-                [np.linalg.inv(platform) @ pose @ moved @ self._tool for pose in chosen]
-            )
-            position = torch.tensor(goals[:, :3, 3], dtype=torch.float32, device="cuda")
-            quaternion = Rotation.from_matrix(goals[:, :3, :3]).as_quat(scalar_first=True)
-            quaternion = torch.tensor(quaternion, dtype=torch.float32, device="cuda")
+            goals = [np.linalg.inv(platform) @ pose @ moved for pose in chosen]
             result = planner.plan_grasp(
-                GoalToolPose(
-                    tool_frames=planner.tool_frames,
-                    position=position.view(1, 1, 1, len(chosen), 3),
-                    quaternion=quaternion.view(1, 1, 1, len(chosen), 4),
-                ),
+                self._goal(planner, goals),
                 self._state(planner, q),
                 grasp_approach_offset=back[2],
                 plan_approach_to_grasp=False,
@@ -219,18 +210,39 @@ class Planner:
                 return Cut(approach, inward, (inward[0][::-1], -inward[1][::-1]))
         return None
 
+    def reach(
+        self, q: np.ndarray, platform: np.ndarray, pose: np.ndarray, skip, beside
+    ) -> tuple[np.ndarray, np.ndarray] | None:
+        """A move from arm joint positions `q` to the mouth at world pose
+        `pose`, the platform at `platform`, keeping the whole arm, the shear
+        too, clear of the world but the bodies in `skip` and the stretch of
+        the stem `beside` names (`_world`); or None if there is none. Planned
+        as a cut's way to its stand-off is, by the same planner."""
+        planner = self._cutting
+        self._world(planner, platform, skip, beside)
+        goal = self._goal(planner, [np.linalg.inv(platform) @ pose])
+        result = planner.plan_pose(goal, self._state(planner, q))
+        if result is None or not result.success.any():
+            return None
+        return _trajectory(result.interpolated_trajectory, result.interpolated_last_tstep)
+
     def line(
-        self, q: np.ndarray, platform: np.ndarray, start: np.ndarray, end: np.ndarray
+        self,
+        q: np.ndarray,
+        platform: np.ndarray,
+        start: np.ndarray,
+        end: np.ndarray,
+        speed: float = SPEED,
     ) -> tuple[np.ndarray, np.ndarray] | None:
         """The arm's joint positions and velocities every `dt` taking the mouth
         from world pose `start` to `end`, turned as `start` is, on a straight
-        line at `SPEED`, from arm joint positions `q` with the platform at
-        `platform`; or None if the arm cannot follow it."""
+        line at `speed` in m/s, from arm joint positions `q` with the platform
+        at `platform`; or None if the arm cannot follow it."""
         inverse = np.linalg.inv(platform)
-        return self._line(q, inverse @ start, inverse @ end)
+        return self._line(q, inverse @ start, inverse @ end, speed)
 
     def _line(
-        self, q: np.ndarray, start: np.ndarray, end: np.ndarray
+        self, q: np.ndarray, start: np.ndarray, end: np.ndarray, speed: float = SPEED
     ) -> tuple[np.ndarray, np.ndarray] | None:
         """`line`, `start` and `end` in the platform's frame.
 
@@ -241,7 +253,8 @@ class Planner:
         chain, tool = self.chain, self._machine.tool
         length = np.linalg.norm(end[:3, 3] - start[:3, 3])
         positions = []
-        for share in np.linspace(0.0, 1.0, math.ceil(length / (SPEED * self.dt)) + 1):
+        # Both ends, however near, so it has a gradient.
+        for share in np.linspace(0.0, 1.0, max(2, math.ceil(length / (speed * self.dt)) + 1)):
             point = start.copy()
             point[:3, 3] += share * (end[:3, 3] - start[:3, 3])
             q, distance, angle = solve(chain, tool, point, q, iterations=50)
@@ -331,6 +344,19 @@ class Planner:
             for i, quaternion in zip(kept, quaternions, strict=True)
         ]
         planner.update_world(Scene(cuboid=boxes))
+
+    def _goal(self, planner: MotionPlanner, poses: list[np.ndarray]) -> GoalToolPose:
+        """The mouth at each of `poses`, in the platform's frame, as a set of
+        goals for the shear's frame, which cuRobo poses."""
+        goals = np.array([pose @ self._tool for pose in poses])
+        position = torch.tensor(goals[:, :3, 3], dtype=torch.float32, device="cuda")
+        quaternion = Rotation.from_matrix(goals[:, :3, :3]).as_quat(scalar_first=True)
+        quaternion = torch.tensor(quaternion, dtype=torch.float32, device="cuda")
+        return GoalToolPose(
+            tool_frames=planner.tool_frames,
+            position=position.view(1, 1, 1, len(goals), 3),
+            quaternion=quaternion.view(1, 1, 1, len(goals), 4),
+        )
 
     @staticmethod
     def _state(planner: MotionPlanner, q) -> JointState:

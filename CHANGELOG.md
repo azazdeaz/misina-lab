@@ -168,6 +168,11 @@ Scene document format 12.
   `lone_damping`. **vinery-lab** sets it for the weeds' stems, which now
   spring back a little past upright before they settle, where they stopped
   dead.
+- **misina-lab**: `GeneratedSceneCfg.ROD_STRETCH` and `ROD_DAMPING` tune a
+  scene's rods in place of `rods.ROD_STRETCH` and `rods.ROD_DAMPING`.
+  **greenhouse-lab** sets them for its trusses: their fruit no longer bounce
+  for a second after a push or a lift lets go, and a pushed truss swings back
+  a little past rest before it settles, where it stopped dead.
 - **greenhouse-lab**: Stems collide, as a chain of capsules along each
   stem's axis from where it takes off from the lowered bundle,
   `Stem_n/Collision_00 …`, each straight from one of the axis's points to
@@ -335,6 +340,16 @@ Scene document format 12.
   a friction coefficient of 0.25, where every one had the default 1.0. A
   truss let go slides off the open finger as the shear opens, where it lay
   on it until the blades were tipped down.
+- The harvest demo's hand is stiff to the touch: its colliders have a
+  contact stiffness of 50 000 N/m, where every one had Isaac Lab's default
+  2500. A fruit borne on the shear's head sinks 0.6 mm into it, where it
+  sank about a centimetre.
+- The harvest demo's video opens on a truss giving way to the arm: before
+  the first cut, the open shear pushes the truss from the side, brushes its
+  lowest fruit and lifts it, filmed close up. The demo's crop is deleafed up
+  to the truss above the one picked, so leaves hang in the video's view. `harvest.run` makes the `Gesture`s it is
+  given at the first truss, its points placed about the truss's fruit, and
+  passes over one the arm cannot plan or finish.
 - The pruning demo's vineyard grows bending weeds, and its robot's chassis
   and wheels push them aside as it drives the alley. Its video is filmed
   with them.

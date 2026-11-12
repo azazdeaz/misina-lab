@@ -40,6 +40,7 @@ from isaaclab.sim.spawners.from_files.from_files_cfg import FileCfg
 from isaaclab.sim.utils import clone
 from isaaclab.utils.configclass import configclass
 
+from . import rods
 from .rods import steps_rods, tune_rods
 from .skins import drive_skins
 
@@ -63,6 +64,10 @@ class GeneratedSceneCfg(FileCfg):
     and the prim path may be an env regex. Everything on the cfg that is not a
     fragment is applied to the spawned prim rather than baked into the USD,
     and takes no part in the cache key.
+
+    The upper-case attributes are the generator's own, set by its subclass.
+    Set on an instance, they are lost to `copy()` and `replace()`, which
+    rebuild a cfg from its fields.
 
     There is no `usd_path`: the fragments are what identifies the asset, and
     the file backing it is an implementation detail of the cache.
@@ -89,9 +94,18 @@ class GeneratedSceneCfg(FileCfg):
     for a scene that can author one. Everything under one plant's prim collides
     as a group and passes through every other plant; see `rods.tune_rods`."""
 
+    ROD_STRETCH: ClassVar[float] = rods.ROD_STRETCH
+    """What every rod joint's stretch and shear stiffness is multiplied by; see
+    `rods.ROD_STRETCH`. The heavier a rod's segments, the stiffer a joint the
+    solver converges on."""
+
+    ROD_DAMPING: ClassVar[float] = rods.ROD_DAMPING
+    """What every rod joint's bend and twist are damped with, as a fraction of
+    their own stiffness, in seconds; see `rods.ROD_DAMPING`."""
+
     LONE_ROD_DAMPING: ClassVar[float | None] = None
     """What a rod under no plant's prim is damped with, in place of
-    `rods.ROD_DAMPING`; `None` damps it as any other. A rod's bend damping is
+    `ROD_DAMPING`; `None` damps it as any other. A rod's bend damping is
     a fraction of its own stiffness, which damps a rod the more the faster it
     swings: a short, slender one standing on its own may want less to swing
     at all."""
@@ -182,7 +196,12 @@ def for_backend(cfg: GeneratedSceneCfg) -> GeneratedSceneCfg:
             raise TypeError(
                 f"{type(cfg).__name__} authors rods but names no PLANT to group them by"
             )
-        tune_rods(cfg.PLANT, lone_damping=cfg.LONE_ROD_DAMPING)
+        tune_rods(
+            cfg.PLANT,
+            damping=cfg.ROD_DAMPING,
+            stretch=cfg.ROD_STRETCH,
+            lone_damping=cfg.LONE_ROD_DAMPING,
+        )
         drive_skins()
         return cfg
     solver = getattr(physics, "solver_cfg", physics)

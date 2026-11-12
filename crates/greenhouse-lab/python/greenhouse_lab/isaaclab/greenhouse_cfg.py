@@ -495,6 +495,18 @@ class GreenhouseCfg(GeneratedSceneCfg):
     PLANT: ClassVar[str] = "Plant"
     """The plant prim `crates/greenhouse-lab/src/elements/stem.rs` names
     `Plant_NNN`: a plant's bent trusses collide as one group."""
+    ROD_STRETCH: ClassVar[float] = 0.1
+    """A truss's segments carry its fruit, tens to hundreds of grams each,
+    heavy enough for the solver to converge on a tenth of the material's
+    stretch and shear. At `rods.ROD_STRETCH` the fruit hang on 2-3 mm of give
+    and bounce on it at about 10 Hz for a second whenever the arm lets go of
+    the truss; at this they come to rest without it."""
+    ROD_DAMPING: ClassVar[float] = 0.02
+    """A truss is short and stiff and swings about three times as fast as a
+    cane, and at `rods.ROD_DAMPING` it comes back from a push and stops dead.
+    At this, pushed a few centimetres aside and let go, it swings back past
+    rest by a tenth to a quarter of the push and is within 5 mm of rest in
+    about 0.4 s."""
 
     # >>> generated: aggregate
     scene: SceneCfg = SceneCfg()

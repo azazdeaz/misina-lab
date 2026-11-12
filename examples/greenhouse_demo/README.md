@@ -141,12 +141,12 @@ reaches, how many of those only by brushing a truss, how many it cuts,
 holds and lets go, how many end in the crate, and the seconds per truss
 cut.
 On the demo's two 4 m rows, 25 trusses are due on the three paths. The
-robot reaches and cuts every one, one only by brushing a truss, and all
-but two ride in the jaws to the crate and land in it: one is let go in the
-path where the shoulder cannot turn far enough to swing it round (see
-[Cutting and holding](#cutting-and-holding)), and one comes to rest partly
-outside the crate. That is about 6 s of simulated time a cut and 240 s for
-the whole run, which takes about six minutes on an RTX 5070 Ti.
+robot reaches and cuts every one, one only by brushing a truss, and 21 to
+23 ride in the jaws to the crate and land in it, two runs differing by a
+truss or two. The rest are let go at the stand-off, where the arm cannot
+follow the line out across the path, or come to rest partly outside the
+crate. That is about 5.5 s of simulated time a cut and 235 s for the whole
+run, which takes about six minutes on an RTX 5070 Ti.
 
 ## Cutting and holding
 
@@ -184,6 +184,13 @@ friction coefficient of 0.25, 0.5 against a peduncle. One still lying on
 the finger, where the shear was tilted up for the cut, is tipped off by
 turning the blades down about the peduncle, as the pruning demo tips out a
 piece of cane.
+
+The hand's colliders are stiffer to the touch than the rest of the scene,
+too: 50 000 N/m, to Isaac Lab's default 2500. The solver bending the trusses
+lets a contact give in proportion to the load on it, and at the default a
+fruit borne up on the shear's head, its truss's weight on it, sinks a
+centimetre into it. At 100 000 N/m, the closing shear stalls on the
+peduncle.
 
 The blade crosses the peduncle half a centimetre past its rod's first
 joint, and `Shears.cut` makes the cut at the joint. Now and then the
@@ -250,9 +257,12 @@ films the harvester cutting Path_01's due trusses, the first three close up
 and the rest from a camera riding along with the trolley, in Isaac Sim's RTX
 renderer and headless, and writes
 `target/video/harvest.mp4` at the repo root, captioned and small enough to
-upload, and a contact sheet beside it. Its storyboard -- the shots, the takes,
-the pacing -- is the top of `video.py`, and the run fails if a take's truss
-was not cut.
+upload, and a contact sheet beside it. It opens on the first truss, close
+up, as the open shear pushes it from the side, brushes its lowest fruit and
+lifts it, to show the trusses giving way to the arm, then cuts it. Its
+storyboard -- the shots, the takes, those gestures, the pacing -- is the
+top of `video.py`, and the run fails if a take's truss was not cut or a
+gesture was not made.
 `docs/video/publish.sh target/video/harvest.mp4 examples/greenhouse_demo/README.md`,
 run from the repo root on the branch whose pull request changes the video,
 uploads it and points the video line above at it.
@@ -263,11 +273,11 @@ uploads it and points the video line above at it.
 | --- | --- |
 | `shot.py` | a still from a shot file in `docs/shots/greenhouse_demo/`: the greenhouse under a sky, or the harvester at work; see [docs-shots](../../.claude/skills/docs-shots/SKILL.md) |
 | `bend.py` | a row with bent trusses under VBD, the capsules that sweep through them, and the cut |
-| `harvest.py` | two rows and the harvester: the ground truth off the stage, the plan, the cuts, the holds and releases, the tally |
+| `harvest.py` | two rows and the harvester: the ground truth off the stage, the plan, the cuts, the holds and releases, the tally, and the gestures a video may have the arm make at the first truss |
 | `harvester.py` | the robot: its dimensions, the UR5e read out of Menagerie's MJCF, its colliders, the shear on its flange, the URDF built from them and cuRobo's model of it, the actuators |
 | `shear.py` | the cut-and-hold shear: its blades' geometry, their meshes and colliders, and `Stroke`, the blade closing through a peduncle, and the jaw and the sprung finger that hold the truss; the pruning demo's module, kept the same |
-| `planner.py` | cuRobo: the world it plans in, read off the running simulation, the moves to joint positions, folded or over the crate, the reach to a cut and the straight lines of the mouth |
-| `video.py`, `record.sh` | the video: Path_01 harvested, filmed headless, and its encoding |
+| `planner.py` | cuRobo: the world it plans in, read off the running simulation, the moves to joint positions, folded or over the crate, the reach to a cut or to any pose of the mouth, and its straight lines |
+| `video.py`, `record.sh` | the video: Path_01 harvested, the first truss pushed, brushed and lifted before it is cut, filmed headless, and its encoding |
 | `kinematics.py` | forward and inverse kinematics of the trolley and the arm, for the URDF, the stations and the straight line in; the pruning demo's module, kept the same |
 
 [`examples/isaaclab_demo/DEVELOPMENT.md`](../isaaclab_demo/DEVELOPMENT.md)
