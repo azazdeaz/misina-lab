@@ -25,12 +25,13 @@ def rolled(angle: float) -> np.ndarray:
     return np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
 
 
-def fk(x: float, pitch: float, yaw: float, point: np.ndarray) -> np.ndarray:
+def fk(x: float, pitch: float, yaw: float, point: np.ndarray, y=0.0, z=0.0, roll=0.0) -> np.ndarray:
     """Where `point`, in the body's frame, is in the ground frame, for a body
-    shifted `x` forward and turned by `pitch` and `yaw`: the paper's Eq. 1."""
+    shifted `x` forward and turned by `pitch` and `yaw`: the paper's Eq. 1;
+    and shifted `y` and `z` and turned by `roll` beyond it."""
     c, s = math.cos(yaw), math.sin(yaw)
     yawed = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
-    return np.array([x, 0, spot_weeder.Z_NOM]) + yawed @ pitched(pitch) @ point
+    return np.array([x, y, spot_weeder.Z_NOM + z]) + yawed @ pitched(pitch) @ rolled(roll) @ point
 
 
 @pytest.fixture(scope="module")
@@ -67,6 +68,7 @@ def test_the_pose_puts_the_bit_on_the_point(height):
     for x, y in spot_weeder.E:
         point = (x, y, height)
         np.testing.assert_allclose(fk(*spot_weeder.pose_for(point), spot_weeder.TIP), point)
+        np.testing.assert_allclose(spot_weeder.fk(*spot_weeder.pose_for(point)), point)
 
 
 def test_the_shaft_stands_upright_with_the_bit_2_cm_in(stage):
@@ -78,17 +80,18 @@ def test_the_shaft_stands_upright_with_the_bit_2_cm_in(stage):
 
 
 @pytest.mark.parametrize(
-    ("body", "raised"),
+    ("body", "raised", "rest"),
     [
-        ((0.0, 0.0, 0.0), {}),
-        ((0.0, 0.3, 0.0), {}),
-        ((0.1, 0.25, 0.3), {}),
-        ((-0.05, 0.27, -0.4), {}),
-        ((0.05, 0.2, 0.2), {"fl": 0.05, "hr": 0.1}),
+        ((0.0, 0.0, 0.0), {}, {}),
+        ((0.0, 0.3, 0.0), {}, {}),
+        ((0.1, 0.25, 0.3), {}, {}),
+        ((-0.05, 0.27, -0.4), {}, {}),
+        ((0.05, 0.2, 0.2), {"fl": 0.05, "hr": 0.1}, {}),
+        ((0.05, 0.25, 0.3), {}, {"y": 0.03, "z": -0.02, "roll": 0.05}),
     ],
 )
-def test_the_stance_keeps_the_feet_where_they_stood(body, raised):
-    angles = spot_weeder.stance(*body, raised)
+def test_the_stance_keeps_the_feet_where_they_stood(body, raised, rest):
+    angles = spot_weeder.stance(*body, raised, **rest)
     for name, angle in angles.items():
         low, high = spot_weeder.LIMITS[name[-2:]]
         assert type(angle) is float and low <= angle <= high
@@ -99,7 +102,9 @@ def test_the_stance_keeps_the_feet_where_they_stood(body, raised):
         swung = pitched(angles[f"{leg}_hy"]) @ (knee + shin)
         foot = np.array([x, y, 0]) + rolled(angles[f"{leg}_hx"]) @ ([0, out, 0] + swung)
         stood = [x, y + out, spot_weeder.FOOT + raised.get(leg, 0.0)]
-        np.testing.assert_allclose(fk(*body, foot), stood, atol=1e-9)
+        np.testing.assert_allclose(fk(*body, foot, **rest), stood, atol=1e-9)
+    bit = fk(*body, spot_weeder.TIP, **rest)
+    np.testing.assert_allclose(spot_weeder.fk(*body, **rest), bit, atol=1e-12)
 
 
 def test_spots_legs_are_as_the_stance_has_them(stage):
@@ -227,7 +232,7 @@ def test_importing_the_scripts_does_not_load_pxr():
         [
             sys.executable,
             "-c",
-            "import demo, spot_weeder, sys, workspace; assert 'pxr' not in sys.modules",
+            "import demo, pose, spot_weeder, sys, tracking, workspace; assert 'pxr' not in sys.modules",
         ],
         cwd=pathlib.Path(__file__).parent,
         check=True,
