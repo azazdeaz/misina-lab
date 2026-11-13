@@ -9,8 +9,8 @@ to put the bit on a weed.
 
 **Contents:** [Requirements](#requirements) · [Running it](#running-it) ·
 [The robot](#the-robot) · [Where it comes from](#where-it-comes-from) ·
-[Using it](#using-it) · [What it does not do](#what-it-does-not-do) ·
-[Layout](#layout)
+[Using it](#using-it) · [Workspace](#workspace) ·
+[What it does not do](#what-it-does-not-do) · [Layout](#layout)
 
 ## Requirements
 
@@ -42,6 +42,13 @@ The body stands 6 mm over the paper's 0.5 m, on the contact margins of
 Isaac Lab's physics settings for Spot, and pitches 13.2 degrees for the 12.0
 it is sent to, as the front legs give under the tool. That brings the bit
 down to 3.2 cm from the 4 cm it is sent to.
+
+```bash
+uv run workspace.py
+```
+
+prints where the bit can reach the ground beside the paper's numbers; see
+[Workspace](#workspace).
 
 ```bash
 uv run pytest
@@ -121,10 +128,57 @@ its locomotion policies are trained with, and the spindle a velocity drive:
 its velocity target spins it. The legs' gains fold under the tool's weight
 when they hold a pose, so the demo puts stiffer drives on them.
 
-`stance(pitch)` gives the leg joint angles that pitch the body about its
-centre over feet planted below the hips: the paper's body pose command with
-no shift and no yaw. `pitch_to(height)` is the pitch that brings the bit to
-`height` over the ground, the paper's Eq. 2.
+The bit is aimed with the body, as in the paper. Points are in the ground
+frame: the body's frame with the robot standing at rest, dropped onto the
+ground.
+
+```python
+from spot_weeder import pose_for, reachable, stance
+
+point = (0.85, 0.2, -0.02)  # 2 cm into the ground, ahead and to the left
+if reachable(*point):
+    joints = stance(*pose_for(point))
+```
+
+- `pose_for(point)` is the paper's Eqs. 2–4: the body's shift, pitch and yaw
+  that put the bit on `point`, here 0.20 m, 16.9 degrees and 17.2 degrees.
+- `stance(x, pitch, yaw)` gives the leg joint angles that hold the body in
+  that pose, `Z_NOM` over the ground. The feet stay planted below the hips,
+  and each leg's three joints are solved as in the paper's Appendix A.
+  `raised` stands feet on blocks.
+- `reachable` is the paper's workspace K, which `LIMITS` bounds.
+- `E` is the paper's workspace E, as an outline. `inside(E, x, y)` tests
+  points against it, as the paper's Eq. 5 keeps the weeds inside E.
+- `pitch_to(height)` is Eq. 2 alone.
+
+## Workspace
+
+The paper's two workspaces at ground level (its Fig. 5b) are where the bit
+can reach the ground over planted feet:
+
+- K, the area every leg joint allows within its range: 0.402 m².
+- E, the area Spot's own controller allowed on the real robot, measured on
+  flat ground: 0.165 m². `E` is its outline, traced from the paper's PDF.
+
+`workspace.py` counts K for this robot, from the joint limits and the leg
+lengths in NVIDIA's USD, with the body `Z_NOM` over the ground:
+
+| Feet raised on blocks | K here | K in the paper's text | K in the paper's figure |
+| --- | --- | --- | --- |
+| none | 0.562 m² | 0.402 m² | 0.402 m² |
+| FL 5 cm | 0.540 m² | 0.420 m² | 0.452 m² |
+| FL 5 cm, FR 10 cm | 0.491 m² | 0.455 m² | 0.444 m² |
+| FL 5 cm, HL 10 cm | 0.580 m² | 0.459 m² | 0.568 m² |
+| FL 5 cm, HR 10 cm | 0.588 m² | 0.557 m² | 0.459 m² |
+
+- Here K is larger than the paper's. It reaches further back and less far to
+  the sides. The paper doesn't say where its feet stand or which joint
+  ranges it took.
+- 93% of E is inside K here. The rest is E's two outer corners, beyond 30
+  degrees of yaw, where the hind legs run out of reach with the feet below
+  the hips. The real Spot reached them, so its feet stand elsewhere.
+- With feet raised, the paper's text (its Table 3) and the outlines it draws
+  (its Appendix B) disagree on K, though they agree on flat ground.
 
 ## What it does not do
 
@@ -134,7 +188,9 @@ no shift and no yaw. `pitch_to(height)` is the pitch that brings the bit to
   spindle, which is why the demo stops the bit at 4 cm.
 - Find weeds. The L515's camera renders, but nothing looks for a weed in its
   pictures.
-- Shift or yaw the body. `stance` only pitches it.
+- Weed. The demo pitches the body straight down. `pose_for` and `stance`
+  aim the bit at any point, but nothing yet picks the weeds in E and moves
+  from one to the next.
 - Balance like Spot. The paper poses the body with Spot's own controller,
   which takes the tool's weight into account; here stiff joint drives hold
   the pose.
@@ -143,6 +199,7 @@ no shift and no yaw. `pitch_to(height)` is the pitch that brings the bit to
 
 | File | What it is |
 | --- | --- |
-| [spot_weeder.py](spot_weeder.py) | the robot: the paper's numbers, `write_usd`, `robot_cfg`, `stance` and `pitch_to` |
+| [spot_weeder.py](spot_weeder.py) | the robot: the paper's numbers, `write_usd`, `robot_cfg`, and the aiming: `pose_for`, `stance`, `reachable` and `E` |
 | [demo.py](demo.py) | the demo above |
+| [workspace.py](workspace.py) | the workspace at ground level, beside the paper's |
 | [test_spot_weeder.py](test_spot_weeder.py) | the robot checked against the paper's numbers |

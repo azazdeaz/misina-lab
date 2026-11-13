@@ -248,7 +248,9 @@ def main():
         while sim.is_running() and (not args.out or step < sum(steps)):
             # Stand, then pitch down at an even rate, then hold.
             pitch = down * min(max(step - steps[0], 0) / steps[1], 1.0)
-            target = torch.tensor([list(spot_weeder.stance(pitch).values())], device=sim.device)
+            target = torch.tensor(
+                [list(spot_weeder.stance(pitch=pitch).values())], device=sim.device
+            )
             robot.actuators.target_command.set_position_index(value=target, joint_ids=legs)
             scene.write_data_to_sim()
             sim.step(render=not args.out)

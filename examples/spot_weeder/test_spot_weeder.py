@@ -19,12 +19,18 @@ def pitched(angle: float) -> np.ndarray:
     return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
 
 
-def fk(x: float, pitch: float, yaw: float, tip: np.ndarray) -> np.ndarray:
-    """Where the bit is over planted feet, for a body shifted `x` forward and
-    turned by `pitch` and `yaw`: the paper's Eq. 1."""
+def rolled(angle: float) -> np.ndarray:
+    """A turn of `angle` about the x axis, left side up."""
+    c, s = math.cos(angle), math.sin(angle)
+    return np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
+
+
+def fk(x: float, pitch: float, yaw: float, point: np.ndarray) -> np.ndarray:
+    """Where `point`, in the body's frame, is in the ground frame, for a body
+    shifted `x` forward and turned by `pitch` and `yaw`: the paper's Eq. 1."""
     c, s = math.cos(yaw), math.sin(yaw)
     yawed = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
-    return np.array([x, 0, spot_weeder.Z_NOM]) + yawed @ pitched(pitch) @ tip
+    return np.array([x, 0, spot_weeder.Z_NOM]) + yawed @ pitched(pitch) @ point
 
 
 @pytest.fixture(scope="module")
@@ -53,6 +59,14 @@ def test_the_bit_is_where_the_paper_puts_it(stage):
     # Its Table 2: the body shifted 0.08 m and turned pi/10 in pitch and yaw.
     bit = fk(0.08, math.pi / 10, math.pi / 10, tip)
     np.testing.assert_allclose(bit * 1000, [715.44, 206.47, -32.53], atol=0.01)
+    np.testing.assert_allclose(spot_weeder.pose_for(bit), [0.08, math.pi / 10, math.pi / 10])
+
+
+@pytest.mark.parametrize("height", [-0.02, 0.0, 0.1])
+def test_the_pose_puts_the_bit_on_the_point(height):
+    for x, y in spot_weeder.E:
+        point = (x, y, height)
+        np.testing.assert_allclose(fk(*spot_weeder.pose_for(point), spot_weeder.TIP), point)
 
 
 def test_the_shaft_stands_upright_with_the_bit_2_cm_in(stage):
@@ -63,38 +77,88 @@ def test_the_shaft_stands_upright_with_the_bit_2_cm_in(stage):
     assert math.degrees(math.acos(up[2])) < 0.5
 
 
-@pytest.mark.parametrize("pitch", [0.0, 0.15, 0.3])
-def test_the_stance_keeps_the_feet_on_the_ground_below_the_hips(pitch):
-    angles = spot_weeder.stance(pitch)
+@pytest.mark.parametrize(
+    ("body", "raised"),
+    [
+        ((0.0, 0.0, 0.0), {}),
+        ((0.0, 0.3, 0.0), {}),
+        ((0.1, 0.25, 0.3), {}),
+        ((-0.05, 0.27, -0.4), {}),
+        ((0.05, 0.2, 0.2), {"fl": 0.05, "hr": 0.1}),
+    ],
+)
+def test_the_stance_keeps_the_feet_where_they_stood(body, raised):
+    angles = spot_weeder.stance(*body, raised)
+    for name, angle in angles.items():
+        low, high = spot_weeder.LIMITS[name[-2:]]
+        assert type(angle) is float and low <= angle <= high
     for leg, (x, y) in spot_weeder.HIPS.items():
+        out = math.copysign(spot_weeder.HIP, y)
         knee = np.array([spot_weeder.THIGH[0], 0, spot_weeder.THIGH[1]])
         shin = pitched(angles[f"{leg}_kn"]) @ [0, 0, -spot_weeder.SHIN]
-        foot = np.array([x, y, 0]) + pitched(angles[f"{leg}_hy"]) @ (knee + shin)
-        on_ground = np.array([0, 0, spot_weeder.Z_NOM]) + pitched(pitch) @ foot
-        np.testing.assert_allclose(on_ground, [x, y, spot_weeder.FOOT], atol=1e-9)
+        swung = pitched(angles[f"{leg}_hy"]) @ (knee + shin)
+        foot = np.array([x, y, 0]) + rolled(angles[f"{leg}_hx"]) @ ([0, out, 0] + swung)
+        stood = [x, y + out, spot_weeder.FOOT + raised.get(leg, 0.0)]
+        np.testing.assert_allclose(fk(*body, foot), stood, atol=1e-9)
 
 
 def test_spots_legs_are_as_the_stance_has_them(stage):
-    from pxr import Usd, UsdGeom, UsdPhysics
+    from pxr import Gf, Usd, UsdGeom, UsdPhysics
+
+    def joint(path):
+        return UsdPhysics.RevoluteJoint(stage.GetPrimAtPath(path))
 
     def joint_at(path):
-        return np.array(UsdPhysics.Joint(stage.GetPrimAtPath(path)).GetLocalPos0Attr().Get())
+        return np.array(joint(path).GetLocalPos0Attr().Get())
 
     for leg, hip in spot_weeder.HIPS.items():
+        np.testing.assert_allclose(joint_at(f"/spot/body/{leg}_hx"), [*hip, 0])
         position, turn = pose(stage, f"/spot/{leg}_hip")
         np.testing.assert_allclose(
-            position + turn @ joint_at(f"/spot/{leg}_hip/{leg}_hy"), [*hip, 0]
+            position + turn @ joint_at(f"/spot/{leg}_hip/{leg}_hy"),
+            [hip[0], hip[1] + math.copysign(spot_weeder.HIP, hip[1]), 0],
         )
         knee = joint_at(f"/spot/{leg}_uleg/{leg}_kn")
         np.testing.assert_allclose(knee[[0, 2]], spot_weeder.THIGH)
         np.testing.assert_allclose(
             joint_at(f"/spot/{leg}_lleg/{leg}_ank"), [0, 0, -spot_weeder.SHIN]
         )
+        # Each joint turns about the axis, and within the range, that the
+        # stance takes it to.
+        for name, parent, axis in (
+            ("hx", "body", "X"),
+            ("hy", f"{leg}_hip", "Y"),
+            ("kn", f"{leg}_uleg", "Y"),
+        ):
+            moving = joint(f"/spot/{parent}/{leg}_{name}")
+            assert moving.GetAxisAttr().Get() == axis
+            assert moving.GetLocalRot0Attr().Get() == moving.GetLocalRot1Attr().Get() == Gf.Quatf(1)
+            limits = moving.GetLowerLimitAttr().Get(), moving.GetUpperLimitAttr().Get()
+            np.testing.assert_allclose(np.radians(limits), spot_weeder.LIMITS[name], atol=1e-6)
         feet = Usd.PrimRange(
             stage.GetPrimAtPath(f"/spot/{leg}_foot"), Usd.TraverseInstanceProxies()
         )
         (ball,) = [UsdGeom.Sphere(prim) for prim in feet if prim.IsA(UsdGeom.Sphere)]
         assert ball.GetRadiusAttr().Get() == pytest.approx(spot_weeder.FOOT)
+
+
+def test_the_legs_reach_most_of_the_papers_workspace():
+    """The paper's E was measured on the real robot, so a true K holds all of
+    it; this one misses its outer corners, where Spot's hind legs run out of
+    reach. Spot's joint limits alone give a K larger than the paper's
+    0.402 m2."""
+    step = 0.005
+    x, y = np.meshgrid(np.arange(0.2, 1.2, step), np.arange(-0.8, 0.8, step))
+    outline = spot_weeder.E
+    area = abs(
+        outline[:, 0] @ np.roll(outline[:, 1], 1) - outline[:, 1] @ np.roll(outline[:, 0], 1)
+    )
+    assert area / 2 == pytest.approx(0.165, abs=0.001)
+    in_e = spot_weeder.inside(outline, x, y)
+    assert in_e.sum() * step**2 == pytest.approx(0.165, abs=0.002)
+    k = spot_weeder.reachable(x, y)
+    assert (k & in_e).sum() / in_e.sum() > 0.9
+    assert k.sum() * step**2 == pytest.approx(0.56, abs=0.01)
 
 
 def test_the_tool_weighs_7_kg_centred_25_cm_ahead_of_the_front_hips(stage):
@@ -160,7 +224,11 @@ def test_importing_the_scripts_does_not_load_pxr():
     imported first."""
     # A subprocess, so the check is not fooled by another test's imports.
     subprocess.run(
-        [sys.executable, "-c", "import demo, spot_weeder, sys; assert 'pxr' not in sys.modules"],
+        [
+            sys.executable,
+            "-c",
+            "import demo, spot_weeder, sys, workspace; assert 'pxr' not in sys.modules",
+        ],
         cwd=pathlib.Path(__file__).parent,
         check=True,
     )
