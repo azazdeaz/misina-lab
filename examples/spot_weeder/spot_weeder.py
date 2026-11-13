@@ -185,7 +185,9 @@ def stance(
         reach_x, reach_z = THIGH[0] - SHIN * np.sin(knee), THIGH[1] - SHIN * np.cos(knee)
         hip = np.arctan2(reach_z, reach_x) - np.arctan2(down, fx)
         joints |= {f"{leg}_hx": roll, f"{leg}_hy": hip, f"{leg}_kn": knee}
-    return joints
+    # Plain floats for a single pose: torch turns numpy's scalars into float64
+    # tensors, and the joint targets take float32.
+    return {name: float(angle) if np.ndim(angle) == 0 else angle for name, angle in joints.items()}
 
 
 def pitch_to(height: float) -> float:

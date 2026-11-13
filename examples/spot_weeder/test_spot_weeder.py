@@ -91,7 +91,7 @@ def test_the_stance_keeps_the_feet_where_they_stood(body, raised):
     angles = spot_weeder.stance(*body, raised)
     for name, angle in angles.items():
         low, high = spot_weeder.LIMITS[name[-2:]]
-        assert low <= angle <= high
+        assert type(angle) is float and low <= angle <= high
     for leg, (x, y) in spot_weeder.HIPS.items():
         out = math.copysign(spot_weeder.HIP, y)
         knee = np.array([spot_weeder.THIGH[0], 0, spot_weeder.THIGH[1]])
