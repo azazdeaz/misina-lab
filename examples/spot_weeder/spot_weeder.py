@@ -48,7 +48,7 @@ ASSETS = "azazdeaz/misina-lab-sim-assets"
 """The Hugging Face dataset the robot is published in. `huggingface_hub`
 fetches it from there on first use and caches it."""
 
-ASSETS_REVISION = "226040398cd51bcd9aa4ff9c5fcf88163496e8ba"
+ASSETS_REVISION = "a7eafc6cbbdf4e62f0852e021bcc0239f2eb46d6"
 """The dataset commit the example is pinned to."""
 
 FOLDER = "spot_weeder"
@@ -429,8 +429,9 @@ def write_usd(folder: pathlib.Path) -> pathlib.Path:
     drive.CreateDampingAttr(SPINDLE_DAMPING * math.pi / 180)
     drive.CreateMaxForceAttr(SPINDLE_TORQUE)
 
-    # Isaac Sim's robot schema lists a robot's links and joints, each with
-    # its API applied; the tool's go after Spot's.
+    # Isaac Sim's robot schema lists a robot's links and moving joints, each
+    # with its API applied; the tool's go after Spot's. A fixed joint carries
+    # the API but stays off the list, as Spot's ankles do.
     for name, api, targets in (
         ("robotLinks", "IsaacLinkAPI", [tool, bit]),
         ("robotJoints", "IsaacJointAPI", [spindle.GetPath()]),
@@ -439,6 +440,7 @@ def write_usd(folder: pathlib.Path) -> pathlib.Path:
         for target in targets:
             listed.AddTarget(target, Usd.ListPositionBackOfAppendList)
             stage.GetPrimAtPath(target).AddAppliedSchema(api)
+    mount.GetPrim().AddAppliedSchema("IsaacJointAPI")
 
     # Spot goes in last, onto a copy no stage composes: usd-core cannot open
     # a URL, and only Isaac Lab's resolver fetches it.

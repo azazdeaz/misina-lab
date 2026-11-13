@@ -36,12 +36,14 @@ STAND, PITCH, HOLD = 1.0, 1.0, 1.0
 """Seconds standing, pitching down and holding still before the pictures."""
 
 CLEARANCE = 0.04
-"""How high over the ground the bit stops. The contact margins of `PHYSICS`,
-1 cm on each shape, let the ground touch it from about 2 cm away, which
-brakes the spindle."""
+"""How high over the ground the pitch is set to stop the bit; it settles a
+little lower, as the front legs give under the tool. The contact margins of
+`PHYSICS`, 1 cm on each shape, let the ground touch it from about 2 cm away,
+which brakes the spindle."""
 
 LEGS = ImplicitActuatorCfg(joint_names_expr=[".*_h[xy]", ".*_kn"], stiffness=800.0, damping=20.0)
-"""Spot's legs on stiff drives, as strong as Spot's own torque limits."""
+"""Spot's legs on stiff drives. They keep the torque limits Spot's USD
+authors, 45 N m at the hips and 115 N m at the knees."""
 
 PHYSICS = NewtonCfg(
     solver_cfg=MJWarpSolverCfg(

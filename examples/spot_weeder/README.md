@@ -26,7 +26,7 @@ uv run demo.py out
 ```
 
 stands Spot on bare soil among a few artificial weeds, its spindle at
-7000 rpm, then pitches the body over the planted feet until the bit is 4 cm
+7000 rpm, then pitches the body over the planted feet to stop the bit 4 cm
 up and just behind a leaf, where the paper stops to find the weed again
 before it mills, with the tool out of the camera's way. It saves three
 pictures into `out/`: `side.png` and `front.png` from outside, and
@@ -40,7 +40,8 @@ opens instead. At the end of each phase it prints how the robot stands:
 
 The body stands 6 mm over the paper's 0.5 m, on the contact margins of
 Isaac Lab's physics settings for Spot, and pitches 13.2 degrees for the 12.0
-it is sent to, as the front legs give under the tool.
+it is sent to, as the front legs give under the tool. That brings the bit
+down to 3.2 cm from the 4 cm it is sent to.
 
 ```bash
 uv run pytest

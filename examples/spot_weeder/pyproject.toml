@@ -3,7 +3,8 @@ name = "spot-weeder"
 version = "0.1.0"
 description = "Boston Dynamics Spot with the mechanical weeding tool of Beumer et al. (2026), in Isaac Lab"
 readme = "README.md"
-requires-python = ">=3.12"
+# Isaac Sim publishes wheels for CPython 3.12 alone.
+requires-python = "==3.12.*"
 dependencies = [
     "huggingface-hub>=1.16",
     "isaaclab[isaacsim,all]==3.0.0",
