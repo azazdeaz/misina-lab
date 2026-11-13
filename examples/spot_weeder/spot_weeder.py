@@ -22,10 +22,18 @@ visuals and its colliders:
   along the shaft with a velocity drive. Its origin is the end effector, the
   bottom of the bit, and its z axis runs up the shaft.
 
-Every position here is in Spot's body frame: x forward, z up, the origin
-between the four hips. The numbers marked as the paper's are from its text
-and tables; the rest of the tool's shape is read off its photos and its
+Every position on the robot is in Spot's body frame: x forward, z up, the
+origin between the four hips. The numbers marked as the paper's are from its
+text and tables; the rest of the tool's shape is read off its photos and its
 drawing of the robot, which give no dimensions.
+
+The tool has no joint to aim with, so the bit is aimed by the body's pose,
+as the paper does. `pose_for` gives the pose that puts the bit on a point,
+and `stance` the joint angles that hold that pose over the planted feet.
+`reachable` and `E` are the paper's two workspaces at ground level. Points
+for these are in the ground frame, the frame of the paper's Eq. 1: the body
+frame of the robot standing at rest, dropped onto the ground. These
+functions take numbers or numpy arrays.
 
 The example spawns the copy published in `ASSETS`. To write it again:
 
@@ -104,13 +112,16 @@ SPINDLE_DAMPING = SPINDLE_TORQUE / (0.1 * SPINDLE_SPEED)
 target speed."""
 
 HIPS = {
-    "fl": (0.29785, 0.165945),
-    "fr": (0.29785, -0.165945),
-    "hl": (-0.29785, 0.165945),
-    "hr": (-0.29785, -0.165945),
+    "fl": (0.29785, 0.055),
+    "fr": (0.29785, -0.055),
+    "hl": (-0.29785, 0.055),
+    "hr": (-0.29785, -0.055),
 }
-"""Where each of Spot's legs pitches, its `*_hy` axis, in the body's xy
-plane, with the hip's roll at zero."""
+"""Where each of Spot's legs rolls, its `*_hx` axis along x, in the body's xy
+plane."""
+
+HIP = 0.110945
+"""How far out from its roll axis each leg pitches, its `*_hy` axis."""
 
 THIGH = np.array([0.025, -0.3205])
 """Spot's knee from its hip's pitch axis, (x, z) in the upper leg."""
@@ -121,25 +132,59 @@ SHIN = 0.3365
 FOOT = 0.035
 """The radius of Spot's foot."""
 
+LIMITS = {"hx": (-0.785398, 0.785398), "hy": (-0.898845, 2.295108), "kn": (-2.7929, -0.2471)}
+"""The range of each of Spot's leg joints in its USD, in radians: the roll
+`*_hx`, the hip's pitch `*_hy` and the knee `*_kn`."""
 
-def stance(pitch: float = 0.0) -> dict[str, float]:
-    """Spot's joint angles for its body `Z_NOM` over feet planted below its
-    hips, pitched `pitch` radians nose down about its centre: the paper's
-    body pose command, with no shift and no yaw."""
-    c, s = math.cos(pitch), math.sin(pitch)
-    down = FOOT - Z_NOM
+_E_HALF = [
+    (0.734, 0.0),
+    (0.734, 0.033),
+    (0.726, 0.128),
+    (0.708, 0.242),
+    (0.664, 0.377),
+    (0.821, 0.469),
+    (0.843, 0.421),
+    (0.893, 0.283),
+    (0.921, 0.140),
+    (0.929, 0.0),
+]
+E = np.array(_E_HALF + [(x, -y) for x, y in reversed(_E_HALF[1:-1])])
+"""The paper's workspace E at ground level: where Spot's own controller could
+put the bit over planted feet, found on the real robot on flat ground. It is
+an (x, y) outline in the ground frame, the paper's Fig. 5b traced to 2 mm
+from the vector paths in its PDF, and it encloses the paper's 0.165 m2."""
+
+
+def stance(
+    x: float = 0.0, pitch: float = 0.0, yaw: float = 0.0, raised: dict[str, float] | None = None
+) -> dict[str, float]:
+    """Spot's joint angles for its body `Z_NOM` over the ground, shifted `x`
+    forward, pitched `pitch` nose down and yawed `yaw` to the left about its
+    centre: the paper's body pose command. The feet stay where they stand
+    with the body at rest, below the legs' pitch axes, on the ground or on
+    blocks `raised` by {leg: height}. NaN where a leg can't reach its foot."""
+    cp, sp, cy, sy = np.cos(pitch), np.sin(pitch), np.cos(yaw), np.sin(yaw)
     # How far the knee sits off the upper leg's axis, as an angle at the hip.
     offset = math.atan2(THIGH[0], -THIGH[1])
     joints = {}
-    for leg, (x, y) in HIPS.items():
-        # The foot from the hip's pitch axis, (x, z) in the pitched body.
-        foot = np.array([c * x - s * down - x, s * x + c * down])
-        bend = (foot @ foot - THIGH @ THIGH - SHIN**2) / (2 * np.linalg.norm(THIGH) * SHIN)
-        knee = -math.acos(bend) - offset
-        # Spot's leg as the knee bends it, then swung about the hip onto the foot.
-        reach = THIGH + SHIN * np.array([-math.sin(knee), -math.cos(knee)])
-        hip = math.atan2(reach[1], reach[0]) - math.atan2(foot[1], foot[0])
-        joints |= {f"{leg}_hx": 0.0, f"{leg}_hy": hip, f"{leg}_kn": knee}
+    for leg, (hip_x, hip_y) in HIPS.items():
+        out = math.copysign(HIP, hip_y)
+        # The foot from the body's centre in the ground frame, turned into the
+        # body's frame, then taken from the hip's roll axis.
+        gx, gy, gz = hip_x - x, hip_y + out, FOOT + (raised or {}).get(leg, 0.0) - Z_NOM
+        ux, uy = cy * gx + sy * gy, cy * gy - sy * gx
+        fx, fy, fz = cp * ux - sp * gz - hip_x, uy - hip_y, sp * ux + cp * gz
+        # The roll that swings the leg, `out` from the axis and reaching
+        # `down` along the leg, onto the foot.
+        down = -np.sqrt(fy**2 + fz**2 - HIP**2)
+        roll = np.arctan2(out * fz - down * fy, out * fy + down * fz)
+        # Then the knee, and the hip's pitch in the leg's plane: the leg as the
+        # knee bends it, swung about the hip onto the foot.
+        bend = (fx**2 + down**2 - THIGH @ THIGH - SHIN**2) / (2 * np.linalg.norm(THIGH) * SHIN)
+        knee = -np.arccos(bend) - offset
+        reach_x, reach_z = THIGH[0] - SHIN * np.sin(knee), THIGH[1] - SHIN * np.cos(knee)
+        hip = np.arctan2(reach_z, reach_x) - np.arctan2(down, fx)
+        joints |= {f"{leg}_hx": roll, f"{leg}_hy": hip, f"{leg}_kn": knee}
     return joints
 
 
@@ -147,7 +192,44 @@ def pitch_to(height: float) -> float:
     """The body pitch over planted feet that puts the bit `height` over the
     ground, with no shift and no yaw: the paper's Eq. 2."""
     x, _, z = TIP
-    return math.acos((height - Z_NOM) / math.hypot(x, z)) - math.atan2(x, z)
+    return np.arccos((height - Z_NOM) / math.hypot(x, z)) - math.atan2(x, z)
+
+
+def pose_for(point) -> tuple[float, float, float]:
+    """The body's shift, pitch and yaw over planted feet that put the bit on
+    `point`, (x, y, z) in the ground frame: the paper's Eqs. 2-4. NaN where
+    the bit can't get there."""
+    px, py, pz = point
+    pitch = pitch_to(pz)
+    # How far the bit is ahead of the body's centre, along the ground.
+    ahead = np.cos(pitch) * TIP[0] + np.sin(pitch) * TIP[2]
+    yaw = np.arcsin(py / ahead)
+    return px - np.cos(yaw) * ahead, pitch, yaw
+
+
+def reachable(x, y, z=0.0, raised: dict[str, float] | None = None):
+    """Whether the bit reaches (x, y, z) in the ground frame over the planted
+    feet of `stance`, with every leg joint within `LIMITS`: the paper's
+    kinematic workspace K."""
+    with np.errstate(invalid="ignore"):
+        joints = stance(*pose_for((x, y, z)), raised)
+        ok = True
+        for name, angle in joints.items():
+            low, high = LIMITS[name[-2:]]
+            ok = ok & (low <= angle) & (angle <= high)
+    return ok
+
+
+def inside(outline: np.ndarray, x, y):
+    """Whether the points (x, y) are inside `outline`, an (n, 2) polygon such
+    as `E`. The paper's Eq. 5 keeps the weeds inside E."""
+    x, y = np.asarray(x)[..., None], np.asarray(y)[..., None]
+    (ax, ay), (bx, by) = outline.T, np.roll(outline, -1, axis=0).T
+    # A point is inside if a ray from it along x crosses the outline an odd
+    # number of times.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        crossing = ax + (y - ay) * (bx - ax) / (by - ay)
+    return (((ay > y) != (by > y)) & (x < crossing)).sum(-1) % 2 == 1
 
 
 @functools.cache
