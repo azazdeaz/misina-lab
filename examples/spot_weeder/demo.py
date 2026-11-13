@@ -8,9 +8,8 @@ there from outside and through the robot's own L515.
     python demo.py                      # opens Kit's viewer instead
     python demo.py OUT_DIR --usd FILE   # spawns FILE, a robot `spot_weeder.py` wrote
 
-The paper poses the body with Spot's own controller. Here the legs track the
-joint angles of `spot_weeder.stance` on stiff PD drives instead of the ones
-Isaac Lab trains Spot's policies with, which fold under the tool's weight.
+The paper poses the body with Spot's own controller; here `pose.Controller`
+does, over planted feet.
 """
 
 import argparse
@@ -18,49 +17,18 @@ import math
 import pathlib
 
 import isaaclab.sim as sim_utils
+import numpy as np
+import pose
 import spot_weeder
 import torch
-from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.app import launch_simulation
-from isaaclab_newton.physics import (
-    MJWarpSolverCfg,
-    NewtonCfg,
-    NewtonCollisionPipelineCfg,
-    NewtonShapeCfg,
-)
 
-SIM_DT = 0.002
-"""Spot's physics step, as Isaac Lab trains it."""
-
-STAND, PITCH, HOLD = 1.0, 1.0, 1.0
-"""Seconds standing, pitching down and holding still before the pictures."""
+STAND, HOLD = 1.0, 1.0
+"""Seconds standing, and holding still after pitching down, before the
+pictures."""
 
 CLEARANCE = 0.04
-"""How high over the ground the pitch is set to stop the bit; it settles a
-little lower, as the front legs give under the tool. The contact margins of
-`PHYSICS`, 1 cm on each shape, let the ground touch it from about 2 cm away,
-which brakes the spindle."""
-
-LEGS = ImplicitActuatorCfg(joint_names_expr=[".*_h[xy]", ".*_kn"], stiffness=800.0, damping=20.0)
-"""Spot's legs on stiff drives. They keep the torque limits Spot's USD
-authors, 45 N m at the hips and 115 N m at the knees."""
-
-PHYSICS = NewtonCfg(
-    solver_cfg=MJWarpSolverCfg(
-        njmax=130,
-        nconmax=40,
-        cone="pyramidal",
-        impratio=1,
-        integrator="implicitfast",
-        use_mujoco_contacts=False,
-    ),
-    collision_cfg=NewtonCollisionPipelineCfg(max_triangle_pairs=2_500_000),
-    num_substeps=2,
-    default_shape_cfg=NewtonShapeCfg(margin=0.01),
-)
-"""Isaac Lab's Newton settings for Spot, from its Spot task. Their contact
-margin, 1 cm on each shape and so 2 cm between two, keeps the feet 1 to 2 cm
-off the ground."""
+"""How high over the ground the bit stops."""
 
 ROBOT = "/World/envs/env_0/Robot"
 
@@ -125,7 +93,7 @@ def design_scene(usd: pathlib.Path | None):
             ),
         )
     robot = spot_weeder.robot_cfg(usd)
-    actuators = {"legs": LEGS, spot_weeder.SPINDLE: robot.actuators[spot_weeder.SPINDLE]}
+    actuators = {"legs": pose.LEGS, spot_weeder.SPINDLE: robot.actuators[spot_weeder.SPINDLE]}
     scene.robot = robot.replace(prim_path="{ENV_REGEX_NS}/Robot", actuators=actuators)
     return instantiate(scene)
 
@@ -224,7 +192,7 @@ def main():
     parser.add_argument("out", nargs="?", type=pathlib.Path, help="where the pictures go")
     parser.add_argument("--usd", type=pathlib.Path, help="a robot to spawn, not the published one")
     args = parser.parse_args()
-    sim_cfg = sim_utils.SimulationCfg(dt=SIM_DT, device="cuda:0", physics=PHYSICS)
+    sim_cfg = sim_utils.SimulationCfg(dt=pose.SIM_DT, device="cuda:0", physics=pose.PHYSICS)
     if args.out:
         launcher = {"headless": True, "enable_cameras": True, "require_kit": True, "visualizer": []}
     else:
@@ -241,25 +209,16 @@ def main():
         spindle, _ = robot.find_joints([spot_weeder.SPINDLE])
         speed = torch.full((1, 1), spot_weeder.SPINDLE_SPEED, device=sim.device)
         robot.actuators.target_command.set_velocity_index(value=speed, joint_ids=spindle)
-        legs, _ = robot.find_joints(list(spot_weeder.stance()), preserve_order=True)
-        down = spot_weeder.pitch_to(CLEARANCE)
-        steps = [round(seconds / SIM_DT) for seconds in (STAND, PITCH, HOLD)]
-        step = 0
-        while sim.is_running() and (not args.out or step < sum(steps)):
-            # Stand, then pitch down at an even rate, then hold.
-            pitch = down * min(max(step - steps[0], 0) / steps[1], 1.0)
-            target = torch.tensor(
-                [list(spot_weeder.stance(pitch=pitch).values())], device=sim.device
-            )
-            robot.actuators.target_command.set_position_index(value=target, joint_ids=legs)
-            scene.write_data_to_sim()
-            sim.step(render=not args.out)
-            scene.update(SIM_DT)
-            step += 1
-            if step in (steps[0], sum(steps)):
-                report(robot, "standing" if step == steps[0] else "pitched down")
+        controller = pose.Controller(robot, scene.env_origins)
+        pose.run(sim, scene, controller, STAND, render=not args.out)
+        report(robot, "standing")
+        controller.move(np.array([0, 0, 0, 0, spot_weeder.pitch_to(CLEARANCE), 0]))
+        pose.run(sim, scene, controller, pose.MOVE + HOLD, render=not args.out)
+        report(robot, "pitched down")
         if args.out:
             film(sim, sensors, args.out)
+        while sim.is_running() and not args.out:
+            pose.run(sim, scene, controller, pose.SIM_DT, render=True)
 
 
 if __name__ == "__main__":

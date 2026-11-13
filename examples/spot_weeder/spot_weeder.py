@@ -156,24 +156,36 @@ from the vector paths in its PDF, and it encloses the paper's 0.165 m2."""
 
 
 def stance(
-    x: float = 0.0, pitch: float = 0.0, yaw: float = 0.0, raised: dict[str, float] | None = None
+    x: float = 0.0,
+    pitch: float = 0.0,
+    yaw: float = 0.0,
+    raised: dict[str, float] | None = None,
+    *,
+    y: float = 0.0,
+    z: float = 0.0,
+    roll: float = 0.0,
 ) -> dict[str, float]:
     """Spot's joint angles for its body `Z_NOM` over the ground, shifted `x`
     forward, pitched `pitch` nose down and yawed `yaw` to the left about its
-    centre: the paper's body pose command. The feet stay where they stand
-    with the body at rest, below the legs' pitch axes, on the ground or on
-    blocks `raised` by {leg: height}. NaN where a leg can't reach its foot."""
+    centre: the paper's body pose command. `y`, `z` and `roll` complete it
+    to a full pose: shifted left and up, and rolled left side up. The feet
+    stay where they stand with the body at rest, below the legs' pitch axes,
+    on the ground or on blocks `raised` by {leg: height}. NaN where a leg
+    can't reach its foot."""
     cp, sp, cy, sy = np.cos(pitch), np.sin(pitch), np.cos(yaw), np.sin(yaw)
+    cr, sr = np.cos(roll), np.sin(roll)
     # How far the knee sits off the upper leg's axis, as an angle at the hip.
     offset = math.atan2(THIGH[0], -THIGH[1])
     joints = {}
     for leg, (hip_x, hip_y) in HIPS.items():
         out = math.copysign(HIP, hip_y)
         # The foot from the body's centre in the ground frame, turned into the
-        # body's frame, then taken from the hip's roll axis.
-        gx, gy, gz = hip_x - x, hip_y + out, FOOT + (raised or {}).get(leg, 0.0) - Z_NOM
+        # body's frame by yaw, pitch and roll, then taken from the hip's roll
+        # axis.
+        gx, gy, gz = hip_x - x, hip_y + out - y, FOOT + (raised or {}).get(leg, 0.0) - Z_NOM - z
         ux, uy = cy * gx + sy * gy, cy * gy - sy * gx
-        fx, fy, fz = cp * ux - sp * gz - hip_x, uy - hip_y, sp * ux + cp * gz
+        vx, vz = cp * ux - sp * gz, sp * ux + cp * gz
+        fx, fy, fz = vx - hip_x, cr * uy + sr * vz - hip_y, cr * vz - sr * uy
         # The roll that swings the leg, `out` from the axis and reaching
         # `down` along the leg, onto the foot.
         down = -np.sqrt(fy**2 + fz**2 - HIP**2)
@@ -195,6 +207,15 @@ def pitch_to(height: float) -> float:
     ground, with no shift and no yaw: the paper's Eq. 2."""
     x, _, z = TIP
     return np.arccos((height - Z_NOM) / math.hypot(x, z)) - math.atan2(x, z)
+
+
+def fk(x: float = 0.0, pitch: float = 0.0, yaw: float = 0.0) -> np.ndarray:
+    """Where the bit is, (x, y, z) in the ground frame, with the body shifted
+    `x`, pitched `pitch` and yawed `yaw`: the paper's Eq. 1, which `pose_for`
+    inverts."""
+    ahead = np.cos(pitch) * TIP[0] + np.sin(pitch) * TIP[2]
+    up = np.cos(pitch) * TIP[2] - np.sin(pitch) * TIP[0]
+    return np.array([x + np.cos(yaw) * ahead, np.sin(yaw) * ahead, Z_NOM + up])
 
 
 def pose_for(point) -> tuple[float, float, float]:
