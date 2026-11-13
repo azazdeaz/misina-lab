@@ -161,7 +161,8 @@ if reachable(*point):
   and each leg's three joints are solved as in the paper's Appendix A.
   `raised` stands feet on blocks, and `y`, `z` and `roll` make it a full
   body pose.
-- `fk(x, pitch, yaw)` is Eq. 1: where the bit is for a body pose.
+- `fk(x, pitch, yaw)` is Eq. 1: where the bit is for a body pose. It takes
+  `y`, `z` and `roll` as `stance` does.
 - `reachable` is the paper's workspace K, which `LIMITS` bounds.
 - `E` is the paper's workspace E, as an outline. `inside(E, x, y)` tests
   points against it, as the paper's Eq. 5 keeps the weeds inside E.
@@ -203,17 +204,23 @@ finds its way there and holds it. `pose.Controller` does the same in Newton,
 over planted feet:
 
 ```python
+import isaaclab.sim as sim_utils
 import pose
+from isaaclab.app import launch_simulation
 from spot_weeder import pose_for
 
-scene = pose.design_scene("soft")  # or "flat", or "raised"
-robot = scene["robot"]
-sim.reset()
-robot.write_joint_position_to_sim_index(position=robot.data.default_joint_pos.torch.clone())
-controller = pose.Controller(robot, scene.env_origins)  # on "raised", pass pose.RAISED too
-x, pitch, yaw = pose_for((0.8, 0.1, 0.04))
-controller.move([x, 0, 0, 0, pitch, yaw])  # x, y, z, roll, pitch, yaw
-pose.run(sim, scene, controller, pose.MOVE + 1.0)
+sim_cfg = sim_utils.SimulationCfg(dt=pose.SIM_DT, physics=pose.PHYSICS)
+with launch_simulation(sim_cfg, {"headless": True, "visualizer": []}):
+    sim = sim_utils.SimulationContext(sim_cfg)
+    scene = pose.design_scene("soft")  # or "flat", or "raised"
+    robot = scene["robot"]
+    sim.reset()
+    robot.write_joint_position_to_sim_index(position=robot.data.default_joint_pos.torch.clone())
+    controller = pose.Controller(robot, scene.env_origins)  # on "raised", pass pose.RAISED too
+    x, pitch, yaw = pose_for((0.8, 0.1, 0.04))
+    controller.move([x, 0, 0, 0, pitch, yaw])  # x, y, z, roll, pitch, yaw
+    pose.run(sim, scene, controller, pose.MOVE + 1.0)
+    print(controller.pose())
 ```
 
 - It moves the body along a smooth path in pose space, 4.8 s by default,
@@ -252,12 +259,12 @@ flat ground, in mm and mrad:
 
 | | Ours | Ours, Spot-like | The paper's Table 1 |
 | --- | --- | --- | --- |
-| x | 0.00 ± 0.01 | 1.05 ± 7.01 | 1.11 ± 6.33 |
-| y | 0.00 ± 0.00 | 11.61 ± 21.97 | 4.79 ± 27.88 |
-| z | 0.00 ± 0.00 | 0.82 ± 1.94 | 0.33 ± 2.04 |
-| roll | 0.00 ± 0.01 | 1.54 ± 3.76 | 0.84 ± 4.23 |
-| pitch | 0.00 ± 0.01 | 2.14 ± 7.68 | 3.34 ± 8.14 |
-| yaw | 0.00 ± 0.01 | −1.97 ± 2.19 | −1.78 ± 2.23 |
+| x | 0.00 ± 0.01 | 1.09 ± 7.00 | 1.11 ± 6.33 |
+| y | 0.00 ± 0.00 | 11.25 ± 21.99 | 4.79 ± 27.88 |
+| z | 0.00 ± 0.00 | 0.81 ± 1.92 | 0.33 ± 2.04 |
+| roll | 0.00 ± 0.01 | 1.53 ± 3.76 | 0.84 ± 4.23 |
+| pitch | 0.00 ± 0.01 | 2.10 ± 7.67 | 3.34 ± 8.14 |
+| yaw | 0.00 ± 0.01 | −1.94 ± 2.15 | −1.78 ± 2.23 |
 
 - `SpotLike`'s errors are a smooth random function of where the bit goes.
   After each move both robots make a 2 cm correction, as the paper's
@@ -267,11 +274,11 @@ flat ground, in mm and mrad:
 - Spot's ball feet roll as its shins tilt: a yaw of 0.4 rad moves the
   centre of a front foot 11 mm, and back again with the yaw. Over a run,
   all four feet end up about 1 cm to the left on flat ground and on blocks;
-  on the soft ground the front feet 27 mm and the hind feet 9 mm.
+  on the soft ground the front feet 23 mm and the hind feet 9 mm.
 
 `tracking.py workspace` sends a robot to each point of a 2 cm grid over K,
 the bit 1 cm over flat ground, and counts where the body is held within
-5 mm and 5 mrad: our E. It is 0.471 m², 80% of K here (0.585 m² at that
+5 mm and 5 mrad: our E. It is 0.470 m², 80% of K here (0.585 m² at that
 height) and 2.9 times the paper's 0.165 m². It holds 98% of the paper's E,
 all but a few points at its outer front corners. The paper expects
 joint-level control to bring E close to K (its §6.2), and here it does.

@@ -79,7 +79,7 @@ WINDUP = np.array([0.06, 0.06, 0.06, 0.1, 0.1, 0.1])
 shifted 28 cm back, the legs give 5 cm under the tool."""
 
 BALANCE = 0.06
-"""How far inside the rectangle of its feet the robot's centre of mass has
+"""How far inside the outline of its feet the robot's centre of mass has
 to stay in a pose that is safe to send. The controller holds poses up to
 the edge of the feet; this leaves room for `SpotLike`'s errors."""
 
@@ -168,7 +168,9 @@ class Controller:
 
     def __init__(self, robot, origins: torch.Tensor, raised: dict[str, float] | None = None):
         self.robot, self.origins, self.raised = robot, origins, raised or {}
-        self.legs, _ = robot.find_joints(list(spot_weeder.stance()), preserve_order=True)
+        names = list(spot_weeder.stance())
+        self.legs, _ = robot.find_joints(names, preserve_order=True)
+        self.low, self.high = np.array([spot_weeder.LIMITS[name[-2:]] for name in names]).T
         self.feet, _ = robot.find_bodies(
             [f"{leg}_foot" for leg in spot_weeder.HIPS], preserve_order=True
         )
@@ -188,15 +190,22 @@ class Controller:
     def balanced(self, pose) -> np.ndarray:
         """Whether each robot can hold `pose`, (n, 6) or one pose for all:
         whether its centre of mass, carried along with its body from where it
-        is now, stays `BALANCE` inside the rectangle of its feet."""
+        is now, stays `BALANCE` inside the outline of its feet where they
+        stand now."""
         data = self.robot.data
         mass = data.body_mass.torch[..., None]
         com = (mass * data.body_com_pos_w.torch).sum(dim=1) / mass.sum(dim=1)
         center = quat_apply_inverse(data.root_quat_w.torch, com - data.root_pos_w.torch).cpu()
         pose = torch.tensor(np.broadcast_to(pose, (len(center), 6)), dtype=torch.float32)
-        x, y = (pose[:, :3] + quat_apply(quat_from_euler_xyz(*pose[:, 3:].T), center))[:, :2].T
-        foot_x, foot_y = spot_weeder.HIPS["fl"][0], spot_weeder.HIPS["fl"][1] + spot_weeder.HIP
-        return ((x.abs() <= foot_x - BALANCE) & (y.abs() <= foot_y - BALANCE)).numpy()
+        shifted = pose[:, :3] + quat_apply(quat_from_euler_xyz(*pose[:, 3:].T), center)
+        # The feet clockwise seen from above: front left, front right, hind
+        # right, hind left. The inside is to the right of each edge.
+        ring = [self.feet[i] for i in (0, 1, 3, 2)]
+        corners = (data.body_pos_w.torch[:, ring, :2] - self.origins[:, None, :2]).cpu()
+        edges = corners.roll(-1, dims=1) - corners
+        to = shifted[:, None, :2] - corners
+        left = (edges[..., 0] * to[..., 1] - edges[..., 1] * to[..., 0]) / edges.norm(dim=-1)
+        return (-left >= BALANCE).all(dim=1).numpy()
 
     def reference(self) -> np.ndarray:
         """Where the path has each body now: a minimum-jerk blend from the
@@ -229,16 +238,21 @@ class Controller:
         with np.errstate(invalid="ignore"):
             joints = spot_weeder.stance(x, pitch, yaw, raised, y=y, z=z, roll=roll)
         joints = np.stack(list(joints.values()), axis=-1)
-        # A pose out of reach keeps the last angles that reached it.
-        reached = np.isfinite(joints).all(axis=-1)
+        # A pose out of reach, or past a joint's range, keeps the last angles
+        # that reached it.
+        with np.errstate(invalid="ignore"):
+            reached = ((self.low <= joints) & (joints <= self.high)).all(axis=-1)
         self.targets[reached] = joints[reached]
         target = torch.tensor(self.targets, dtype=torch.float32, device=self.origins.device)
         self.robot.actuators.target_command.set_position_index(value=target, joint_ids=self.legs)
 
 
 def run(sim, scene, controller: Controller, seconds: float, render: bool = False) -> None:
-    """Steps the simulation `seconds`, the controller driving the legs."""
+    """Steps the simulation `seconds`, the controller driving the legs, or
+    until its viewer is closed."""
     for _ in range(round(seconds / SIM_DT)):
+        if not sim.is_running():
+            return
         controller.step()
         scene.write_data_to_sim()
         sim.step(render=render)
@@ -276,8 +290,8 @@ class SpotLike:
         return np.cos(np.einsum("...d,kwd->...kw", xy, self.k) + self.phase).sum(axis=-1)
 
     def __call__(self, pose: np.ndarray) -> np.ndarray:
-        x, _, _, _, pitch, yaw = np.moveaxis(np.asarray(pose), -1, 0)
-        bit = np.moveaxis(spot_weeder.fk(x, pitch, yaw)[:2], 0, -1)
+        x, y, z, roll, pitch, yaw = np.moveaxis(np.asarray(pose), -1, 0)
+        bit = np.moveaxis(spot_weeder.fk(x, pitch, yaw, y=y, z=z, roll=roll)[:2], 0, -1)
         return self.MEAN + self.STD * (self._field(bit) - self.center) / self.scale
 
 

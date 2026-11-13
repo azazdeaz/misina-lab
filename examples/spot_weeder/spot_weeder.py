@@ -209,13 +209,30 @@ def pitch_to(height: float) -> float:
     return np.arccos((height - Z_NOM) / math.hypot(x, z)) - math.atan2(x, z)
 
 
-def fk(x: float = 0.0, pitch: float = 0.0, yaw: float = 0.0) -> np.ndarray:
+def fk(
+    x: float = 0.0,
+    pitch: float = 0.0,
+    yaw: float = 0.0,
+    *,
+    y: float = 0.0,
+    z: float = 0.0,
+    roll: float = 0.0,
+) -> np.ndarray:
     """Where the bit is, (x, y, z) in the ground frame, with the body shifted
     `x`, pitched `pitch` and yawed `yaw`: the paper's Eq. 1, which `pose_for`
-    inverts."""
-    ahead = np.cos(pitch) * TIP[0] + np.sin(pitch) * TIP[2]
-    up = np.cos(pitch) * TIP[2] - np.sin(pitch) * TIP[0]
-    return np.array([x + np.cos(yaw) * ahead, np.sin(yaw) * ahead, Z_NOM + up])
+    inverts. `y`, `z` and `roll` complete the pose as in `stance`."""
+    # The bit turned by roll, then pitch, then yaw; it is on the body's x-z
+    # plane, so roll moves only its y and z.
+    side, low = -np.sin(roll) * TIP[2], np.cos(roll) * TIP[2]
+    ahead = np.cos(pitch) * TIP[0] + np.sin(pitch) * low
+    up = np.cos(pitch) * low - np.sin(pitch) * TIP[0]
+    return np.array(
+        [
+            x + np.cos(yaw) * ahead - np.sin(yaw) * side,
+            y + np.sin(yaw) * ahead + np.cos(yaw) * side,
+            Z_NOM + z + up,
+        ]
+    )
 
 
 def pose_for(point) -> tuple[float, float, float]:

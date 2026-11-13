@@ -144,8 +144,12 @@ def workspace(step: float = 0.02, height: float = 0.01) -> None:
     in_e = inside(E, points[:, 0], points[:, 1])
     area = step**2
     print(f"\nWhere the bit is held on a point {height * 100:.0f} cm up, m2:\n")
-    print(f"K here      {k.sum() * area:.3f}   (the paper's 0.402)")
-    print(f"E here      {held.sum() * area:.3f}   (the paper's 0.165)")
+    # The paper's K and E are at the ground; the bit is held 1 cm over it
+    # here, clear of the ground's contact.
+    up = f"{height * 100:.0f} cm up"
+    print(f"{'K, ' + up:18}{k.sum() * area:.3f}")
+    print(f"{'K at the ground':18}{reachable(x, y).sum() * area:.3f}   (the paper's 0.402)")
+    print(f"{'E, ' + up:18}{held.sum() * area:.3f}   (the paper's 0.165, at the ground)")
     print(f"the paper's E held here: {(held & in_e).sum() / in_e.sum():.0%} of its part inside K")
     # The map: forward to the right, the robot's left up.
     grid = np.full(x.shape, " ")

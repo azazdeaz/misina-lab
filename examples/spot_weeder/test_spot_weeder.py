@@ -103,6 +103,8 @@ def test_the_stance_keeps_the_feet_where_they_stood(body, raised, rest):
         foot = np.array([x, y, 0]) + rolled(angles[f"{leg}_hx"]) @ ([0, out, 0] + swung)
         stood = [x, y + out, spot_weeder.FOOT + raised.get(leg, 0.0)]
         np.testing.assert_allclose(fk(*body, foot, **rest), stood, atol=1e-9)
+    bit = fk(*body, spot_weeder.TIP, **rest)
+    np.testing.assert_allclose(spot_weeder.fk(*body, **rest), bit, atol=1e-12)
 
 
 def test_spots_legs_are_as_the_stance_has_them(stage):
