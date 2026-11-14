@@ -99,6 +99,11 @@ LENS = 0.26
 25 cm", the camera's nearest depth, on an arm down from the head as in its
 indoor photos. Its field photo has the camera higher, level with the tray."""
 
+FIELD_OF_VIEW = (70.0, 55.0)
+"""The L515's depth camera's field of view, in degrees, across the body and
+along it: the camera looks down the body's -z with the top of its picture
+forward."""
+
 SPINDLE_SPEED = 7000 * 2 * math.pi / 60
 """The spindle's top speed, the paper's 7000 rpm, in rad/s."""
 
@@ -164,14 +169,15 @@ def stance(
     y: float = 0.0,
     z: float = 0.0,
     roll: float = 0.0,
+    slid: dict[str, tuple[float, float]] | None = None,
 ) -> dict[str, float]:
     """Spot's joint angles for its body `Z_NOM` over the ground, shifted `x`
     forward, pitched `pitch` nose down and yawed `yaw` to the left about its
     centre: the paper's body pose command. `y`, `z` and `roll` complete it
     to a full pose: shifted left and up, and rolled left side up. The feet
     stay where they stand with the body at rest, below the legs' pitch axes,
-    on the ground or on blocks `raised` by {leg: height}. NaN where a leg
-    can't reach its foot."""
+    on the ground or on blocks `raised` by {leg: height}, and slid from there
+    by `slid`, {leg: (x, y)}. NaN where a leg can't reach its foot."""
     cp, sp, cy, sy = np.cos(pitch), np.sin(pitch), np.cos(yaw), np.sin(yaw)
     cr, sr = np.cos(roll), np.sin(roll)
     # How far the knee sits off the upper leg's axis, as an angle at the hip.
@@ -182,7 +188,9 @@ def stance(
         # The foot from the body's centre in the ground frame, turned into the
         # body's frame by yaw, pitch and roll, then taken from the hip's roll
         # axis.
-        gx, gy, gz = hip_x - x, hip_y + out - y, FOOT + (raised or {}).get(leg, 0.0) - Z_NOM - z
+        dx, dy = (slid or {}).get(leg, (0.0, 0.0))
+        gx, gy = hip_x + dx - x, hip_y + out + dy - y
+        gz = FOOT + (raised or {}).get(leg, 0.0) - Z_NOM - z
         ux, uy = cy * gx + sy * gy, cy * gy - sy * gx
         vx, vz = cp * ux - sp * gz, sp * ux + cp * gz
         fx, fy, fz = vx - hip_x, cr * uy + sr * vz - hip_y, cr * vz - sr * uy
@@ -526,13 +534,13 @@ def write_usd(folder: pathlib.Path) -> pathlib.Path:
     box(f"{seen}/camera_arm", (start + end) / 2, (0.012, 0.02, length), green, reach)
 
     # The L515's camera, at its lens, looking down the body's -z with the top
-    # of its picture forward, so the shaft comes in from the bottom edge. Its
-    # field is the depth camera's, 70 x 55 degrees.
+    # of its picture forward, so the shaft comes in from the bottom edge.
     camera = UsdGeom.Camera.Define(stage, f"{tool}/camera")
     place(camera, lens, Gf.Rotation(Gf.Vec3d(0, 0, 1), -90))
     camera.CreateFocalLengthAttr(10.0)
-    camera.CreateHorizontalApertureAttr(20 * math.tan(math.radians(35)))
-    camera.CreateVerticalApertureAttr(20 * math.tan(math.radians(27.5)))
+    across, along = np.radians(FIELD_OF_VIEW) / 2
+    camera.CreateHorizontalApertureAttr(20 * math.tan(across))
+    camera.CreateVerticalApertureAttr(20 * math.tan(along))
     camera.CreateClippingRangeAttr(Gf.Vec2f(0.01, 100.0))
 
     mount = UsdPhysics.FixedJoint.Define(stage, "/spot/body/tool_mount")
