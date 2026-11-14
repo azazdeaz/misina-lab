@@ -66,23 +66,9 @@ def sequence(rng: np.random.Generator, balanced) -> list[tuple[np.ndarray, np.nd
     return pairs
 
 
-def launch(ground: str, num_envs: int):
-    """The simulation and the scene, standing still, and a controller for it."""
-    sim = sim_utils.SimulationContext(sim_utils.SimulationCfg(dt=pose.SIM_DT, physics=pose.PHYSICS))
-    scene = pose.design_scene(ground, num_envs)
-    robot = scene["robot"]
-    sim.reset()
-    robot.write_joint_position_to_sim_index(position=robot.data.default_joint_pos.torch.clone())
-    controller = pose.Controller(
-        robot, scene.env_origins, pose.RAISED if ground == "raised" else None
-    )
-    pose.run(sim, scene, controller, HOLD)
-    return sim, scene, controller
-
-
 def track(ground: str) -> None:
     """Table 1 on `ground`, with the corrections and the feet's creep."""
-    sim, scene, controller = launch(ground, 2)
+    sim, scene, controller = pose.launch(ground, 2)
     robot = scene["robot"]
     feet, names = robot.find_bodies(".*_foot")
     planted = robot.data.body_pos_w.torch[:, feet].cpu().numpy()
@@ -136,7 +122,7 @@ def workspace(step: float = 0.02, height: float = 0.01) -> None:
     x, y = np.meshgrid(np.arange(0.2, 1.2, step), np.arange(-0.8, 0.8, step))
     k = reachable(x, y, height)
     points = np.stack([x[k], y[k], np.full(k.sum(), height)], axis=-1)
-    sim, scene, controller = launch("flat", len(points))
+    sim, scene, controller = pose.launch("flat", len(points))
     sent = np.stack([body_pose(p) for p in points])
     controller.move(sent)
     pose.run(sim, scene, controller, pose.MOVE + HOLD)
@@ -144,8 +130,7 @@ def workspace(step: float = 0.02, height: float = 0.01) -> None:
     in_e = inside(E, points[:, 0], points[:, 1])
     area = step**2
     print(f"\nWhere the bit is held on a point {height * 100:.0f} cm up, m2:\n")
-    # The paper's K and E are at the ground; the bit is held 1 cm over it
-    # here, clear of the ground's contact.
+    # The paper's K and E are at the ground, and ours `height` over it.
     up = f"{height * 100:.0f} cm up"
     print(f"{'K, ' + up:18}{k.sum() * area:.3f}")
     print(f"{'K at the ground':18}{reachable(x, y).sum() * area:.3f}   (the paper's 0.402)")

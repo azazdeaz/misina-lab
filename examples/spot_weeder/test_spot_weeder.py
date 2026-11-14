@@ -80,18 +80,19 @@ def test_the_shaft_stands_upright_with_the_bit_2_cm_in(stage):
 
 
 @pytest.mark.parametrize(
-    ("body", "raised", "rest"),
+    ("body", "raised", "rest", "slid"),
     [
-        ((0.0, 0.0, 0.0), {}, {}),
-        ((0.0, 0.3, 0.0), {}, {}),
-        ((0.1, 0.25, 0.3), {}, {}),
-        ((-0.05, 0.27, -0.4), {}, {}),
-        ((0.05, 0.2, 0.2), {"fl": 0.05, "hr": 0.1}, {}),
-        ((0.05, 0.25, 0.3), {}, {"y": 0.03, "z": -0.02, "roll": 0.05}),
+        ((0.0, 0.0, 0.0), {}, {}, {}),
+        ((0.0, 0.3, 0.0), {}, {}, {}),
+        ((0.1, 0.25, 0.3), {}, {}, {}),
+        ((-0.05, 0.27, -0.4), {}, {}, {}),
+        ((0.05, 0.2, 0.2), {"fl": 0.05, "hr": 0.1}, {}, {}),
+        ((0.05, 0.25, 0.3), {}, {"y": 0.03, "z": -0.02, "roll": 0.05}, {}),
+        ((0.05, 0.2, 0.2), {}, {}, {"fl": (0.02, -0.03), "hr": (-0.01, 0.02)}),
     ],
 )
-def test_the_stance_keeps_the_feet_where_they_stood(body, raised, rest):
-    angles = spot_weeder.stance(*body, raised, **rest)
+def test_the_stance_keeps_the_feet_where_they_stood(body, raised, rest, slid):
+    angles = spot_weeder.stance(*body, raised, **rest, slid=slid)
     for name, angle in angles.items():
         low, high = spot_weeder.LIMITS[name[-2:]]
         assert type(angle) is float and low <= angle <= high
@@ -101,7 +102,8 @@ def test_the_stance_keeps_the_feet_where_they_stood(body, raised, rest):
         shin = pitched(angles[f"{leg}_kn"]) @ [0, 0, -spot_weeder.SHIN]
         swung = pitched(angles[f"{leg}_hy"]) @ (knee + shin)
         foot = np.array([x, y, 0]) + rolled(angles[f"{leg}_hx"]) @ ([0, out, 0] + swung)
-        stood = [x, y + out, spot_weeder.FOOT + raised.get(leg, 0.0)]
+        dx, dy = slid.get(leg, (0.0, 0.0))
+        stood = [x + dx, y + out + dy, spot_weeder.FOOT + raised.get(leg, 0.0)]
         np.testing.assert_allclose(fk(*body, foot, **rest), stood, atol=1e-9)
     bit = fk(*body, spot_weeder.TIP, **rest)
     np.testing.assert_allclose(spot_weeder.fk(*body, **rest), bit, atol=1e-12)
@@ -164,6 +166,53 @@ def test_the_legs_reach_most_of_the_papers_workspace():
     k = spot_weeder.reachable(x, y)
     assert (k & in_e).sum() / in_e.sum() > 0.9
     assert k.sum() * step**2 == pytest.approx(0.56, abs=0.01)
+
+
+def found(weeds, poses, tool) -> np.ndarray:
+    """Where robots standing in `poses`, (n, 6), as they were sent, find one
+    weed each, `weeds`, (n, 3), with their tools mounted `tool`, (n, 3), off
+    where the pipeline takes them to be: (n, 3), NaN for out of view."""
+    import weeding
+
+    still = np.zeros(len(weeds))
+    rng = np.random.default_rng(0)
+    return weeding.detect(poses, poses, weeds[:, None], tool, still, rng)[:, 0]
+
+
+def scans(yaw: float, n: int) -> np.ndarray:
+    return np.tile([0.0, 0.0, 0.0, 0.0, 0.0, yaw], (n, 1))
+
+
+def test_the_two_scans_see_all_of_e():
+    import weeding
+
+    x, y = np.meshgrid(np.linspace(0.6, 1.0, 41), np.linspace(-0.5, 0.5, 101))
+    in_e = spot_weeder.inside(spot_weeder.E, x, y)
+    points = np.stack([x[in_e], y[in_e], np.zeros(in_e.sum())], axis=-1)
+    tool = np.zeros_like(points)
+    seen = [~np.isnan(found(points, scans(yaw, len(points)), tool)[:, 0]) for yaw in weeding.SCANS]
+    assert (seen[0] | seen[1]).all()
+    # Each scan sees its own side.
+    assert seen[0][points[:, 1] < -0.3].all() and seen[1][points[:, 1] > 0.3].all()
+
+
+@pytest.mark.parametrize(("offset", "within"), [(0.0, 1e-9), (0.03, 0.003)])
+def test_the_correction_puts_the_bit_on_the_weed(offset, within):
+    """A weed found from a scan, and again from just behind and above it, is
+    where the correction puts the bit, with each body where it is sent:
+    exactly with the tool where the pipeline takes it to be, and within the
+    paper's 3 mm (its §4.1) with the tool mounted 3 cm forward."""
+    import weeding
+
+    weeds = np.concatenate([weeding.scatter(np.random.default_rng(seed)) for seed in range(4)])
+    tool = np.tile([offset, 0.0, 0.0], (len(weeds), 1))
+    first = found(weeds, scans(weeding.SCANS[0], len(weeds)), tool)
+    second = found(weeds, scans(weeding.SCANS[1], len(weeds)), tool)
+    first = np.where(np.isnan(first), second, first)
+    near = weeding.body_pose(first + weeding.APPROACH)
+    plunge = weeding.body_pose(found(weeds, near, tool) - (0, 0, weeding.AIM))
+    bit = weeding.to_ground(plunge, spot_weeder.TIP + tool)
+    np.testing.assert_allclose(bit, weeds - (0, 0, weeding.AIM), atol=within)
 
 
 def test_the_tool_weighs_7_kg_centred_25_cm_ahead_of_the_front_hips(stage):
@@ -232,7 +281,8 @@ def test_importing_the_scripts_does_not_load_pxr():
         [
             sys.executable,
             "-c",
-            "import demo, pose, spot_weeder, sys, tracking, workspace; assert 'pxr' not in sys.modules",
+            "import demo, experiments, pose, spot_weeder, sys, tracking, weeding, workspace;"
+            " assert 'pxr' not in sys.modules",
         ],
         cwd=pathlib.Path(__file__).parent,
         check=True,

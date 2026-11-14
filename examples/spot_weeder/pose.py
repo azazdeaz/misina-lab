@@ -42,8 +42,8 @@ SIM_DT = 0.002
 MARGIN = 0.002
 """Every shape's contact margin, and the gap beyond it where contacts are
 found early. Margins add up, so two shapes touch from 4 mm apart: the feet
-stand a few millimetres into that, and the bit comes within 4 mm of the
-ground before the ground touches it and brakes the spindle."""
+stand a few millimetres into that. The ground of `design_scene` lets the bit
+in; the demo's touches it from 4 mm away, and brakes the spindle."""
 
 PHYSICS = NewtonCfg(
     solver_cfg=MJWarpSolverCfg(
@@ -115,13 +115,32 @@ def soft_ground(prim_path: str, cfg: sim_utils.GroundPlaneCfg, *args, **kwargs):
     return prim
 
 
+def let_the_bit_in(_event) -> None:
+    """Keeps the ground plane from touching the bit and its shaft in Newton's
+    model, so the bit goes into the ground as it does into soil when it mills.
+    A filtered pair authored in USD is dropped: Isaac Lab builds the robot
+    apart from the rest of the stage."""
+    from isaaclab_newton.physics import NewtonBuilderCfg
+
+    sim = sim_utils.SimulationContext.instance()
+    builder = sim.get_or_create_backend(NewtonBuilderCfg(physics_cfg=sim.cfg.physics))
+    labels = builder.shape_label
+    ground = [i for i, label in enumerate(labels) if label.startswith("/World/ground/")]
+    for i, label in enumerate(labels):
+        if f"/Robot/{spot_weeder.BIT}/" in label:
+            for plane in ground:
+                builder.add_shape_collision_filter_pair(i, plane)
+
+
 def design_scene(ground: str = "flat", num_envs: int = 1, spacing: float = 2.0):
     """One of `GROUNDS`, with a standing robot in each of `num_envs`
-    environments, its legs on `LEGS`."""
+    environments, its legs on `LEGS`. The ground lets the bit in."""
     # Imported here: they bring `pxr`, and Kit's own has to be the first one.
     from isaaclab.assets import AssetBaseCfg
+    from isaaclab.physics import PhysicsEvent
     from isaaclab.scene import InteractiveSceneCfg
     from isaaclab.utils import instantiate
+    from isaaclab_newton.physics import NewtonManager
 
     cfg = InteractiveSceneCfg(num_envs=num_envs, env_spacing=spacing)
     plane = sim_utils.GroundPlaneCfg(color=(0.3, 0.2, 0.12))
@@ -150,6 +169,8 @@ def design_scene(ground: str = "flat", num_envs: int = 1, spacing: float = 2.0):
         actuators={"legs": LEGS, spot_weeder.SPINDLE: robot.actuators[spot_weeder.SPINDLE]},
         init_state=robot.init_state.replace(joint_pos=spot_weeder.stance(raised=raised)),
     )
+    # Newton's model is built when the simulation resets, after this scene.
+    NewtonManager.register_callback(let_the_bit_in, PhysicsEvent.MODEL_INIT, name="let_the_bit_in")
     return instantiate(cfg)
 
 
@@ -164,7 +185,8 @@ class Controller:
     they sink into the ground. Legs that reach short of a sunk foot push the
     feet against each other, and MuJoCo's friction gives way under a lasting
     push, so they slide; legs solved for wherever the feet are would let
-    them splay."""
+    them splay. `replant` takes the feet where they stand for planted, as
+    the robot stands still."""
 
     def __init__(self, robot, origins: torch.Tensor, raised: dict[str, float] | None = None):
         self.robot, self.origins, self.raised = robot, origins, raised or {}
@@ -178,6 +200,18 @@ class Controller:
         self.start = self.goal = self.integral = np.zeros((n, 6))
         self.time = self.seconds = 0.0
         self.targets = robot.data.default_joint_pos.torch[:, self.legs].cpu().numpy().astype(float)
+        self.slid = {}
+
+    def replant(self) -> None:
+        """Takes the feet where they stand now for planted. On the soft ground
+        each move slides them a little, and legs solved for where they stood
+        before push them on."""
+        feet = self.robot.data.body_pos_w.torch[:, self.feet, :2] - self.origins[:, None, :2]
+        feet = feet.cpu().numpy()
+        self.slid = {
+            leg: (feet[:, i, 0] - x, feet[:, i, 1] - y - math.copysign(spot_weeder.HIP, y))
+            for i, (leg, (x, y)) in enumerate(spot_weeder.HIPS.items())
+        }
 
     def pose(self) -> np.ndarray:
         """Each body's pose as it stands, (n, 6)."""
@@ -187,10 +221,10 @@ class Controller:
         turn = torch.stack(euler_xyz_from_quat(data.root_quat_w.torch), dim=-1).cpu().numpy()
         return np.concatenate([position, turn], axis=1)
 
-    def balanced(self, pose) -> np.ndarray:
+    def balanced(self, pose, margin: float = BALANCE) -> np.ndarray:
         """Whether each robot can hold `pose`, (n, 6) or one pose for all:
         whether its centre of mass, carried along with its body from where it
-        is now, stays `BALANCE` inside the outline of its feet where they
+        is now, stays `margin` inside the outline of its feet where they
         stand now."""
         data = self.robot.data
         mass = data.body_mass.torch[..., None]
@@ -205,7 +239,7 @@ class Controller:
         edges = corners.roll(-1, dims=1) - corners
         to = shifted[:, None, :2] - corners
         left = (edges[..., 0] * to[..., 1] - edges[..., 1] * to[..., 0]) / edges.norm(dim=-1)
-        return (-left >= BALANCE).all(dim=1).numpy()
+        return (-left >= margin).all(dim=1).numpy()
 
     def reference(self) -> np.ndarray:
         """Where the path has each body now: a minimum-jerk blend from the
@@ -236,7 +270,7 @@ class Controller:
             leg: np.minimum(h, self.raised.get(leg, 0.0)) for leg, h in zip(spot_weeder.HIPS, sunk)
         }
         with np.errstate(invalid="ignore"):
-            joints = spot_weeder.stance(x, pitch, yaw, raised, y=y, z=z, roll=roll)
+            joints = spot_weeder.stance(x, pitch, yaw, raised, y=y, z=z, roll=roll, slid=self.slid)
         joints = np.stack(list(joints.values()), axis=-1)
         # A pose out of reach, or past a joint's range, keeps the last angles
         # that reached it.
@@ -259,6 +293,19 @@ def run(sim, scene, controller: Controller, seconds: float, render: bool = False
         scene.update(SIM_DT)
 
 
+def launch(ground: str = "flat", num_envs: int = 1):
+    """The simulation and the scene of `design_scene`, standing still for a
+    second, and a controller for it."""
+    sim = sim_utils.SimulationContext(sim_utils.SimulationCfg(dt=SIM_DT, physics=PHYSICS))
+    scene = design_scene(ground, num_envs)
+    robot = scene["robot"]
+    sim.reset()
+    robot.write_joint_position_to_sim_index(position=robot.data.default_joint_pos.torch.clone())
+    controller = Controller(robot, scene.env_origins, RAISED if ground == "raised" else None)
+    run(sim, scene, controller, 1.0)
+    return sim, scene, controller
+
+
 class SpotLike:
     """The errors of Spot's own controller, as the paper's Table 1 gives them,
     to add to the poses the controller is sent: `pose + spot_like(pose)`.
@@ -268,13 +315,16 @@ class SpotLike:
     and standard deviation. A move and its small correction to a nearby
     point then come out with nearly the same error, as the paper found
     beside its Table 2, which is why one re-detection fixes most misses.
-    `length` is how far apart, at the bit, two errors are mostly unrelated."""
+    `length` is how far apart, at the bit, two errors are mostly unrelated:
+    40 cm by default, at which `weeding`'s one correction, from 3 cm behind
+    the weed, mills out 85 to 89% of the weeds it aims at, where the paper's
+    Table 4 has 86%."""
 
     MEAN = np.array([1.11e-3, 4.79e-3, 0.33e-3, 0.84e-3, 3.34e-3, -1.78e-3])
     STD = np.array([6.33e-3, 27.88e-3, 2.04e-3, 4.23e-3, 8.14e-3, 2.23e-3])
     """Table 1, in metres and radians: (x, y, z, roll, pitch, yaw)."""
 
-    def __init__(self, seed: int = 0, length: float = 0.1, waves: int = 64):
+    def __init__(self, seed: int = 0, length: float = 0.4, waves: int = 64):
         # A sum of plane waves of random direction and phase, with wave
         # numbers spread as for a Gaussian process of that length scale.
         rng = np.random.default_rng(seed)
@@ -300,14 +350,9 @@ def main():
     holds it there, and checks that the body holds the pose."""
     from isaaclab.app import launch_simulation
 
-    sim_cfg = sim_utils.SimulationCfg(dt=SIM_DT, device="cuda:0", physics=PHYSICS)
+    sim_cfg = sim_utils.SimulationCfg(physics=PHYSICS)
     with launch_simulation(sim_cfg, {"headless": True, "visualizer": []}):
-        sim = sim_utils.SimulationContext(sim_cfg)
-        scene = design_scene()
-        robot = scene["robot"]
-        sim.reset()
-        robot.write_joint_position_to_sim_index(position=robot.data.default_joint_pos.torch.clone())
-        controller = Controller(robot, scene.env_origins)
+        sim, scene, controller = launch()
         sent = np.array([0, 0, 0, 0, spot_weeder.pitch_to(0.04), 0])
         controller.move(sent)
         run(sim, scene, controller, MOVE + 1.0)
