@@ -78,9 +78,10 @@ def report(ground: str, ways: list[str], pipeline: weeding.Pipeline) -> None:
     ):
         print(f"{label:32}{ours:>8.3f}{paper:>{width}.3f}")
     print("\nOur removal planner's time is the move to the scan and the detection there.")
+    print(f"Our cycle also stands up again before the walk: {weeding.REACH:.1f} s.")
     aimed = np.array([len(points) for points in pipeline.aimed]).reshape(len(ways), SCENES)
     for way, counts in zip(ways, aimed):
-        cycle = 2 * scan + counts.mean() * per_weed + LOCOMOTION
+        cycle = 2 * scan + counts.mean() * per_weed + weeding.REACH + LOCOMOTION
         print(f"A cycle, {way}: {cycle:.1f} s, for the {counts.mean():.1f} weeds it aims at")
     print("A cycle in the paper: 47 s, for 5 weeds")
 

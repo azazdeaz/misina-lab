@@ -255,12 +255,13 @@ def pose_for(point) -> tuple[float, float, float]:
     return px - np.cos(yaw) * ahead, pitch, yaw
 
 
-def reachable(x, y, z=0.0, raised: dict[str, float] | None = None):
+def reachable(x, y, z=0.0, raised: dict[str, float] | None = None, slid=None):
     """Whether the bit reaches (x, y, z) in the ground frame over the planted
     feet of `stance`, with every leg joint within `LIMITS`: the paper's
-    kinematic workspace K."""
+    kinematic workspace K. `raised` and `slid` place the feet as `stance`
+    takes them."""
     with np.errstate(invalid="ignore"):
-        joints = stance(*pose_for((x, y, z)), raised)
+        joints = stance(*pose_for((x, y, z)), raised, slid=slid)
         ok = True
         for name, angle in joints.items():
             low, high = LIMITS[name[-2:]]

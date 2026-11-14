@@ -310,8 +310,8 @@ joint-level control to bring E close to K (its §6.2), and here it does.
 ## Weeding
 
 `weeding.Pipeline` weeds a patch of ground as the paper does (its §3.2–3.4),
-with the weeds' positions read from the scene instead of from the L515's
-pictures:
+given where the weeds are instead of finding them in the L515's pictures.
+The weeds are points, with nothing in the simulation:
 
 ```python
 import isaaclab.sim as sim_utils
@@ -357,9 +357,9 @@ ground, where the paper measured its Table 4, of the weeds found:
 
 | | Ours | Ours, Spot-like | The paper's Table 4 |
 | --- | --- | --- | --- |
-| Removed | 45 (45%) | 39 (40%) | 72 (82%) |
-| Not removed | 55 (55%) | 59 (60%) | 16 (18%) |
-| Poor tracking | 0 | 7 (7%) | 12 (14%) |
+| Removed | 45 (45%) | 40 (41%) | 72 (82%) |
+| Not removed | 55 (55%) | 58 (59%) | 16 (18%) |
+| Poor tracking | 0 | 6 (6%) | 12 (14%) |
 | No second detection | 0 | 0 | 0 |
 | Outside E | 0 | 7 (7%) | 4 (4%) |
 | Out of reach | 55 (55%) | 45 (46%) | |
@@ -367,9 +367,9 @@ ground, where the paper measured its Table 4, of the weeds found:
 
 Flat and raised ground come out within 2 points of these.
 
-- Of the weeds it aims at, the Spot-like robot removes 85%, the paper's
-  86%: by construction, as `SpotLike`'s 40 cm is fitted to it. At 10 cm,
-  half of them were missed.
+- Of the weeds it aims at, the Spot-like robot removes 87 to 89%, the
+  paper's 86%: by construction, as `SpotLike`'s 40 cm is fitted to it. At
+  10 cm, half of them were missed.
 - Half the weeds found are out of reach. A plunge at the front of E would
   put the robot's centre of mass past its front feet. On flat ground with
   no margin, 11 of 20 robots tipped over their front feet while they
@@ -386,13 +386,14 @@ Flat and raised ground come out within 2 points of these.
 - With the tool 3 cm forward, the bit lands 0.1 mm from the weed on
   average and 0.3 mm at worst, where the paper's §4.1 has under 3 mm: the
   camera rides on the tool, so finding the weed again takes the offset out.
-- Of 20 Spot-like robots, 1 to 3 lose their footing.
+- Of 20 Spot-like robots, 1 or 2 lose their footing.
 
 For the paper's Table 5, the moves take its 4.8 s of movement per weed,
 3.8 s to the weed and 1 s to correct; detection stands still its 2 s and
 the bit mills its 1 s. A weed takes the paper's 7.8 s by construction. Our
 planner's time is the move to the scan and the detection there, 5.8 s to
-the paper's 2.4 s. A patch takes 33 s for the 2.3 weeds aimed at, where the
+the paper's 2.4 s, and the robot stands up again before the walk, 3.8 s
+more. A patch takes 36 to 37 s for the 2.2 to 2.4 weeds aimed at, where the
 paper takes 47 s for 5; no robot walks, so the walk is the paper's 3.2 s.
 
 ## What it does not do
@@ -400,9 +401,9 @@ paper takes 47 s for 5; no robot walks, so the walk is the paper's 3.2 s.
 - Mill. The bit goes into the ground, but nothing is cut: a weed counts as
   milled out when the bit's centre comes within 11 mm of its stem, in the
   ground.
-- Find weeds in pictures. The pipeline reads the weeds' positions from the
-  scene, as the L515 would measure them. The camera renders, but nothing
-  looks for a weed in its pictures.
+- Find weeds in pictures. The pipeline is given where the weeds are, points
+  with nothing in the simulation, and measures them as the L515 would. The
+  camera renders, but nothing looks for a weed in its pictures.
 - Walk. The robot weeds the patch it stands at; in the paper, Spot walks
   20 cm on to the next one after each.
 - Estimate its pose. The controller reads the body's pose from the
@@ -416,7 +417,7 @@ paper takes 47 s for 5; no robot walks, so the walk is the paper's 3.2 s.
 | [pose.py](pose.py) | the body pose in Newton: `Controller`, `SpotLike`, the grounds, `PHYSICS` and `launch`; run, it checks that a pose is held |
 | [demo.py](demo.py) | the demo above |
 | [tracking.py](tracking.py) | the controller's tracking error and its E, beside the paper's |
-| [weeding.py](weeding.py) | the paper's weeding pipeline, with the weeds read from the scene: `Pipeline`, and the detection, `detect`; run, it weeds a patch |
+| [weeding.py](weeding.py) | the paper's weeding pipeline, given where the weeds are: `Pipeline`, and the detection, `detect`; run, it weeds a patch |
 | [experiments.py](experiments.py) | the pipeline over many patches, beside the paper's Tables 4 and 5 |
 | [workspace.py](workspace.py) | the workspace at ground level, beside the paper's |
 | [test_spot_weeder.py](test_spot_weeder.py) | the robot checked against the paper's numbers |

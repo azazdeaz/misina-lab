@@ -317,7 +317,7 @@ class SpotLike:
     beside its Table 2, which is why one re-detection fixes most misses.
     `length` is how far apart, at the bit, two errors are mostly unrelated:
     40 cm by default, at which `weeding`'s one correction, from 3 cm behind
-    the weed, mills out 85% of the weeds it aims at, where the paper's
+    the weed, mills out 85 to 89% of the weeds it aims at, where the paper's
     Table 4 has 86%."""
 
     MEAN = np.array([1.11e-3, 4.79e-3, 0.33e-3, 0.84e-3, 3.34e-3, -1.78e-3])

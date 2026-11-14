@@ -1,6 +1,7 @@
 """The paper's weeding pipeline over planted feet, its §3.2-3.4, with oracle
-detection: the weeds' positions come from the scene, as the L515 would
-measure them from where it is mounted, instead of from its pictures.
+detection: it is given where the weeds are, points with nothing in the
+simulation, and measures them as the L515 would from where it is mounted,
+instead of finding them in its pictures.
 
 The robot scans twice, yawed right and then left, as its camera sees only
 part of E at a time. After each scan the removal planner keeps the weeds
@@ -13,7 +14,7 @@ second.
 Points are in the ground frame of `spot_weeder`, the paper's initial body
 frame, and poses are as `pose` has them. The robots of a batch, one scene
 each, work in step: each move takes them all the same time, and a robot with
-nothing to do in one holds still.
+nothing to do in one waits where it scanned.
 
     python weeding.py   # weeds one scene on flat ground, headless, and says what became of each weed
 """
@@ -249,8 +250,10 @@ class Pipeline:
             for point in aimed:
                 fresh[i] &= np.linalg.norm(found[i] - point, axis=-1) >= DONE
         aim, near = found - (0, 0, AIM), found + APPROACH
-        able = fresh & reachable(*np.moveaxis(aim, -1, 0), self.raised)
-        able &= reachable(*np.moveaxis(near, -1, 0), self.raised)
+        # K over the feet where the controller has them planted.
+        slid = {leg: (x[:, None], y[:, None]) for leg, (x, y) in self.controller.slid.items()}
+        able = fresh & reachable(*np.moveaxis(aim, -1, 0), self.raised, slid)
+        able &= reachable(*np.moveaxis(near, -1, 0), self.raised, slid)
         for j in range(w):
             for points in (aim[:, j], near[:, j]):
                 able[:, j] &= self.controller.balanced(body_pose(np.nan_to_num(points)), LEAN)

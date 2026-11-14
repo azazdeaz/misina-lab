@@ -80,18 +80,19 @@ def test_the_shaft_stands_upright_with_the_bit_2_cm_in(stage):
 
 
 @pytest.mark.parametrize(
-    ("body", "raised", "rest"),
+    ("body", "raised", "rest", "slid"),
     [
-        ((0.0, 0.0, 0.0), {}, {}),
-        ((0.0, 0.3, 0.0), {}, {}),
-        ((0.1, 0.25, 0.3), {}, {}),
-        ((-0.05, 0.27, -0.4), {}, {}),
-        ((0.05, 0.2, 0.2), {"fl": 0.05, "hr": 0.1}, {}),
-        ((0.05, 0.25, 0.3), {}, {"y": 0.03, "z": -0.02, "roll": 0.05}),
+        ((0.0, 0.0, 0.0), {}, {}, {}),
+        ((0.0, 0.3, 0.0), {}, {}, {}),
+        ((0.1, 0.25, 0.3), {}, {}, {}),
+        ((-0.05, 0.27, -0.4), {}, {}, {}),
+        ((0.05, 0.2, 0.2), {"fl": 0.05, "hr": 0.1}, {}, {}),
+        ((0.05, 0.25, 0.3), {}, {"y": 0.03, "z": -0.02, "roll": 0.05}, {}),
+        ((0.05, 0.2, 0.2), {}, {}, {"fl": (0.02, -0.03), "hr": (-0.01, 0.02)}),
     ],
 )
-def test_the_stance_keeps_the_feet_where_they_stood(body, raised, rest):
-    angles = spot_weeder.stance(*body, raised, **rest)
+def test_the_stance_keeps_the_feet_where_they_stood(body, raised, rest, slid):
+    angles = spot_weeder.stance(*body, raised, **rest, slid=slid)
     for name, angle in angles.items():
         low, high = spot_weeder.LIMITS[name[-2:]]
         assert type(angle) is float and low <= angle <= high
@@ -101,7 +102,8 @@ def test_the_stance_keeps_the_feet_where_they_stood(body, raised, rest):
         shin = pitched(angles[f"{leg}_kn"]) @ [0, 0, -spot_weeder.SHIN]
         swung = pitched(angles[f"{leg}_hy"]) @ (knee + shin)
         foot = np.array([x, y, 0]) + rolled(angles[f"{leg}_hx"]) @ ([0, out, 0] + swung)
-        stood = [x, y + out, spot_weeder.FOOT + raised.get(leg, 0.0)]
+        dx, dy = slid.get(leg, (0.0, 0.0))
+        stood = [x + dx, y + out + dy, spot_weeder.FOOT + raised.get(leg, 0.0)]
         np.testing.assert_allclose(fk(*body, foot, **rest), stood, atol=1e-9)
     bit = fk(*body, spot_weeder.TIP, **rest)
     np.testing.assert_allclose(spot_weeder.fk(*body, **rest), bit, atol=1e-12)
