@@ -53,9 +53,19 @@
 //! and mature green, over which it grows to full size, to the USDA colour
 //! classes breaker, turning, pink, light red and red, which are defined by
 //! how much of the surface has coloured: up to 10%, 30%, 60%, 90% and the
-//! rest. The colour climbs from the blossom end, so the shoulders turn last.
-//! The calyx grows on from the flower's as the fruit grows, so a young
+//! rest. The calyx grows on from the flower's as the fruit grows, so a young
 //! fruit's sepals are long next to it.
+//!
+//! The skin is coloured per point from what it holds. Each point has an
+//! onset, the stage it starts to colour at: the blossom end at breaker, the
+//! shoulders `shoulder_lag` stages later, and the rest in between by height
+//! and in patches, so a fruit turns lopsided and over its whole surface
+//! rather than behind a level front. From its onset a point loses its
+//! chlorophyll, gains the peel's yellow chalcone and then builds lycopene,
+//! each over a few stages, and [`tissue`] turns the amounts into its colour:
+//! from green through yellow and salmon to red, where a blend of the green
+//! and the red would pass through olive. An orange, yellow or brown fruit
+//! builds other pigments, or keeps its chlorophyll.
 //!
 //! A stem ripens from the bottom up, about a truss a week, and a truss from
 //! its base to its tip. A fruit's ripening is read off how far its truss
@@ -71,8 +81,9 @@
 //! growing, and the youngest trusses are in flower.
 //!
 //! Colour is baked per mesh, one per point, so fruit are quantized on their
-//! stage as well as their shape, and every fruit keeps its own prim with its
-//! own stage and ripeness on it as attributes.
+//! stage as well as their shape: every fruit sharing a mesh shows the onsets
+//! and the stage of the one it was built for. Each keeps its own prim with
+//! its own stage and ripeness on it as attributes.
 
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
@@ -82,7 +93,7 @@ use misina_lab::geometry::outline::outline_mesh;
 use misina_lab::geometry::packing::nearest;
 use misina_lab::geometry::par_map;
 use misina_lab::geometry::shapes::{leaf, simplify_with};
-use misina_lab::palette::{Response, mix, srgb};
+use misina_lab::palette::{COLOR_STREAM, Pigment, Response, mix, srgb, tissue};
 use misina_lab::params::{Choices, Label, Slider};
 use misina_lab::quantize::{Metric, farthest_first};
 use misina_lab::rng::Rng;
@@ -213,19 +224,43 @@ const HUG: f32 = 1.2;
 const SEPAL_START: f32 = 0.4;
 const GAP: f32 = 0.0004;
 
-/// How far past a point the colour front has to climb before the point is
-/// fully coloured, as a share of the fruit's height.
-const FRONT: f32 = 0.3;
-
 /// What a stage is worth in meters of diameter to the clustering: a stage of
 /// colour shows about as much as a centimeter of size.
 const STAGE_WEIGHT: f32 = 0.01;
 
-/// A young fruit, a mature green one, and the tan a fruit breaks to, before
-/// its ripe colour comes through.
-const YOUNG: u32 = 0x74A83A;
-const MATURE: u32 = 0x9DB55A;
-const BLUSH: u32 = 0xD6A35E;
+/// The order the skin colours in: up from the blossom end, the shoulders
+/// round the stem this much later, as a share of the height, and patches
+/// this much earlier or later. Only the order counts: the onsets are spread
+/// over `shoulder_lag` by surface area, whatever these are.
+const SHOULDER_DELAY: f32 = 0.1;
+const PATCHES: f32 = 0.12;
+
+/// The patches' noise: plane waves through the body, this many in each of
+/// two octaves, the first about 1.6 cycles across the fruit.
+const WAVES: usize = 4;
+const WAVENUMBER: f32 = 5.0;
+
+/// The skin's pigments, in [`Pigment`]'s amounts: the chlorophyll of a fruit
+/// just set and of a mature green one, its carotenoids, the lycopene of a red
+/// one, the naringenin chalcone a ripe peel holds, and what the flesh
+/// absorbs of itself. Mature green lands near `#9DB55A` and red on `#B3241A`.
+const SET_CHLOROPHYLL: f32 = 64.0;
+const CHLOROPHYLL: f32 = 28.25;
+const CAROTENOID: f32 = 7.42;
+const LYCOPENE: f32 = 87.35;
+const CHALCONE: f32 = 2.0;
+const FLESH: f32 = 0.0089;
+
+/// When a point's pigments change, in stages after its onset, as the middle
+/// and the width of a logistic step: chlorophyll goes first, the peel's
+/// chalcone comes with it, a yellow or orange fruit's carotenoids follow,
+/// and lycopene builds last. Fitted to how far the hue has moved at the
+/// blossom end (Carrillo-López & Yahia 2014) and at the girth (López Camelo &
+/// Gómez 2004) at each stage.
+const CHLOROPHYLL_LOSS: (f32, f32) = (0.8, 1.0);
+const CHALCONE_GAIN: (f32, f32) = (0.3, 0.6);
+const CAROTENOID_GAIN: (f32, f32) = (0.5, 0.6);
+const LYCOPENE_GAIN: (f32, f32) = (3.0, 0.775);
 
 /// The calyx.
 const SEPAL_COLOR: u32 = 0x355E1E;
@@ -333,9 +368,21 @@ impl Ripe {
         Self::ALL.into_iter().find(|ripe| ripe.name() == name)
     }
 
-    /// The fully ripe skin, as sRGB.
-    fn hex(self) -> u32 {
-        [0xB3241A, 0xE0671C, 0xE6B92C, 0x5E2A1C][self as usize]
+    /// What ripening does to the skin's pigments: the share of its
+    /// chlorophyll it keeps, the carotenoids it gains and the lycopene it
+    /// builds.
+    fn pigments(self) -> (f32, f32, f32) {
+        match self {
+            Ripe::Red => (0.0, 0.0, LYCOPENE),
+            // Carotene in place of most of the lycopene, as in a tangerine
+            // cultivar: #D86415.
+            Ripe::Orange => (0.0, 39.0, 15.0),
+            // No lycopene, and a trace of green kept: #E6B92C.
+            Ripe::Yellow => (0.12, 11.0, 0.0),
+            // All of its chlorophyll kept beside the lycopene, as a green-flesh
+            // cultivar keeps it: #80341D.
+            Ripe::Brown => (1.0, 0.0, LYCOPENE),
+        }
     }
 }
 
@@ -344,7 +391,9 @@ pub fn stage_name(stage: f32) -> &'static str {
     STAGES[((stage - BUD).max(0.0) as usize).min(STAGES.len() - 1)]
 }
 
-/// The share of a fruit's surface that has coloured at `stage`, 0 to 1.
+/// The share of a fruit's surface that has coloured at `stage`, 0 to 1, as
+/// the USDA class it is in counts it: read off its stage, not measured on its
+/// skin.
 pub fn ripeness(stage: f32) -> f32 {
     let s = (stage - BREAKER).clamp(0.0, RIPE - BREAKER);
     let i = (s as usize).min(COLOURED.len() - 2);
@@ -588,7 +637,9 @@ impl Metric<FruitConfig> for FruitMetric {
 ///
 /// Every fruit has a stage: bud and flower before it sets, set, expanding
 /// and mature green while it grows, then breaker, turning, pink, light red
-/// and red as it colours from its blossom end up. A truss shows at the head
+/// and red as it colours, from its blossom end up and in patches; a red
+/// fruit passes through yellow and salmon, losing its chlorophyll before it
+/// builds its lycopene. A truss shows at the head
 /// in bud, opens its flowers from its base to its tip from about 15 cm below
 /// the head, sets them over the week after, and they reach full size about
 /// five trusses further down. A stem colours from its lowest truss up and a
@@ -626,6 +677,13 @@ pub struct FruitParams {
     /// The colour a ripe fruit turns: `red`, `orange`, `yellow` or `brown`.
     #[reflect(@Choices(&Ripe::NAMES))]
     pub color: String,
+    /// How many stages after its blossom end a fruit's shoulders start to
+    /// colour. At 0 a fruit colours all over at once; at the default 1.7,
+    /// fitted to colour measured on ripening tomatoes, its shoulders are
+    /// still turning at pink and a little orange at the end of red; at 3
+    /// they are still salmon then.
+    #[reflect(@Slider { min: 0.0, max: 3.0, step: 0.1 })]
+    pub shoulder_lag: f32,
     /// Height of a fruit over its width: under 1 is oblate, as round truss
     /// tomatoes and beefsteaks are, and over 1 elongated, as plum tomatoes
     /// are. Each fruit draws a little either side.
@@ -714,6 +772,7 @@ impl Default for FruitParams {
             ripe_trusses: 1.0,
             spread: 0.2,
             color: Ripe::default().name().into(),
+            shoulder_lag: 1.7,
             aspect: 0.9,
             widest: 0.5,
             stem_dip: 0.1,
@@ -755,7 +814,8 @@ pub fn plugin(app: &mut App) {
             reauthor.run_if(resource_changed::<FruitParams>),
             build.run_if(
                 configs_changed::<FruitConfig>
-                    // `color`, `variations` and `detail` reach no config.
+                    // `color`, `shoulder_lag`, `variations` and `detail`
+                    // reach no config.
                     .or_eager(resource_changed::<FruitParams>),
             ),
         )
@@ -1024,18 +1084,99 @@ impl Body {
     }
 }
 
-/// The skin at `h` of the way up the body, from the blossom end, at `stage`.
-fn skin(stage: f32, h: f32, ripe: [f32; 3]) -> [f32; 3] {
-    let green = mix(srgb(YOUNG), srgb(MATURE), stage / BREAKER);
-    let coloured = ripeness(stage);
-    // The front passes the shoulders by `FRONT` as the last of the surface
-    // turns, so a fruit at the end of red is red to its stem.
-    let front = coloured * (1.0 + FRONT * coloured);
-    let turned = ((front - h) / FRONT).clamp(0.0, 1.0);
-    let depth = ((stage - BREAKER) / (RIPE - BREAKER))
-        .clamp(0.0, 1.0)
-        .sqrt();
-    mix(green, mix(srgb(BLUSH), ripe, turned * depth), turned)
+/// Each point's onset, the stage the skin there starts to colour at: up from
+/// the blossom end, the shoulders late, in patches drawn off `seed`. Ordered
+/// so, the points are spread from [`BREAKER`] to `lag` stages later by the
+/// share of the surface that colours before them, so at any stage the same
+/// share has started whatever the mesh.
+///
+/// Draws, off its own stream: per wave its direction, then its phase.
+fn onsets(skin: &MeshData, seed: u64, lag: f32) -> Vec<f32> {
+    let points: Vec<Vec3> = skin.points.iter().map(|p| Vec3::from(*p)).collect();
+    let (low, high) = points.iter().fold((Vec3::MAX, Vec3::MIN), |(lo, hi), p| {
+        (lo.min(*p), hi.max(*p))
+    });
+    let middle = (low + high) / 2.0;
+
+    let mut rng = Rng::new(seed ^ COLOR_STREAM);
+    let waves: Vec<(Vec3, f32, f32)> = (0..2 * WAVES)
+        .map(|i| {
+            let octave = (i / WAVES) as i32;
+            let (z, turn) = (rng.range(-1.0, 1.0) as f32, rng.unit() as f32 * TAU);
+            let towards = Vec2::from_angle(turn) * (1.0 - z * z).sqrt();
+            let k = towards.extend(z) * WAVENUMBER * 2f32.powi(octave);
+            (k, rng.unit() as f32 * TAU, 0.5f32.powi(octave))
+        })
+        .collect();
+    // Scaled to a standard deviation of 1.
+    let spread = (WAVES as f32 / 2.0 * 1.25).sqrt();
+    let noise = |at: Vec3| {
+        let sum: f32 = waves
+            .iter()
+            .map(|(k, phase, a)| a * (k.dot(at) + phase).cos())
+            .sum();
+        sum / spread
+    };
+    let order: Vec<f32> = points
+        .iter()
+        .map(|p| {
+            let h = (p.z - low.z) / (high.z - low.z).max(1e-6);
+            let at = (*p - middle).normalize_or_zero();
+            h + SHOULDER_DELAY * smooth((h - 0.65) / 0.35) + PATCHES * noise(at)
+        })
+        .collect();
+
+    // A point's share of the surface: a third of each triangle it is a
+    // corner of, faces fanned from their first corner.
+    let mut area = vec![0.0; points.len()];
+    let mut cursor = 0;
+    for count in &skin.face_vertex_counts {
+        let face = &skin.face_vertex_indices[cursor..cursor + *count as usize];
+        cursor += face.len();
+        for i in 1..face.len() - 1 {
+            let [a, b, c] = [face[0], face[i], face[i + 1]].map(|k| k as usize);
+            let third = (points[b] - points[a])
+                .cross(points[c] - points[a])
+                .length()
+                / 6.0;
+            for k in [a, b, c] {
+                area[k] += third;
+            }
+        }
+    }
+    let total: f32 = area.iter().sum();
+    let mut ranked: Vec<usize> = (0..points.len()).collect();
+    ranked.sort_by(|a, b| order[*a].total_cmp(&order[*b]));
+    let mut onsets = vec![0.0; points.len()];
+    let mut before = 0.0;
+    for k in ranked {
+        before += area[k];
+        onsets[k] = BREAKER + lag * before / total;
+    }
+    onsets
+}
+
+/// The skin's colour where its onset is `onset`, on a fruit at `stage` that
+/// ripens to `ripe`: its pigments, read off how long ago the point started
+/// to colour, as [`tissue`] sees them.
+fn skin(stage: f32, onset: f32, ripe: Ripe) -> [f32; 3] {
+    let after = stage - onset;
+    let step = |(middle, width): (f32, f32)| 1.0 / (1.0 + ((middle - after) / width).exp());
+    let (kept, carotenoids, lycopene) = ripe.pigments();
+    // A young fruit's chlorophyll thins as it grows, and goes as it ripens.
+    let green =
+        SET_CHLOROPHYLL + (CHLOROPHYLL - SET_CHLOROPHYLL) * (stage / BREAKER).clamp(0.0, 1.0);
+    let lost = (1.0 - kept) * step(CHLOROPHYLL_LOSS);
+    let flesh = [
+        (Pigment::CHLOROPHYLL, green * (1.0 - lost)),
+        (
+            Pigment::CAROTENOID,
+            CAROTENOID + carotenoids * step(CAROTENOID_GAIN),
+        ),
+        (Pigment::LYCOPENE, lycopene * step(LYCOPENE_GAIN)),
+    ];
+    let peel = [(Pigment::CHALCONE, CHALCONE * step(CHALCONE_GAIN))];
+    tissue(&flesh, FLESH, &peel)
 }
 
 /// A position along a polyline, by arc length, with its direction and the
@@ -1290,26 +1431,27 @@ fn flower(config: &FruitConfig, rng: &mut Rng) -> Result<(Vec<MeshData>, Vec<[f3
     Ok((pieces, colors))
 }
 
+/// How a fruit's skin colours: what it ripens to, and how many stages its
+/// shoulders start after its blossom end.
+#[derive(Clone, Copy, Debug)]
+struct Colouring {
+    ripe: Ripe,
+    lag: f32,
+}
+
 /// One fruit in its own frame, hanging below the origin, with a colour per
 /// point: its body, meshed to `tolerance`, and its calyx.
 fn fruit(
     config: &FruitConfig,
-    ripe: [f32; 3],
+    colouring: Colouring,
     tolerance: f32,
     rng: &mut Rng,
 ) -> Result<(Vec<MeshData>, Vec<[f32; 3]>)> {
     let body = Body::new(config, tolerance, rng);
     let skin_mesh = body.mesh();
-    let (low, high) = skin_mesh
-        .points
-        .iter()
-        .fold((f32::MAX, f32::MIN), |(lo, hi), p| {
-            (lo.min(p[2]), hi.max(p[2]))
-        });
-    let mut colors: Vec<[f32; 3]> = skin_mesh
-        .points
-        .iter()
-        .map(|p| skin(config.stage, (p[2] - low) / (high - low).max(1e-6), ripe))
+    let mut colors: Vec<[f32; 3]> = onsets(&skin_mesh, config.seed, colouring.lag)
+        .into_iter()
+        .map(|onset| skin(config.stage, onset, colouring.ripe))
         .collect();
 
     let sepals = calyx(config, &body, rng)?;
@@ -1323,12 +1465,12 @@ fn fruit(
 
 /// One fruit, or the flower it sets from, in its own frame below the origin,
 /// with a colour per point, a fruit's body meshed to `tolerance`.
-fn fruit_mesh(config: &FruitConfig, ripe: [f32; 3], tolerance: f32) -> Result<Mesh> {
+fn fruit_mesh(config: &FruitConfig, colouring: Colouring, tolerance: f32) -> Result<Mesh> {
     let mut rng = Rng::new(config.seed ^ CALYX_STREAM);
     let (pieces, colors) = if config.in_flower() {
         flower(config, &mut rng)?
     } else {
-        fruit(config, ripe, tolerance, &mut rng)?
+        fruit(config, colouring, tolerance, &mut rng)?
     };
     let rgba: Vec<[f32; 4]> = colors.iter().map(|[r, g, b]| [*r, *g, *b, 1.0]).collect();
     Ok(merge_meshes(&pieces)
@@ -1362,10 +1504,13 @@ fn build(
         0.0,
         &FruitMetric,
     );
-    let ripe = srgb(params.ripe().hex());
+    let colouring = Colouring {
+        ripe: params.ripe(),
+        lag: params.shoulder_lag.max(0.0),
+    };
     let tolerance = TOLERANCE as f32 / params.detail.max(MIN_DETAIL);
     let meshes = par_map(&book.representatives, |_, config| {
-        fruit_mesh(config, ripe, tolerance)
+        fruit_mesh(config, colouring, tolerance)
     });
     let mut geometry = Vec::with_capacity(meshes.len());
     for (index, (config, mesh)) in book.representatives.iter().zip(meshes).enumerate() {
@@ -1408,13 +1553,21 @@ mod tests {
 
     use super::*;
     use crate::elements::{grown, small};
-    use misina_lab::testing::organs;
+    use misina_lab::testing::{bounds, organs};
 
     /// A fruit of the default params, 60 mm when grown, at `stage`.
     fn config(stage: f32, edit: fn(&mut FruitParams)) -> FruitConfig {
         FruitConfig {
             stage,
             ..seeded(7, edit)
+        }
+    }
+
+    /// The default params' colouring.
+    fn colouring() -> Colouring {
+        Colouring {
+            ripe: Ripe::default(),
+            lag: FruitParams::default().shoulder_lag,
         }
     }
 
@@ -1597,7 +1750,7 @@ mod tests {
                         mesh.points.iter().all(|p| p[2] <= body.dip + 1e-6),
                         "{at}: above its calyx"
                     );
-                    let triangles = fruit_mesh(&config, [1.0; 3], tolerance)
+                    let triangles = fruit_mesh(&config, colouring(), tolerance)
                         .unwrap()
                         .indices()
                         .unwrap()
@@ -1824,7 +1977,7 @@ mod tests {
             let config = config(stage, |_| {});
             let (pieces, _) = flower(&config, &mut Rng::new(config.seed ^ CALYX_STREAM)).unwrap();
             assert_eq!(pieces.len(), 2 * config.sepals as usize + 1);
-            let triangles = fruit_mesh(&config, [1.0; 3], TOLERANCE as f32)
+            let triangles = fruit_mesh(&config, colouring(), TOLERANCE as f32)
                 .unwrap()
                 .indices()
                 .unwrap()
@@ -1855,21 +2008,32 @@ mod tests {
         assert_eq!([-1.5, -0.5, 0.0].map(stage_name), ["bud", "flower", "set"]);
     }
 
-    /// Colour starts at the blossom end: at pink the bottom of a fruit is
-    /// redder than its shoulders, at mature green neither has turned, and at
-    /// the end of red both have.
+    /// Colour starts at the blossom end: at pink the lowest tenth of a
+    /// fruit's skin is redder than its highest, at mature green neither has
+    /// turned, and at the end of red both have.
     #[test]
     fn a_fruit_colours_from_its_blossom_end() {
-        let ripe = srgb(Ripe::Red.hex());
-        let redness = |stage: f32, h: f32| {
-            let [r, g, _] = skin(stage, h, ripe);
-            r - g
+        // Red over green, on average, in the lowest and the highest tenth.
+        let redness = |stage: f32| {
+            let config = config(stage, |_| {});
+            let mut rng = Rng::new(config.seed ^ CALYX_STREAM);
+            let (pieces, colors) = fruit(&config, colouring(), TOLERANCE as f32, &mut rng).unwrap();
+            let (low, high) = bounds(&pieces[0], 2);
+            let skin = &pieces[0].points;
+            [0.0, 0.9].map(|from| {
+                let tenth: Vec<f32> = skin
+                    .iter()
+                    .zip(&colors)
+                    .filter(|(p, _)| ((p[2] - low) / (high - low) - from - 0.05).abs() <= 0.05)
+                    .map(|(_, [r, g, _])| r - g)
+                    .collect();
+                tenth.iter().sum::<f32>() / tenth.len() as f32
+            })
         };
-        assert!(redness(5.5, 0.0) > redness(5.5, 0.9) + 0.05);
-        assert!(redness(MATURE_GREEN, 0.0) < 0.0 && redness(MATURE_GREEN, 1.0) < 0.0);
-        assert!(
-            redness(RIPE, 0.0) > 0.05 && (redness(RIPE, 1.0) - redness(RIPE, 0.0)).abs() < 1e-4
-        );
+        let [blossom, stem] = redness(5.5);
+        assert!(blossom > stem + 0.05, "{blossom} {stem}");
+        assert!(redness(MATURE_GREEN).iter().all(|r| *r < 0.0));
+        assert!(redness(RIPE).iter().all(|r| *r > 0.3));
         assert_eq!(
             (ripeness(BREAKER), ripeness(4.0), ripeness(RIPE)),
             (0.0, 0.1, 1.0)

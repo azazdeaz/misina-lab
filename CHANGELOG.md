@@ -24,6 +24,12 @@ Scene document format 12.
 
 ### Added
 
+- **misina-lab**: `palette::tissue` gives the colour of a tissue that
+  scatters light back out, a fruit's flesh, from the `Pigment` amounts it
+  holds: chlorophyll, carotenoids, lycopene, and a peel's chalcone over
+  them. A colour that changes as an organ grows can be written as pigments
+  fading and building, which passes through the colours a real one does,
+  where a blend of two hexes passes through olive and khaki.
 - **greenhouse-lab**: A fruit's outline has knobs of its own:
   `FruitCfg.widest`, where it is widest; `FruitCfg.stem_dip`, how deep its
   stem scar is sunk; `FruitCfg.stem_blockiness` and
@@ -288,6 +294,19 @@ Scene document format 12.
 
 ### Changed
 
+- **greenhouse-lab**: A fruit colours over its whole surface, where a level
+  front climbed from its blossom end and left its girth green until pink.
+  Each point of its skin starts to colour at an onset of its own: up from
+  the blossom end, in patches, and the shoulders last, by
+  `FruitCfg.shoulder_lag` stages, 1.7 by default, which is new. From its
+  onset a point loses its chlorophyll and then builds lycopene, and its
+  colour is read off those amounts, so a turning fruit passes through
+  yellow and salmon rather than olive. At the end of red the shoulders are
+  still a little orange; a `shoulder_lag` of 0.5 makes them red. An orange,
+  yellow or brown fruit builds other pigments: yellow keeps a trace of
+  green, and brown keeps all of its chlorophyll beside the lycopene, which
+  makes it a red-brown, `#80341D`, lighter than the `#5E2A1C` it was. A
+  young fruit is a little duller green.
 - **greenhouse-lab** (**cfg**): A fruit has a lobe per locule, each its own
   width and fullness, where its lobes were one even ripple. The groove over
   each wall between two is deepest round the shoulders, where it pleats out
