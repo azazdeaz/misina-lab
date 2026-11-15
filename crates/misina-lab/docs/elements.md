@@ -68,7 +68,9 @@ Stalks packed once and drawn under several clusters' fruit are packed for
 the biggest; `swing` turns each cluster's own fruit about the stalks' ends,
 back toward the way each would hang alone, until they touch.
 `palette` turns a hex colour linear, jitters it per mesh and pairs it with a
-`Response`, how a surface answers light. `terrain` is the one element this
+`Response`, how a surface answers light; for a surface whose colour changes
+as it grows, `tissue` turns `Pigment` amounts, chlorophyll fading and
+lycopene building, into the colour they leave. `terrain` is the one element this
 crate ships: the ground, staged first by every generator, and the `Ground`
 height field everything placed on it drapes onto.
 

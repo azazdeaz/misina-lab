@@ -33,7 +33,7 @@ package, is in the root `AGENTS.md`.
 | [src/python.rs](src/python.rs) | the PyO3 glue under the macro, behind the `python` feature |
 | [src/stats.rs](src/stats.rs), [src/colliders.rs](src/colliders.rs), [src/perf.rs](src/perf.rs), [src/record.rs](src/record.rs), [src/tour.rs](src/tour.rs) | scene footer, the collider overlay it switches, rebuild timing, frame capture, and the storyboard player a demo video is recorded with |
 | [src/terrain.rs](src/terrain.rs) | the ground: `TerrainParams`, the `Ground` height field, and the one build system every generator stages first |
-| [src/palette.rs](src/palette.rs) | linear colour, the per-mesh jitter, and `Response`, how a surface answers light |
+| [src/palette.rs](src/palette.rs) | linear colour, the per-mesh jitter, `tissue`, the colour `Pigment` amounts leave, and `Response`, how a surface answers light |
 | [src/geometry/](src/geometry/) | the geometry kernels: `mesh`, `strand`, `outline`, `shapes`, `scatter`, `bending`, `packing`, and `par_map` |
 | [src/quantize.rs](src/quantize.rs) | k-center clustering: a population of configs down to `variations` meshes |
 | [src/rng.rs](src/rng.rs) | the seeded stream every element draws from |
