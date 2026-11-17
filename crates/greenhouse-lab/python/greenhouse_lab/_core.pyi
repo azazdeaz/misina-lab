@@ -432,14 +432,15 @@ class FruitParams:
 
     Every fruit has a stage: bud and flower before it sets, set, expanding and mature
     green while it grows, then breaker, turning, pink, light red and red as it
-    colours from its blossom end up. A truss shows at the head in bud, opens its
-    flowers from its base to its tip from about 15 cm below the head, sets them over
-    the week after, and they reach full size about five trusses further down. A stem
-    colours from its lowest truss up and a truss from its base to its tip, so in full
-    production the lowest `ripe_trusses` trusses on a stem are colouring and the ones
-    above them still green; a young crop's trusses are all green until the first are
-    old enough. A truss is due once its tip fruit is turning. Every stem runs a
-    little ahead of or behind the rest.
+    colours, from its blossom end up and in patches; a red fruit passes through
+    yellow and salmon, losing its chlorophyll before it builds its lycopene. A truss
+    shows at the head in bud, opens its flowers from its base to its tip from about
+    15 cm below the head, sets them over the week after, and they reach full size
+    about five trusses further down. A stem colours from its lowest truss up and a
+    truss from its base to its tip, so in full production the lowest `ripe_trusses`
+    trusses on a stem are colouring and the ones above them still green; a young
+    crop's trusses are all green until the first are old enough. A truss is due once
+    its tip fruit is turning. Every stem runs a little ahead of or behind the rest.
 
     A fruit has a lobe per locule, the chambers its seeds grow in, and a groove over
     each wall between two: deepest round its shoulders, where it pleats out from the
@@ -463,6 +464,12 @@ class FruitParams:
     """
     color: FruitColor
     """The colour a ripe fruit turns: `red`, `orange`, `yellow` or `brown`."""
+    shoulder_lag: float
+    """How many stages after its blossom end a fruit's shoulders start to colour. At 0 a
+    fruit colours all over at once; at the default 1.7, fitted to colour measured on
+    ripening tomatoes, its shoulders are still turning at pink and a little orange at
+    the end of red; at 3 they are still salmon then.
+    """
     aspect: float
     """Height of a fruit over its width: under 1 is oblate, as round truss tomatoes and
     beefsteaks are, and over 1 elongated, as plum tomatoes are. Each fruit draws a
@@ -544,6 +551,7 @@ class FruitParams:
         ripe_trusses: float = 1.0,
         spread: float = 0.2,
         color: FruitColor = "red",
+        shoulder_lag: float = 1.7,
         aspect: float = 0.9,
         widest: float = 0.5,
         stem_dip: float = 0.1,
