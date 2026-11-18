@@ -89,21 +89,30 @@ in front of a commit.
 
 ## Releasing
 
-`misina-lab`, `vinery-lab` and `greenhouse-lab` release to PyPI together, under
-the workspace version, `[workspace.package]` in the root `Cargo.toml`. The
-generators' wheels take it from their crates. Two other places spell it out:
-`version` in `python/misina-lab/pyproject.toml`, and the `misina-lab==` pin in
-each generator's `pyproject.toml`. `tests/test_versions.py` fails until all
-four agree.
+`misina-lab`, `vinery-lab` and `greenhouse-lab` release to PyPI together, and
+`misina-lab` to crates.io with them, under the workspace version,
+`[workspace.package]` in the root `Cargo.toml`. The generators' wheels take it
+from their crates. Two other places spell it out: `version` in
+`python/misina-lab/pyproject.toml`, and the `misina-lab==` pin in each
+generator's `pyproject.toml`. `tests/test_versions.py` fails until all four
+agree.
 
-1. Bump the version in all four places and merge.
-2. Tag the merge commit `v<version>` and push the tag.
+1. Bump the version in all four places, give the changelog's `[Unreleased]`
+   section the version and the date, and merge.
+2. From a clean checkout of the merge commit, `cargo publish -p misina-lab`.
+3. Tag the merge commit `v<version>` and push the tag.
+
+The crate goes first because a version on either registry can never be
+uploaded again: a crate that fails to publish is fixed before anything
+reaches PyPI. `cargo publish` takes a crates.io API token, from `cargo
+login`; give it the `publish-update` scope on `misina-lab` alone, and the
+`publish-new` scope too for the crate's first version.
 
 `.github/workflows/release.yml` then builds an sdist and a Linux x86_64 wheel
 for each package and publishes them. A manual run of it from a branch builds
 them without publishing.
 
-Publishing goes through PyPI's trusted publishing, so no token is stored. Each
+Publishing to PyPI goes through PyPI's trusted publishing, so no token is stored. Each
 project's publisher on PyPI names the `azazdeaz/misina-lab` repository, the
 `release.yml` workflow and the `pypi` environment. A project not on PyPI yet
 takes a pending publisher, which its first upload turns into the project.
