@@ -11,8 +11,9 @@ package turns that document into something a simulator loads.
 - `misina_lab.isaaclab` spawns a generator's scene in
   [Isaac Lab](https://isaac-sim.github.io/IsaacLab/) 3.0.0. It generates the
   scene on first use, caches it as a USD file, and spawns it once however
-  many environments there are. It also has flexible rods on Newton, cutting
-  them while the simulation runs, a view of every collider, and tools that
+  many environments there are. It also has flexible rods on
+  [Newton](https://newton-physics.github.io/newton/latest/), cutting them
+  while the simulation runs, a view of every collider, and tools that
   render stills and film videos.
 
 ## Install
