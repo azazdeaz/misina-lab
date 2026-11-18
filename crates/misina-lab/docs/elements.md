@@ -91,8 +91,9 @@ is the generator's own list of stages.
 
 Several things are generated from the fragment alone
 ([editing-parameters.md](editing-parameters.md)). The viewer, the window
-in which every parameter is a slider, gets a section of sliders in its
-panel. The snippet, the Python code that constructs the Isaac Lab config
+with a control for every parameter, gets a section in its panel: a slider
+for each number, a dropdown for each choice, a checkbox for each flag. The
+snippet, the Python code that constructs the Isaac Lab config
 with the current settings, gets its fields. So do the Python class, its
 type stub and the parameters page. `cargo test` fails if a field lacks
 something one of these needs, such as the doc comment that becomes its
@@ -115,9 +116,11 @@ Every layer that groups its organs runs the same five steps:
 1. **Collect** every config of its own kind, and sort them by
    `scene::Order`, a number each organ is given when it is placed. The sort
    makes the result the same on every run ([Rules](#rules)).
-2. **Cluster**: group similar configs, and pick at most
-   `params.variations` of them, the **representatives**, to get a mesh
-   ([mesh-variations.md](mesh-variations.md)).
+2. **Cluster**: group similar configs, and pick a limited number of them,
+   the **representatives**, to get a mesh. The limit is
+   `params.variations`, which an element raises where it has to keep a mesh
+   for each kind of organ
+   ([mesh-variations.md](mesh-variations.md#the-budget)).
 3. **Build** each representative's mesh once, into `Prototypes`, the
    **mesh library**. It holds every mesh any layer built, by name, such as
    `Leaf_2`, and every layer reads from it.
@@ -171,10 +174,11 @@ geometry prim. Otherwise each leaf would need two prims, an `Xform` and a
 geometry child. In a scene with hundreds of thousands of leaves, one prim
 per leaf halves the number of prims.
 
-Two kinds of part are exported not instanceable, since each is used by
-one prim only: a part that is its own collider, the ground
-([export.md](export.md#colliders)), and a skin, one mesh that bends with a
-flexible organ ([export.md](export.md#skins)).
+Two kinds of part are exported not instanceable. One is a part that is
+its own collider, the ground: physics cannot reach a collider inside a
+shared copy ([export.md](export.md#colliders)). The other is a skin, one
+mesh that bends with a flexible organ: each skin bends on its own, so it
+cannot be a shared copy ([export.md](export.md#skins)).
 
 > [!NOTE]
 > **In Bevy terms.** A geometry prim is an entity that carries the
@@ -259,11 +263,12 @@ its plugin.
 > builds the scene. An element adds its systems to its stage with `in_set`.
 
 **Rebuild only on change.** A layer builds only when one of its configs
-was added, changed or removed. Building meshes from curves is slow, so
-building every frame would make the viewer slow to respond. Removing a
-config also counts as a change. So when all of a layer's configs are
-removed, the layer runs one last time and clears its meshes from the
-library. The run condition is `run_if(configs_changed::<XConfig>)`.
+was added, changed or removed, or when its own params changed (the next
+rule). Building meshes from curves is slow, so building every frame would
+make the viewer slow to respond. Removing a config also counts as a
+change. So when all of a layer's configs are removed, the layer runs one
+last time and clears its meshes from the library. The run condition on the
+configs is `configs_changed::<XConfig>`.
 
 **Editing a parameter updates the existing configs in place.** When you
 edit a leaf parameter, only the leaf meshes are rebuilt, not the whole
@@ -278,8 +283,9 @@ from. A parameter that is copied into no config field, such as
 > [!NOTE]
 > **In Bevy terms.** `reauthor` runs on
 > `resource_changed::<LeafParams>` and writes with `set_if_neq`, which
-> marks a component changed only when its value differs. So
-> `configs_changed` fires only when a config's value moved.
+> marks a component changed only when its value differs. So a `reauthor`
+> that writes the values a config already has does not make
+> `configs_changed` fire.
 
 **Combine run conditions with `or_eager`, never `or_else`.** Both combine
 two conditions with a logical or. `or_else` skips the second condition

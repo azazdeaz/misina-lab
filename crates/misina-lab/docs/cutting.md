@@ -132,9 +132,9 @@ the rod is bent at that joint, the part is a little out of place: by about
 
 What is drawn follows every cut:
 
-- Each segment is drawn as a tube, a prim named `Stem` under the segment's
-  prim. A prim is one object in the USD scene. The tube is scaled along
-  its axis to the capsule's new length.
+- A rod drawn as tubes has one per segment, a prim named `Stem` under the
+  segment's prim. A prim is one object in the USD scene. The tube is
+  scaled along its axis to the capsule's new length.
 - A rod drawn by a skin, a mesh that the rod's bodies bend
   ([isaac-lab.md](isaac-lab.md#skins)), has its skin split at the cut.
 - Anything else under body i's segment prim past the cut, such as a leaf,

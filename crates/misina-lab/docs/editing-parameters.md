@@ -24,7 +24,7 @@ scene.
 
 | Where the parameter appears | How it gets there |
 | --- | --- |
-| the viewer's panel: caption, slider range, tooltip. The viewer is a window on the scene in which every parameter is a slider | [`src/ui.rs`](../src/ui.rs) reads the fragment's fields while the viewer runs |
+| the viewer's panel: caption, slider range, tooltip. The viewer is a window on the scene with a control for every parameter: a slider, a dropdown or a checkbox | [`src/ui.rs`](../src/ui.rs) reads the fragment's fields while the viewer runs |
 | the snippet: Python code that constructs the Isaac Lab config with the current settings. The viewer's **Copy Isaac Lab cfg** button copies it | [`src/snippet.rs`](../src/snippet.rs) reads the fields when the button is pressed |
 | the Python constructor, `BoxParams(size=0.5)` | [`src/python.rs`](../src/python.rs) sets the field named by each keyword, when the constructor is called |
 | the type stub `python/{PACKAGE}/_core.pyi`, which editors and type checkers read | generated into the regions `fragments` and `aggregate`, the second inside `class {NAME}Params` |
@@ -174,7 +174,7 @@ file itself:
 > [!NOTE]
 > **In Bevy terms.** A `Resource` is a value the Bevy app stores once. In
 > the running scene each fragment is its own resource, so an edit rebuilds
-> only the elements that read it
+> only the elements that read it and the elements built on top of those
 > ([generators.md](generators.md#the-params-aggregate)).
 
 ## The generated files

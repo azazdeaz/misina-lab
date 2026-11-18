@@ -14,7 +14,17 @@ with the parameters you want and declare it in your scene config. The base
 class and every helper on this page are in `misina_lab.isaaclab`, the
 framework's Isaac Lab package.
 
+The generator's package holds the cfg class, below the generated classes
+of its fragments, such as `BoxCfg`:
+
 ```python
+from typing import ClassVar
+
+import boxlab
+from isaaclab.utils.configclass import configclass
+from misina_lab.isaaclab import GeneratedSceneCfg
+
+
 @configclass
 class BoxesCfg(GeneratedSceneCfg):
     PARAMS: ClassVar[type] = boxlab.BoxesParams
@@ -23,9 +33,18 @@ class BoxesCfg(GeneratedSceneCfg):
     boxes: BoxCfg = BoxCfg()
     FRAGMENTS: ClassVar[tuple[str, ...]] = ("boxes",)
     # <<< generated: aggregate
+```
 
+Your scene config uses it:
+
+```python
+from boxlab.isaaclab import BoxCfg, BoxesCfg
+from isaaclab.assets import AssetBaseCfg
+from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.utils.configclass import configclass
 
 BOXES_CFG = BoxesCfg(boxes=BoxCfg(count=5))
+
 
 @configclass
 class MySceneCfg(InteractiveSceneCfg):
@@ -36,15 +55,15 @@ The cfg class extends `GeneratedSceneCfg`. It has one field per
 [fragment](generators.md#the-params-aggregate). A fragment is the struct
 of parameters of one [element](elements.md), the code that builds one kind
 of thing in the scene: `BoxParams` holds the parameters of the boxes. Each
-field of the cfg class is a Python class with the same fields as its Rust
-fragment: `BoxCfg` for `BoxParams`.
+field of the cfg class holds an instance of a Python class with the same
+fields as its Rust fragment: `BoxCfg` for `BoxParams`.
 
 A code generator writes the fragment classes, and the lines between the
 `# >>> generated` and `# <<< generated` comments, from the Rust structs
 ([editing-parameters.md](editing-parameters.md)). Do not edit them by
 hand, since the next regeneration overwrites them. You write the rest of
-the class. The viewer, a window on the scene in which every parameter is a
-slider, has a **Copy Isaac Lab cfg** button. It copies a
+the class. The viewer, a window on the scene with a control for every
+parameter, has a **Copy Isaac Lab cfg** button. It copies a
 [snippet](generators.md#what-the-framework-builds-from-it): Python code
 that constructs this class with the viewer's current settings.
 
@@ -75,7 +94,7 @@ on an instance.
 | Attribute | What it says |
 | --- | --- |
 | `PARAMS` | the Python class of the [aggregate](generators.md#the-params-aggregate), the struct that contains every fragment: `boxlab.BoxesParams`. The framework finds the rest from it. Each fragment's class comes from a default `PARAMS()`. The compiled extension module, `boxlab._core`, comes from `PARAMS.__module__`. The package, `boxlab`, comes from that module's name |
-| `FRAGMENTS` | the names of the fragment fields, in the order the aggregate takes them. These fields are turned into params, and the cache key is made from them. Generated |
+| `FRAGMENTS` | the names of the fragment fields, in the order the aggregate takes them. These fields are turned into params, and the cache key is made from them. The code generator writes this line |
 | `PLANT` | the name every plant's prim takes before its index: `Plant` for `Plant_007`. Required for a scene with [rods](#rods). The rods and wood under one plant's prim form one collision group ([Rods](#rods)) |
 | `ROD_STRETCH`, `ROD_DAMPING` | the rod tuning, [below](#rods). The defaults are `rods.ROD_STRETCH` and `rods.ROD_DAMPING` |
 | `LONE_ROD_DAMPING` | the damping of a rod under no plant's prim, used in place of `ROD_DAMPING`. `None` damps it like any other rod |
@@ -314,20 +333,22 @@ with launch_simulation(sim_cfg, shots.launcher(args.out)):
 ```
 
 `arguments` reads the command line: the shot file, and the PNG to write if
-there is one. `load` reads the shot and rejects a field it does not know.
+there is one. `load` reads the shot and rejects a field it does not know. A
+script that reads fields of its own passes their names as a second argument.
 `configure` applies the shot's parameter changes to the cfg. `launcher`
 gives the launch options: headless with cameras for a picture, or Kit's
-window to frame one in. `sensor` makes the camera, before the first reset
-as every Isaac Lab sensor is. `finish` places the camera and saves the
-picture, or, with no camera, opens the viewport. Its third argument is the
-scene's ground, a `misina_lab.usd.Ground`, which the height of the point
-looked at is measured from; `None` puts the ground at height 0.
+window to frame one in. `sensor` makes the camera, before the first reset as
+every Isaac Lab sensor is. `finish` places the camera and saves the picture,
+or, with no camera, opens the viewport. Its third argument is the scene's
+ground, a `misina_lab.usd.Ground`, which the height of the point looked at
+is measured from; `None` puts the ground at height 0.
 
 A demo that moves takes its picture at a chosen moment. The shot names the
 moment with two more fields: `at`, what the demo is doing then, and
-`warmup`, seconds of simulated time after that. The script wraps the demo's
-steps in `shots.Moments`, calls `reach(shot)` to step the demo to that
-moment, and passes the `Moments` to `finish` as a sixth argument.
+`warmup`, seconds of simulated time after that. The script names both in
+its call to `load`: `shots.load(args.shot, {"at", "warmup"})`. It wraps the
+demo's steps in `shots.Moments`, calls `reach(shot)` to step the demo to
+that moment, and passes the `Moments` to `finish` as a sixth argument.
 
 ## A video of the scene
 

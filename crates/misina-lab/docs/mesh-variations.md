@@ -39,12 +39,15 @@ far. It stops when it has `k` representatives, or when every config is
 within `max_radius` of one.
 
 Picking the farthest config each time keeps the *largest* distance from any
-organ to its representative small: at most twice the smallest possible. A
-method that keeps the average distance small, such as k-means, lets the
-common shapes outweigh a rare one. Here a rare config is kept: one diseased
-leaf among ten thousand healthy ones still gets a mesh of its own, provided
-the metric puts it far from the rest. The method is Gonzalez's
-farthest-first traversal for the **k-center** problem.
+organ to its representative small. If the metric obeys the triangle
+inequality (going from one config to another by way of a third is never
+shorter than going directly), that distance is at most twice the smallest
+possible. A method that keeps the average distance small, such as k-means,
+lets the common shapes outweigh a rare one. Here a rare config is kept: one
+diseased leaf among ten thousand healthy ones still gets a mesh of its own,
+provided the metric puts it far from the rest and the budget has room for
+it. The method is Gonzalez's farthest-first traversal for the **k-center**
+problem.
 
 `quantize.rs` holds all of it, and depends on neither Bevy nor on what is
 being grown.
@@ -56,11 +59,13 @@ being grown.
   `distance` that chooses which fields count and multiplies each by a fixed
   weight. The weights turn a difference in a field into roughly how
   different the two meshes *look*.
-- **Leave out a field that does not change the mesh.** The angle a leaf
-  hangs at only places the mesh, and the code that builds the mesh never
-  reads it. Two configs that differ only in that angle should share a mesh;
-  each leaf still hangs at its own angle. If the metric counted the angle,
-  the budget would be used up on configs that build the same mesh.
+- **Leave out a field that does not change the mesh.** Take a leaf whose
+  mesh is turned to the angle it hangs at only when it is placed, so the
+  code that builds the mesh never reads the angle. Two configs that differ
+  only in that angle should share a mesh; each leaf still hangs at its own
+  angle. If the metric counted the angle, the budget would be used up on
+  configs that build the same mesh. A field the mesh is built from does
+  count, an angle included.
 - **Put a large gap between categories.** A young plant and a mature one are
   different kinds of plant, not different sizes, so the metric puts them
   further apart than any two plants of one kind can be. The same goes for a
@@ -76,7 +81,9 @@ being grown.
 and so meshes, an element may keep. Raise it to spend memory on variety;
 lower it to save memory at the cost of variety. To see what a budget cost,
 read `radius` on the `Codebook`: how far the worst-matched organ is from the
-representative whose mesh it uses.
+representative whose mesh it uses. An element may pass `farthest_first` a
+larger `k` than `variations` where it has to: one that builds several
+kinds of organ keeps at least one mesh for each kind present.
 
 A larger budget cannot create variety that is not in the configs. If every
 config is identical there is one representative, however large the budget.

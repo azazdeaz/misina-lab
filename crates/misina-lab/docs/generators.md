@@ -10,9 +10,9 @@ trait. The trait asks for four things: the scene's name, the Python package
 it is published in, its parameters, and the code that builds it.
 
 From those four, misina-lab (the framework) makes the tools around the
-scene: a viewer, a window in which every parameter is a slider; a Python
-package that writes the scene as a USD file; and an Isaac Lab config class
-that spawns it.
+scene: a viewer, a window with a slider or other control for every
+parameter; a Python package that writes the scene as a USD file; and an
+Isaac Lab config class that spawns it.
 [What the framework builds from it](#what-the-framework-builds-from-it)
 lists them all.
 
@@ -82,11 +82,12 @@ elements that read it and the elements built on top of those, and the rest
 of the scene stays as it was.
 
 > [!NOTE]
-> **In Bevy terms.** Each fragment is a `Resource`, and an element's systems
-> run only when a fragment they read has changed:
-> `run_if(resource_changed::<BoxParams>)`. `Params::apply` writes each
-> fragment with `set_if_neq`, which marks a resource as changed only when
-> the new value differs.
+> **In Bevy terms.** Each fragment is a `Resource`. An element's systems
+> run when a fragment they read has changed,
+> `run_if(resource_changed::<BoxParams>)`, or when the layer before them
+> changed what they build on ([elements.md](elements.md#rules)).
+> `Params::apply` writes each fragment with `set_if_neq`, which marks a
+> resource as changed only when the new value differs.
 
 ## Stage sets
 

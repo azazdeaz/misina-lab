@@ -4,11 +4,12 @@
 > **Under development.** This page may not reflect the current state of
 > the source. We're working on it.
 
-Every random number in a scene is made from its params, the settings that
+The random numbers in a scene depend only on its params, the settings that
 describe the scene ([generators.md](generators.md#the-params-aggregate)).
 Most of them start from one number, the **seed**, which is itself one of
-the params. So the same params give the same scene on every machine and in
-every run. The Isaac Lab spawner, the code that puts a scene into the
+the params; the rest start from fixed numbers in the code. So the same
+params give the same scene on every machine and in every run. The Isaac
+Lab spawner, the code that puts a scene into the
 simulator, relies on this. It saves each scene it builds as a USD file
 under a key made from the params, and reuses that file when the same params
 come again ([isaac-lab.md](isaac-lab.md#the-cache)).
@@ -21,9 +22,12 @@ Each [element](elements.md), the code that builds one kind of thing in the
 scene such as the leaves, takes its numbers from its own **streams**. A
 stream is an `Rng`, the framework's random number generator. It starts from
 the seed combined with a fixed number that belongs to the element
-([Starting a stream](#starting-a-stream)). So a parameter of one element
-never changes the numbers another element gets: setting a plant to carry
-more stems adds stems, and the trunk under them keeps its shape.
+([Starting a stream](#starting-a-stream)). So the numbers one element
+draws never shift the numbers another element draws: setting a plant to
+carry more stems adds stems, and the trunk under them keeps its shape. A
+stream also starts from a number that identifies what it is for, such as a
+stem's place in the build order. The stem keeps its random numbers only
+while that number stays the same.
 
 Not every stream starts from the seed. The terrain, the ground element the
 framework provides, has no seed parameter yet. It computes the height of
@@ -97,8 +101,10 @@ only that stem goes away, and every other stem keeps its shape.
 **If a value differs from organ to organ, draw it for each organ and keep
 it in the organ's config.** The element builds only a limited number of
 meshes, and gives each organ the mesh whose config is most like its own.
-Only the values in the config are compared. So two organs that differ only
-in a value kept somewhere else get the same mesh
+The element's metric decides what is compared, and it is given the organ's
+config, sometimes with values the element computed for it. So two organs
+that differ only in a value kept somewhere else, such as a scale applied
+when the mesh is placed, get the same mesh
 ([mesh-variations.md](mesh-variations.md)).
 
 ## Where it lives

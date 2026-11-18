@@ -16,8 +16,9 @@ fn split_mix_64(state: &mut u64) -> u64 {
 /// seed unrelated streams instead of the same one shifted by a step.
 ///
 /// What a layer salts its streams with: a representative's mesh is built from
-/// `seed ^ salt(index)`, and an instance's placement draws from
-/// `seed ^ LAYER_STREAM ^ salt(order)`.
+/// `seed ^ LAYER_STREAM ^ salt(index)`, and an instance's placement draws
+/// from `seed ^ CHILD_STREAM ^ salt(order)`, each `*_STREAM` a constant of
+/// the layer's own.
 pub fn salt(index: u64) -> u64 {
     index.wrapping_mul(0x9E37_79B9_7F4A_7C15)
 }

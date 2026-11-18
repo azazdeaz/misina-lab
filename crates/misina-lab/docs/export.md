@@ -108,8 +108,10 @@ library becomes `/<root>/parts` on the stage.
 
 The export marks a prim that references a part as **instanceable**, which
 lets USD keep one shared copy of the mesh for all the prims that reference
-it. An instanceable prim can have no children, because USD ignores
-children written under one. So the export fails on an entity that has both
+it. The exceptions are a part that is its own collider
+([Colliders](#colliders)) and a skin ([Skins](#skins)). An instanceable
+prim can have no children, because USD ignores children written under one.
+So the export fails on an entity that has both
 a reference and children. A prim that only groups others, such as
 `Stem_00` above, references no part and may have children. Spawn what
 belongs to an object beside its mesh, as `Leaf_00` sits beside `Tube`.
@@ -139,7 +141,8 @@ error: the stage still loads, but draws or collides wrongly.
 
 The document says what collides, and the builder adds the USD physics
 properties that make a prim a collider. A flexible organ collides as a
-chain of moving bodies ([Flexible organs](#flexible-organs)). Nothing else
+chain of moving bodies, and a collider placed under one of its segments
+moves with that segment ([Flexible organs](#flexible-organs)). Nothing else
 in the scene is a rigid body, so every other collider is static: it never
 moves. In the viewer, tick **Colliders** in the footer to draw them all.
 There are two kinds of static collider.

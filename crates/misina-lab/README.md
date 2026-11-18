@@ -145,7 +145,7 @@ modules fit. The pages are also on the
 | --- | --- |
 | [generators.md](docs/generators.md) | what a generator declares, and everything the framework builds from it |
 | [elements.md](docs/elements.md) | how a scene is built: layers, configs, the mesh library, and the rules a layer follows |
-| [mesh-variations.md](docs/mesh-variations.md) | how thousands of parts share a budget of meshes, and how to write the metric that decides which |
+| [mesh-variations.md](docs/mesh-variations.md) | how thousands of parts share a budget of meshes, and how to write the metric that decides which parts share one |
 | [randomness.md](docs/randomness.md) | one seed, many streams: how a scene stays reproducible while every part varies |
 | [export.md](docs/export.md) | coordinates, the scene document, and what the USD builder makes of it |
 | [isaac-lab.md](docs/isaac-lab.md) | spawning a generated scene: the cfg base, the cache, rods, and moving and seeing colliders |

@@ -103,8 +103,8 @@ HTML, and no renderer-specific callouts such as `!!! note`. GitHub's alerts
 are the exception, since GitHub and the site draw them as boxes and an
 editor as a blockquote. They have two uses: the `> [!WARNING]` under a
 page's title, which says the page has not been checked against the current
-source and is removed once it has, and the `> [!NOTE]` that holds a
-mechanism of Bevy, PyO3 or USD ([Prose](#prose)).
+source and is removed once it has, and the `> [!NOTE]` that holds what a
+generator's own code has to do with Bevy, PyO3 or USD ([Prose](#prose)).
 
 ## Checking a page
 
