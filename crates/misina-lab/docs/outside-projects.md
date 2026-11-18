@@ -216,8 +216,11 @@ The two Python pins then hold in different places. uv installs from the
 there, so the project's `.venv` is held by the `rev`. The wheel's metadata
 carries the bound and not the entry, so an installer of the wheel is held by
 `misina-lab==X.Y.Z`. Nothing compares the two: keep the bound at the version
-misina-lab's `pyproject.toml` has at `<commit>`. While that version is not
-on PyPI, the wheel installs only beside misina-lab installed from git.
+misina-lab's `pyproject.toml` has at `<commit>`. Such a wheel is for an
+install that puts misina-lab from the same commit beside it: left to PyPI,
+an installer takes that version's release if there is one, whose builder
+refuses the document once the format has moved on. A wheel others install
+from PyPI pins a release.
 
 ## AGENTS.md
 

@@ -97,8 +97,8 @@ from their crates. Two other places spell it out: `version` in
 generator's `pyproject.toml`. `tests/test_versions.py` fails until all four
 agree.
 
-1. Bump the version in all four places, give the changelog's `[Unreleased]`
-   section the version and the date, and merge.
+1. Set the release's version in all four places, give the changelog's
+   `[Unreleased]` section that version and the date, and merge.
 2. From a clean checkout of the merge commit, `cargo publish -p misina-lab`.
 3. Tag the merge commit `v<version>` and push the tag.
 
@@ -107,6 +107,13 @@ uploaded again: a crate that fails to publish is fixed before anything
 reaches PyPI. `cargo publish` takes a crates.io API token, from `cargo
 login`; give it the `publish-update` scope on `misina-lab` alone, and the
 `publish-new` scope too for the crate's first version.
+
+Nothing that is out can be replaced, so a release whose packages have to
+change after any of them is up goes out again as the next patch version,
+every package together. An upload that failed for a passing reason is
+retried by re-running the release workflow's failed job; that works only
+while PyPI has none of the release's files, since it refuses one it already
+has.
 
 `.github/workflows/release.yml` then builds an sdist and a Linux x86_64 wheel
 for each package and publishes them. A manual run of it from a branch builds
