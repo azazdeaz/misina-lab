@@ -22,6 +22,8 @@ cargo run --release -p greenhouse-lab                        # the greenhouse's
 cargo fmt --all
 cargo clippy --workspace --all-targets --features vinery-lab/python,greenhouse-lab/python -- -D warnings
 cargo test --workspace
+RUSTDOCFLAGS='-D warnings' cargo doc -p misina-lab --no-deps
+cargo package -p misina-lab
 uv run ruff check . && uv run ruff format --check .
 uv run mypy
 uv run pytest tests -q

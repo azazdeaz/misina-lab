@@ -54,6 +54,8 @@ of building Bevy once per generator.
     cargo fmt --all -- --check
     cargo clippy --workspace --all-targets --features vinery-lab/python,greenhouse-lab/python -- -D warnings
     cargo test --workspace
+    RUSTDOCFLAGS='-D warnings' cargo doc -p misina-lab --no-deps
+    cargo package -p misina-lab
     ruff check . && ruff format --check .
     mypy
     pytest tests
