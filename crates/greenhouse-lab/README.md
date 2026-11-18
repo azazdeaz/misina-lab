@@ -18,9 +18,9 @@ glass and columns, is left to an HDR or a Gaussian splat. It is one of
 
 https://github.com/user-attachments/assets/73e2d87f-1db0-415c-aa70-664339f6b9fc
 
-> 🌐 Try the parameter editor in your browser:
-> [azazdeaz.github.io/misina-lab/playground/greenhouse](https://azazdeaz.github.io/misina-lab/playground/greenhouse/),
-> a bit slower, and it needs WebGPU.
+> 🧪 Experimental: the parameter editor also runs in the browser, at
+> [azazdeaz.github.io/misina-lab/playground/greenhouse](https://azazdeaz.github.io/misina-lab/playground/greenhouse/).
+> It is slower there, and needs WebGPU.
 
 **Contents:** [What a row holds](#what-a-row-holds) ·
 [The crop's age](#the-crops-age) · [Running it](#running-it) ·

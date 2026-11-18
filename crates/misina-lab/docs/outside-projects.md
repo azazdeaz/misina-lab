@@ -1,15 +1,27 @@
 # A generator in its own repository
 
-A generator outside this repository depends on both halves of misina-lab,
-at one release: the Rust crate from crates.io and the Python package from
-PyPI. Its repository holds one crate that is the generator, its viewer and
-its Python extension module at once. This page is what that crate needs
-beyond the generator's code, which is written as the [README](../README.md)
-shows. Below, `0.1.0` stands for the release a generator pins.
+A **generator** is the code that produces one kind of scene
+([generators.md](generators.md)). This page sets one up in a repository of
+its own, outside misina-lab's. The repository holds one Rust crate, and
+that crate builds three things: the generator, its viewer, and its Python
+extension module. The viewer is an app that shows the scene in a window,
+with a panel that has a control for every parameter: a slider, a dropdown
+or a checkbox. The extension module is the compiled Rust that Python
+imports to build the scene.
+
+The generator depends on both halves of misina-lab: the Rust crate from
+crates.io and the Python package from PyPI. Both must come from the same
+misina-lab release ([One misina-lab release](#one-misina-lab-release)).
+Write the generator's own Rust code as the
+[README's smallest generator](../README.md#the-smallest-generator) shows.
+This page covers the other files the repository needs. Below, `0.1.0`
+stands for the release the generator pins.
 
 ## The layout
 
-The row of boxes, as its own project:
+The README's example generator builds a row of boxes. Here it is laid out
+as a project of its own: the crate is `boxlab`, and the generator's type is
+`Boxes`.
 
 ```text
 boxlab/
@@ -29,8 +41,11 @@ boxlab/
         └── boxes_cfg.py        `BoxesCfg`, over `GeneratedSceneCfg`
 ```
 
-`PACKAGE` names the directory under `python/`, and `NAME` the cfg file
-([generators.md](generators.md)).
+The generator's type implements misina-lab's `Generator` trait
+([generators.md](generators.md)). Two constants of that implementation set
+two of these names. `PACKAGE`, the name of the Python package, is the
+directory under `python/`. `NAME`, the scene's name, gives
+the cfg file its name in lower case: `Boxes` gives `boxes_cfg.py`.
 
 ## Cargo.toml
 
@@ -41,8 +56,8 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
-# `cdylib` is the extension module Python imports; `rlib` is what the viewer
-# binary and `cargo test` link against.
+# `cdylib` builds the shared library that Python imports; `rlib` builds the
+# Rust library that the viewer binary and `cargo test` use.
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
@@ -62,30 +77,49 @@ opt-level = 1
 opt-level = 3
 ```
 
-- **`misina-lab`** is pinned exactly, for the reason
-  [One misina-lab release](#one-misina-lab-release) gives.
-- **`[profile]`** is read only from the root manifest of a build, so it is
-  copied from the [root `Cargo.toml`](https://github.com/azazdeaz/misina-lab/blob/v0.1.0/Cargo.toml) at the
-  release's tag. It optimizes the dependencies, so a debug viewer runs at a
-  usable frame rate.
-- **`bevy`** is misina-lab's version. Its features are not copied: Cargo
-  turns on the ones misina-lab asks for on the one Bevy in the build.
-- **`pyo3`** is misina-lab's minor version. `pyo3-ffi` declares
-  `links = "python"`, and a build holds one package per `links` value, so
-  another minor fails to resolve even with the `python` feature off.
-- **The feature is called `python`**, since `generator!` expands its Python
-  side under `#[cfg(feature = "python")]`, evaluated in the calling crate.
-- **`extension-module`** unlinks libpython, which breaks `cargo run` and
-  `cargo test`, so only maturin turns it on.
+- **`misina-lab`** is pinned to exactly one version, `=0.1.0`.
+  [One misina-lab release](#one-misina-lab-release) gives the reason.
+- **`[profile]`**: copy these lines from misina-lab's
+  [root `Cargo.toml`](https://github.com/azazdeaz/misina-lab/blob/v0.1.0/Cargo.toml) at the
+  release's tag. Cargo reads profile settings only from the manifest at
+  the root of a build, so misina-lab's own are not used in yours. They
+  compile the dependencies with optimization, so a debug build of the
+  viewer runs at a usable frame rate.
+- **`bevy`** is the version misina-lab uses. [Bevy](https://bevy.org) is
+  the game engine that misina-lab builds the scene in. List no Bevy
+  features on this line. Cargo compiles Bevy once for the whole build, with
+  every feature that any crate asks for, so the features misina-lab needs
+  are already on.
+- **`pyo3`** has the same minor version as misina-lab's, 0.29.
+  [PyO3](https://pyo3.rs/) is the library that binds Rust to Python. A
+  build can contain only one copy of it: `pyo3-ffi` declares
+  `links = "python"`, and Cargo allows only one package per `links` value.
+  With another minor version, Cargo cannot resolve the dependencies, even
+  with the `python` feature off.
+- **The feature must be called `python`.** The `generator!` macro, which
+  declares the parameters, expands inside your crate. It wraps its Python
+  code in `#[cfg(feature = "python")]`, and Cargo checks that condition
+  against your crate's features, not misina-lab's.
+- **`extension-module`** tells PyO3 not to link libpython, the Python
+  runtime library, because the Python that loads the module provides it. A
+  binary built this way cannot start on its own, so `cargo run` and
+  `cargo test` fail with this feature on. Only maturin turns it on.
+  [maturin](https://www.maturin.rs/) is the tool that builds a Rust crate
+  into a Python package ([pyproject.toml](#pyprojecttoml)).
 
-A web build needs only the `[profile.wasm-release]` table, copied the same
-way. misina-lab turns on Bevy's WebGPU backend and `getrandom`'s `wasm_js`
-for `wasm32` itself.
+To build the viewer for the browser as well, as WebAssembly, also copy the
+`[profile.wasm-release]` table from misina-lab's root `Cargo.toml`. You add
+nothing else: misina-lab's own `Cargo.toml` turns on what a `wasm32` build
+needs, Bevy's WebGPU backend and the `wasm_js` feature of `getrandom`.
 
 ## lib.rs
 
-Beside the generator, the crate root holds the extension module and the
-pair of tests that keeps the generated files in step with the structs
+Beside the generator, the crate root holds two more things: the extension
+module's entry point, and three tests. The params structs are the Rust
+structs that declare the scene's parameters. The first test fails on a
+parameter that does not declare what the panel and the generated files
+need, such as a doc comment. The second fails while a generated file
+differs from what the structs give, and the third rewrites the files
 ([generators.md](generators.md#what-a-generators-tests-run)):
 
 ```rust
@@ -102,6 +136,14 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use misina_lab::codegen;
+    use misina_lab::testing::check_params;
+
+    /// Every field has a doc comment, a slider or a choice list, and a
+    /// default inside it.
+    #[test]
+    fn every_field_declares_what_the_panel_and_the_docs_need() {
+        check_params::<super::BoxesParams>();
+    }
 
     fn stale() -> Vec<(PathBuf, String)> {
         codegen::stale::<super::Boxes>(Path::new(env!("CARGO_MANIFEST_DIR")), "docs/parameters.md")
@@ -127,12 +169,31 @@ mod tests {
 }
 ```
 
+`module` is a function the `generator!` macro writes. It adds the Python
+classes of the parameters, and `__version__`, to the extension module.
+`codegen::stale` renders every generated file from the params structs as
+they are now, and returns each file whose text differs, with its new text.
+So the second test fails while a generated file is out of date, and
+`regen_params` writes the new text out.
+
 ## The generated files
 
-`regen_params` writes the parameters page whole and fills marked regions in
-the Python files. Everything outside the markers is hand-written, so a new
-project starts each file with empty marker pairs; a missing pair fails the
-test with the file and the region named.
+Five files are generated from the params structs: the parameters page, the
+type stub `_core.pyi` that editors and type checkers read, the cfg class
+file, and the two `__init__.py` files that re-export their classes. The
+cfg class is the Isaac Lab config class of the scene. On first use it
+builds the scene and saves it as a USD file for later runs. Then it spawns
+the scene in the simulation ([isaac-lab.md](isaac-lab.md)).
+
+`regen_params` overwrites the whole parameters page. In the four Python
+files it rewrites only marked regions, from a line
+`# >>> generated: <region>` to a line `# <<< generated: <region>`.
+Everything outside the markers is written by hand and left alone. So when
+you start a project, create each Python file yourself, with an empty pair
+of markers for each region. A missing file or a missing pair fails the
+test, and the message names the file and the region. Create the `docs/`
+folder too: `regen_params` writes the parameters page into it, and does
+not create the folder.
 
 | File | Regions |
 | --- | --- |
@@ -141,7 +202,13 @@ test with the file and the region named.
 | `python/boxlab/isaaclab/__init__.py` | `imports`; `all` inside `__all__ = [...]` |
 | `python/boxlab/isaaclab/boxes_cfg.py` | `fragments`; `aggregate` inside `class BoxesCfg` |
 
-A pair is indented to where the generated code goes:
+Each `fragments` region gets one class per fragment. A fragment is an
+element's own struct of parameters, and an [element](elements.md) is the
+code that builds one kind of thing in the scene, such as the boxes. Each
+`aggregate` region gets the fields of the aggregate, the one struct that
+contains every fragment
+([generators.md](generators.md#the-params-aggregate)). Indent a pair to
+where the generated code goes:
 
 ```python
 @configclass
@@ -152,11 +219,18 @@ class BoxesCfg(GeneratedSceneCfg):
     # <<< generated: aggregate
 ```
 
-The hand-written rest is the docstrings, the imports the generated code
-uses, `__version__: str` and the aggregate's methods in the stub
-(`__repr__`, `generate_scene_json`, `write_usd`), and the `isaaclab`
-package's guard against a missing Isaac Lab
-([generators.md](generators.md#the-python-module)).
+`GeneratedSceneCfg`, in `misina_lab.isaaclab.spawn`, is the framework's
+base for every cfg class. Your subclass sets `PARAMS` to the aggregate's
+Python class. That line is outside the markers, so you write it by hand.
+
+These parts are also written by hand:
+
+- the docstrings, and the imports the generated code uses;
+- in the stub, `__version__: str` and the aggregate's methods: `__repr__`,
+  `generate_scene_json` and `write_usd`
+  ([generators.md](generators.md#the-python-module));
+- at the top of `isaaclab/__init__.py`, an `import isaaclab` that raises a
+  clear `ImportError` when Isaac Lab is not installed.
 
 ## pyproject.toml
 
@@ -177,28 +251,43 @@ module-name = "boxlab._core"
 python-source = "python"
 ```
 
-maturin takes the version from `Cargo.toml`. `uv build` writes the wheel
-and the sdist to `dist/`. `uv sync` installs the project into `.venv` and
-keeps that build however the Rust changes; `uv sync --reinstall-package
-boxlab` rebuilds it.
+maturin builds with the `extension-module` feature, puts the compiled
+module at `boxlab._core`, and takes the hand-written Python from
+`python/`. It also takes the package's version from `Cargo.toml`.
+
+With [uv](https://docs.astral.sh/uv/), the Python package manager, `uv
+build` writes the wheel and the sdist (the source archive) to `dist/`. `uv
+sync` installs the project into `.venv`. It does not rebuild the extension
+when the Rust code changes. Run `uv sync --reinstall-package boxlab` to
+rebuild it.
 
 ## One misina-lab release
 
-The extension writes a scene document and `misina_lab.usd` reads it, and
-the builder refuses a document of any other format, so both halves name one
-release: `misina-lab = "=X.Y.Z"` in `Cargo.toml` and `misina-lab==X.Y.Z` in
-`pyproject.toml`. A release tagged `vX.Y.Z` puts the crate on crates.io and
-the Python package on PyPI from one commit. Cargo's default requirement,
-`"X.Y"`, would let `cargo update` move the crate to a later release while
-the Python pin stays put.
+The extension writes the scene document, the JSON description of the
+built scene ([export.md](export.md)). `misina_lab.usd`, in the Python
+package, turns that document into USD, the scene format that Isaac Sim
+and Isaac Lab load. Each document carries a format number, and
+`misina_lab.usd` refuses a document whose number differs from its own. So
+both halves must come from one release: `misina-lab = "=X.Y.Z"` in
+`Cargo.toml` and `misina-lab==X.Y.Z` in `pyproject.toml`.
 
-Moving to a new misina-lab is one commit: both pins; the `bevy` and `pyo3`
-versions and the `[profile]` lines as the new release has them; and
-whatever `cargo test` then reports stale, rewritten by `regen_params`.
+Each misina-lab release puts the crate on crates.io and the Python package
+on PyPI from one commit, tagged `vX.Y.Z`. The Rust pin needs the `=`.
+Cargo's default requirement, `"X.Y"`, accepts any later compatible
+release, so `cargo update` could upgrade the crate to a later release
+while the Python package stays on the old one.
+
+To move to a new misina-lab release, change all of this in one commit:
+
+1. Both pins.
+2. The `bevy` and `pyo3` versions and the `[profile]` lines, as the new
+   release has them.
+3. Every file `cargo test` then reports stale, rewritten by `regen_params`.
 
 ### Between releases
 
-A change not released yet is pinned by commit, both halves from git:
+To use a change that is not released yet, pin both halves to one commit,
+from git:
 
 ```toml
 # Cargo.toml
@@ -211,21 +300,30 @@ misina-lab = { git = "https://github.com/azazdeaz/misina-lab", rev = "<commit>" 
 misina-lab = { git = "https://github.com/azazdeaz/misina-lab", rev = "<commit>", subdirectory = "python/misina-lab" }
 ```
 
-The two Python pins then hold in different places. uv installs from the
-`[tool.uv.sources]` entry and ignores the version bound while the entry is
-there, so the project's `.venv` is held by the `rev`. The wheel's metadata
-carries the bound and not the entry, so an installer of the wheel is held by
-`misina-lab==X.Y.Z`. Nothing compares the two: keep the bound at the version
-misina-lab's `pyproject.toml` has at `<commit>`. Such a wheel is for an
-install that puts misina-lab from the same commit beside it: left to PyPI,
-an installer takes that version's release if there is one, whose builder
-refuses the document once the format has moved on. A wheel others install
-from PyPI pins a release.
+The Python package now has two pins, and each holds in a different place:
+
+- In the project's own `.venv`, uv installs misina-lab from the
+  [`[tool.uv.sources]`](https://docs.astral.sh/uv/concepts/projects/dependencies/#dependency-sources)
+  entry, at `<commit>`. It ignores the version bound `misina-lab==X.Y.Z`
+  while the entry is there.
+- A wheel built from the project records only the version bound, not the
+  entry. Whoever installs the wheel gets misina-lab by the bound.
+
+Nothing checks that the two agree, so set the bound to the version that
+misina-lab's `pyproject.toml` has at `<commit>`. Install a wheel built
+this way only together with misina-lab built from the same commit.
+Without that, the installer downloads release `X.Y.Z` from PyPI, if it
+exists. If the document format changed after that release, its
+`misina_lab.usd` refuses the documents your extension writes. A wheel that
+you publish for others pins a release, not a commit.
 
 ## AGENTS.md
 
-The project's map points at the framework's docs at the pinned commit; a
-`CLAUDE.md` holding `@AGENTS.md` beside it loads the map for Claude Code.
+`AGENTS.md` is the project's map for coding agents: its commands and the
+rules that cause failures. If you use Claude Code, add a `CLAUDE.md` next
+to it that holds the single line `@AGENTS.md`. Claude Code then loads
+`AGENTS.md` as well. The map points to misina-lab's docs, which ship
+inside the crate at the pinned version.
 
 ```markdown
 # Boxlab
@@ -243,15 +341,16 @@ A row of boxes, built on misina-lab.
 ## The framework
 
 misina-lab is pinned to one release in Cargo.toml and in pyproject.toml; the
-two change together. Its docs ship in the crate, beside the `manifest_path`
-that `cargo metadata --format-version 1` gives the `misina-lab` package:
-README.md first, then docs/.
+two change together. Its docs ship inside the crate. To find them, run
+`cargo metadata --format-version 1` and take the `manifest_path` of the
+`misina-lab` package. Read README.md in that folder first, then docs/.
 
 ## Rules that bite
 
-- A parameter is declared once, on its Rust params struct. The stub, the cfg
-  classes and docs/parameters.md are generated from it, between
-  `# >>> generated` markers that are never edited by hand.
+- A parameter is declared once, on its Rust params struct. All of
+  docs/parameters.md is generated from it. So are the stub, the cfg
+  classes and the re-exports, between `# >>> generated` markers. Generated
+  text is never edited by hand.
 - `extension-module` is for maturin only; it breaks `cargo run` and `cargo test`.
 - The scene is authored Z-up, in meters.
 ```
@@ -263,3 +362,4 @@ README.md first, then docs/.
 - [`Cargo.toml`](../Cargo.toml): the `pyo3` version a generator matches
 - [the root `Cargo.toml`](https://github.com/azazdeaz/misina-lab/blob/v0.1.0/Cargo.toml): the `bevy` version, and the `[profile.dev]` lines a generator copies
 - [`python/misina-lab/pyproject.toml`](https://github.com/azazdeaz/misina-lab/blob/v0.1.0/python/misina-lab/pyproject.toml): the version the Python pin names
+- [`python/misina-lab/misina_lab/isaaclab/spawn.py`](../../../python/misina-lab/misina_lab/isaaclab/spawn.py): `GeneratedSceneCfg`, the base of the cfg class

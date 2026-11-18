@@ -13,9 +13,9 @@ robots, and one of
 ![The parameter editor](https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/vinery-lab/editor.webp)
 *Standalone parameter editor and visualizer app*
 
-> 🌐 Try the parameter editor in your browser:
-> [azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/),
-> a bit slower, and it needs WebGPU.
+> 🧪 Experimental: the parameter editor also runs in the browser, at
+> [azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/).
+> It is slower there, and needs WebGPU.
 
 **Contents:** [Features](#features) · [Install](#install) ·
 [Parameter editor](#parameter-editor) · [Isaac Lab](#isaac-lab) ·

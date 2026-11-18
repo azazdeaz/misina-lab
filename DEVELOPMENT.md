@@ -1,9 +1,5 @@
 # Development
 
-> [!WARNING]
-> **Under development.** This page may not reflect the current state of
-> the source. We're working on it.
-
 ## Building the Python extension
 
 No need to install `maturin` yourself — uv fetches it automatically as a
@@ -40,40 +36,48 @@ If you only changed Rust source (not pyproject.toml), force a rebuild:
 
 ### Build the distributions
 
-    CARGO_TARGET_DIR=$PWD/target uv build --all-packages
+    CARGO_TARGET_DIR=$PWD/target MATURIN_PEP517_ARGS='--compatibility manylinux_2_34' uv build --all-packages
 
 An sdist and a wheel for each package, into `dist/`, as the release workflow
 builds them. Each wheel is built from its sdist in a scratch directory; the
 target directory lets them reuse this checkout's compiled dependencies instead
-of building Bevy once per generator.
+of building Bevy once per generator. The compatibility flag tags the
+generators' wheels for glibc 2.34 and later, and fails the build if the
+extension needs a newer glibc.
 
 ## Checks
 
-`.github/workflows/ci.yml` runs all of these on every push and pull request:
+`.github/workflows/ci.yml` runs all of these on every push to `main` and on
+every pull request:
 
     cargo fmt --all -- --check
     cargo clippy --workspace --all-targets --features vinery-lab/python,greenhouse-lab/python -- -D warnings
     cargo test --workspace
     RUSTDOCFLAGS='-D warnings' cargo doc -p misina-lab --no-deps
     cargo package -p misina-lab --config profile.dev.opt-level=1 --config 'profile.dev.package."*".opt-level=3'
-    ruff check . && ruff format --check .
-    mypy
-    pytest tests
+    uv sync
+    uv run ruff check . && uv run ruff format --check .
+    uv run mypy
+    uv run pytest tests -q
 
 Each generator's `python` feature is what puts the PyO3 side — `crates/misina-lab/src/python.rs`
 and what the `generator!` macro emits — in front of clippy. It is out of the
 default feature set, so a plain `cargo clippy` never sees it.
 
-`cargo test` also fails while a generator's Python stub, its Isaac Lab cfg
-classes or its `docs/parameters.md` are stale against the Rust params
-structs they are generated from. `cargo test regen_params -- --ignored`
-rewrites them — see
+`cargo test --workspace` also fails while a generator's Python stub, its
+Isaac Lab cfg classes or its `docs/parameters.md` are stale against the Rust
+params structs they are generated from.
+`cargo test -p <generator-crate> regen_params -- --ignored`, with
+`-p vinery-lab` or `-p greenhouse-lab`, rewrites them — see
 [editing-parameters.md](crates/misina-lab/docs/editing-parameters.md).
 
-Isaac Lab is not installed on the runner, so `tests/test_isaaclab_cfg.py` skips
-itself there. It runs locally, from the demo venv:
+Isaac Lab is not installed on the runner, so the `tests/test_isaaclab_*.py`
+files skip themselves there. They run locally, from a demo venv, which has
+Isaac Lab and one generator: every file but the greenhouse's runs from
+`examples/isaaclab_demo`, and the greenhouse's from `examples/greenhouse_demo`:
 
     examples/isaaclab_demo/.venv/bin/python -m pytest tests/ -q -s < /dev/null
+    examples/greenhouse_demo/.venv/bin/python -m pytest tests/test_isaaclab_greenhouse.py -q -s < /dev/null
 
 Capture has to be off: pytest's stdin capture breaks Kit's kernel bootstrap.
 The demo's own tests live beside its code and run the same way:
@@ -120,8 +124,9 @@ retried by re-running the release workflow's failed job; that works only
 while PyPI has none of the release's files, since it refuses one it already
 has.
 
-`.github/workflows/release.yml` then builds an sdist and a Linux x86_64 wheel
-for each package, and publishes misina-lab's sdist and wheel alone. A manual
+`.github/workflows/release.yml` then builds an sdist and a wheel for each
+package, a pure-Python wheel for misina-lab and a Linux x86_64 one for each
+generator, and publishes misina-lab's sdist and wheel alone. A manual
 run of it from a branch builds them without publishing.
 
 Publishing to PyPI goes through PyPI's trusted publishing, so no token is
@@ -195,9 +200,10 @@ instead, headless: each demo's `record.sh` runs its `video.py`, which samples
 an RTX camera on the simulation's clock through `misina_lab.isaaclab.film`.
 All four scripts encode what they record with `docs/video/encode.sh`. See
 [the pruning video's skill](.claude/skills/pruning-video/SKILL.md) for
-changing that one. `docs/video/publish.sh` uploads any of the videos to the
-branch's pull request and puts the link GitHub gives it in its README. github.com plays only video
-that GitHub hosts, so the videos stay uploads; the pictures are published
+changing that one. `docs/video/publish.sh [video.mp4] [README.md]` uploads
+a video to the branch's pull request and puts the link GitHub gives it in the
+README named. Both default to the vineyard's, so any other video is published
+with its README given. github.com plays only video that GitHub hosts, so the videos stay uploads; the pictures are published
 separately, see [Docs pictures](#docs-pictures).
 
 ### Web build
@@ -225,9 +231,10 @@ is a secure context, which both WebGPU and the clipboard require.
 
 Two things differ from the native build. The renderer is WebGPU — the `webgpu`
 feature in `crates/misina-lab/Cargo.toml` is target-gated, and WebGL2 would
-lose compute shaders, which this many meshes need. And the `S` key is compiled
-out, since there is no filesystem to write `scene.json` to; **Copy Isaac Lab
-cfg** is the whole export path on the web.
+lose compute shaders, which this many meshes need. And the `S` and `P` keys
+are compiled out: there is no filesystem to write `scene.json` to, so
+**Copy Isaac Lab cfg** is the whole export path on the web, and only the
+native viewer prints its camera.
 
 ## Docs pictures
 

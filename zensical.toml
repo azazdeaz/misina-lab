@@ -17,15 +17,24 @@ nav = [
   { "Misina Lab" = [
     { "Overview" = "README.md" },
     { "Building a generator" = "crates/misina-lab/README.md" },
-    "crates/misina-lab/docs/generators.md",
-    "crates/misina-lab/docs/elements.md",
-    "crates/misina-lab/docs/quantization.md",
-    "crates/misina-lab/docs/randomness.md",
-    "crates/misina-lab/docs/export.md",
-    "crates/misina-lab/docs/isaac-lab.md",
-    "crates/misina-lab/docs/cutting.md",
-    "crates/misina-lab/docs/editing-parameters.md",
-    "crates/misina-lab/docs/outside-projects.md",
+    { "How a scene is built" = [
+      "crates/misina-lab/docs/generators.md",
+      "crates/misina-lab/docs/elements.md",
+      "crates/misina-lab/docs/mesh-builders.md",
+      "crates/misina-lab/docs/mesh-variations.md",
+      "crates/misina-lab/docs/randomness.md",
+    ] },
+    { "From the scene to the simulator" = [
+      "crates/misina-lab/docs/export.md",
+      "crates/misina-lab/docs/isaac-lab.md",
+      "crates/misina-lab/docs/rods.md",
+      "crates/misina-lab/docs/cutting.md",
+      "crates/misina-lab/docs/pictures.md",
+    ] },
+    { "How-to" = [
+      "crates/misina-lab/docs/editing-parameters.md",
+      "crates/misina-lab/docs/outside-projects.md",
+    ] },
   ] },
   { "Vineyard" = [
     { "Overview" = "crates/vinery-lab/README.md" },
