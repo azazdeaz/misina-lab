@@ -42,9 +42,11 @@ for shot in "$@"; do
         read -r columns width height gap <<< "$layout"
         names=$(jq -r '.tiles[]' "$shot")
         mapfile -t names <<< "$names"
-        inputs=() graph= tiles= n=0
         for tile in "${names[@]}"; do
             [[ $tile != montage/* ]] || { echo "$shot: a tile is not a montage: $tile" >&2; exit 1; }
+        done
+        inputs=() graph= tiles= n=0
+        for tile in "${names[@]}"; do
             [[ -f $out/$tile.webp ]] || "$0" "$here/$tile.json"
             inputs+=(-i "$out/$tile.webp")
             graph+="[$n]scale=$width:$height:force_original_aspect_ratio=increase,"

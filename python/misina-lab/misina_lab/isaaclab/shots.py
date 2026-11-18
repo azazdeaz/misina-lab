@@ -70,6 +70,11 @@ renderer's accumulation to settle."""
 
 CAMERA = "/World/ShotCamera"
 
+PATIENCE = 3600.0
+"""Seconds of simulated time `Moments.reach` steps a demo through before it
+gives up on a shot's `at`: longer than any demo's run, for one that stalls
+short of its end."""
+
 APERTURE = 20.955
 """The horizontal aperture of Isaac Lab's pinhole camera, in the units of its
 focal length."""
@@ -105,7 +110,8 @@ class Moments:
     a shot's `at` picks a moment by. Every step's dict has the same keys,
     and names a moment once: a stage that comes again, as a job tried
     again, tells which time it is. The steps end where the demo's run
-    does, its last job done, so a moment it never comes to fails."""
+    does, its last job done, so a moment it never comes to fails; one it
+    stalls short of fails after `PATIENCE`."""
 
     def __init__(self, steps: Iterator[dict], dt: float):
         self.steps, self.dt = steps, dt
@@ -129,9 +135,11 @@ class Moments:
         at, warmup = shot.get("at", {}), shot.get("warmup", 0.0)
         if unknown := set(at) - set(self.now):
             raise ValueError(f"no moment {sorted(unknown)}: the demo tells {sorted(self.now)}")
+        waited = 0
         while not at.items() <= self.now.items():
-            if not self.step():
-                raise ValueError(f"the demo ended before {at}")
+            if waited * self.dt > PATIENCE or not self.step():
+                raise ValueError(f"the demo never got to {at}")
+            waited += 1
         for _ in range(round(warmup / self.dt)):
             if not self.step():
                 raise ValueError(f"the demo ended within {warmup} s of {at}")
