@@ -20,7 +20,10 @@ Two kinds of change break a project that worked on the release before:
 
 ## [Unreleased]
 
-The first release, 0.1.0. Scene document format 12.
+## [0.1.0] - 2026-11-18
+
+The first release. Scene document format 12. vinery-lab and greenhouse-lab
+are not on PyPI yet: they install from the repository at the `v0.1.0` tag.
 
 ### Added
 

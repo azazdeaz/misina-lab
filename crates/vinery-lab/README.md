@@ -43,13 +43,15 @@ default and range.
 ## Install
 
 ```bash
-pip install vinery-lab
+pip install "vinery-lab @ git+https://github.com/azazdeaz/misina-lab@v0.1.0#subdirectory=crates/vinery-lab"
 ```
 
-Wheels are built for Linux x86_64 and Python 3.12 and later; anywhere else
-pip builds it from source, which needs
-[Rust](https://www.rust-lang.org/tools/install). The [examples](#examples)
-install it from this checkout instead.
+vinery-lab is not on PyPI yet, so pip builds it from the repository at a
+release's tag. That needs Git, Python 3.12 or later,
+[Rust](https://www.rust-lang.org/tools/install) 1.97.1 or later, and on Linux
+pkg-config and the ALSA, udev and Wayland headers: `pkg-config`,
+`libasound2-dev`, `libudev-dev` and `libwayland-dev` on Debian and Ubuntu. The [examples](#examples) install it from this checkout
+instead.
 
 ## Parameter editor
 
