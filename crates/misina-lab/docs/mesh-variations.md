@@ -89,7 +89,7 @@ representative whose mesh it uses. An element may pass `farthest_first` a
 larger `k` than `variations` where it has to: one that builds several
 kinds of organ keeps at least one mesh for each kind present. A `k` of
 zero gives an empty `Codebook`, with no representative for any config, so
-elements pass at least 1: `params.variations.max(1)`.
+elements pass at least 1: `params.variations.max(1) as usize`.
 
 A larger budget cannot create variety that is not in the configs. If every
 config is identical there is one representative, however large the budget.

@@ -92,10 +92,12 @@ is up to date.
    field is in the generated Python files and not in the installed module.
 
 The declaration needs nothing else. A new field has no effect until the
-element's code reads it. If the element copies the field into its configs,
+element's code reads it. If the element keeps the field in its configs,
 the per-instance values its meshes are built from, its `reauthor` system
-has to copy it too ([elements.md](elements.md#rules)). Do not edit the
-generated regions by hand: the next regeneration overwrites them.
+has to copy it too. An element that creates its own configs has no
+`reauthor`: its `author` system sets the field
+([elements.md](elements.md#rules)). Do not edit the generated regions by
+hand: the next regeneration overwrites them.
 
 ## What a field declares
 

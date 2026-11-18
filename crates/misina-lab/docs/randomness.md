@@ -64,8 +64,8 @@ representative's index:
 ```rust
 use misina_lab::rng::{Rng, salt};
 
-/// Any fixed number that no other stream constant has. It must never
-/// change.
+/// Any fixed number that no other stream of this generator uses. It must
+/// never change.
 const STEM_STREAM: u64 = 0x589A_B41E_A1D2_F35B;
 
 let mut rng = Rng::new(scene.seed ^ STEM_STREAM ^ salt(index as u64));
