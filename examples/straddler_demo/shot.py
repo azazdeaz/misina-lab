@@ -10,7 +10,8 @@ whose docstring is its reference, its `set` changing the demo's
 `VINEYARD_CFG`, with fields of its own: `at` and `warmup`, the moment of the
 picture (`shots.Moments`). What the robot is doing is `waypoint`, the index
 of the waypoint it drives to, `route.STRIDE` apart along the route from its
-start, out in the headland before row `ROW`.
+start, out in the headland before row `ROW`; the last leg, back to that
+start, is the route's length.
 """
 
 import isaaclab.sim as sim_utils
@@ -29,14 +30,16 @@ there are vines either side of it."""
 
 def doing(steps, driver):
     """What the robot is doing at each step of the demo's `steps`: the
-    waypoint `driver` drives to. It ends once the route is driven round, back
-    at its first waypoint, every row driven."""
-    left = False
+    waypoint `driver` drives to, or the route's length on the last leg, back
+    to the first. It ends once the route is driven round, every row driven,
+    and the driver moves on from the first waypoint again."""
+    length, left, back = len(driver.waypoints), False, False
     for _ in steps:
-        if left and driver.index == 0:
-            return
         left = left or driver.index > 0
-        yield {"waypoint": driver.index}
+        back = back or (left and driver.index == 0)
+        if back and driver.index > 0:
+            return
+        yield {"waypoint": length if back else driver.index}
 
 
 def main():

@@ -8,8 +8,9 @@ pruning a dormant row, in Isaac Sim's RTX renderer.
 `docs/shots/pruning_demo`. A shot is one of `misina_lab.isaaclab.shots`,
 whose docstring is its reference, its `set` changing the demo's
 `VINEYARD_CFG`, with fields of its own: `at` and `warmup`, the moment of the
-picture (`shots.Moments`). What the robot is doing is `cut`, the cut it
-works, counted from 1 over the run, and `stage`, `Pruning.stage_name`, or
+picture (`shots.Moments`). What the robot is doing is `vine`, how many
+vines it has started on, so 0 on its way to the first; `cut`, the cut it
+works, counted from 1 over the run; and `stage`, `Pruning.stage_name`, or
 `drive` between vines: the third cut's blade closing is `{"cut": 3,
 "stage": "close"}`.
 """
@@ -28,16 +29,19 @@ ROW = 1
 
 
 def doing(steps, driver):
-    """What the robot is doing at each step of the demo's `steps`: the cut it
-    works, counted from 1, and the stage of that cut. It ends once the last
-    vine is pruned, when `driver` has no stop left to drive to."""
-    cut, working = 0, None
+    """What the robot is doing at each step of the demo's `steps`: the vines
+    it has started on, the cut it works, counted from 1, and the stage of
+    that cut. It ends once the last vine is pruned, when `driver` has no stop
+    left to drive to."""
+    vine, cut, pruned, working = 0, 0, None, None
     for pruning in steps:
         if pruning is None and driver.stop is None:
             return
+        if pruning and pruning is not pruned:
+            vine, pruned = vine + 1, pruning
         if pruning and pruning.cut is not None and pruning.cut is not working:
             cut, working = cut + 1, pruning.cut
-        yield {"cut": cut, "stage": pruning.stage_name if pruning else "drive"}
+        yield {"vine": vine, "cut": cut, "stage": pruning.stage_name if pruning else "drive"}
 
 
 def main():
