@@ -73,18 +73,21 @@ jobs:
         id: auth
       # A version that is already out is skipped, not refused, so a re-run
       # after the upload went through and the job failed anyway reaches PyPI.
+      # Only a 404 publishes: any other answer fails the job, to be re-run.
       # `build` checked that the tag names the version.
       # `--no-verify`: verifying compiles every dependency, and their build
       # scripts would run with the token in reach. `build` above and CI's
       # `cargo package` compile the same commit without one.
       - run: |
           v=${GITHUB_REF_NAME#v}
-          if curl -sfo /dev/null -A "misina-lab release (github.com/azazdeaz/misina-lab)" \
-              "https://crates.io/api/v1/crates/misina-lab/$v"; then
-            echo "misina-lab $v is already on crates.io"
-          else
-            cargo publish -p misina-lab --locked --no-verify
-          fi
+          status=$(curl -s --retry 3 -o /dev/null -w '%{http_code}' \
+            -A "misina-lab release (github.com/azazdeaz/misina-lab)" \
+            "https://crates.io/api/v1/crates/misina-lab/$v")
+          case $status in
+            200) echo "misina-lab $v is already on crates.io" ;;
+            404) cargo publish -p misina-lab --locked --no-verify ;;
+            *) echo "::error::crates.io answered $status for misina-lab $v"; exit 1 ;;
+          esac
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
@@ -106,4 +109,8 @@ jobs:
           path: dist/
       # Only misina-lab is on PyPI so far: everything else stays behind.
       - run: find dist -type f ! -name 'misina_lab-*' -print -delete
+      # A file PyPI already has is skipped, so a re-run after a partial upload
+      # sends the rest.
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
