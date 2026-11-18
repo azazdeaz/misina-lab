@@ -100,6 +100,9 @@ agree.
 1. Set the release's version in all four places, give the changelog's
    `[Unreleased]` section that version and the date, and merge.
 2. From a clean checkout of the merge commit, `cargo publish -p misina-lab`.
+   The crate's licence files are symlinks, so the checkout has to have them as
+   links: one where git wrote them as plain files, as it may on Windows, packs
+   their target paths instead of the licences.
 3. Tag the merge commit `v<version>` and push the tag.
 
 The crate goes first because a version on either registry can never be
