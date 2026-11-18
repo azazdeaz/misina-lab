@@ -65,7 +65,7 @@ opt-level = 3
 - **`misina-lab`** is pinned exactly, for the reason
   [One misina-lab release](#one-misina-lab-release) gives.
 - **`[profile]`** is read only from the root manifest of a build, so it is
-  copied from the [root `Cargo.toml`](https://github.com/azazdeaz/misina-lab/blob/main/Cargo.toml) at the
+  copied from the [root `Cargo.toml`](https://github.com/azazdeaz/misina-lab/blob/v0.1.0/Cargo.toml) at the
   release's tag. It optimizes the dependencies, so a debug viewer runs at a
   usable frame rate.
 - **`bevy`** is misina-lab's version. Its features are not copied: Cargo
@@ -258,5 +258,5 @@ README.md first, then docs/.
 - [`src/params.rs`](../src/params.rs): `generator!`, and the `module` function it writes
 - [`src/codegen.rs`](../src/codegen.rs): `targets`, the files and their regions; `stale`, what both tests call
 - [`Cargo.toml`](../Cargo.toml): the `pyo3` version a generator matches
-- [the root `Cargo.toml`](https://github.com/azazdeaz/misina-lab/blob/main/Cargo.toml): the `bevy` version, and the `[profile.dev]` lines a generator copies
-- [`python/misina-lab/pyproject.toml`](https://github.com/azazdeaz/misina-lab/blob/main/python/misina-lab/pyproject.toml): the version the Python pin names
+- [the root `Cargo.toml`](https://github.com/azazdeaz/misina-lab/blob/v0.1.0/Cargo.toml): the `bevy` version, and the `[profile.dev]` lines a generator copies
+- [`python/misina-lab/pyproject.toml`](https://github.com/azazdeaz/misina-lab/blob/v0.1.0/python/misina-lab/pyproject.toml): the version the Python pin names

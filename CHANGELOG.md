@@ -28,14 +28,16 @@ The first release, 0.1.0. Scene document format 12.
   declares its parameters once, as Rust structs, and builds its scene in Bevy
   0.20; the viewer's panel, the Python params classes, the Isaac Lab cfg
   classes, their type stubs and a parameters page are all generated from those
-  declarations. The crate is on crates.io and the Python package on PyPI.
+  declarations. It releases as a crate on crates.io and a Python package on
+  PyPI.
 - **misina-lab**: the viewer. Collapsible parameter sections with a tooltip on
   every parameter, sliders that take a typed number, a rebuild of only what an
   edit touches, a wireframe toggle, an overlay of every collider, and a footer
   with what the scene weighs. **Copy Isaac Lab cfg** puts the current settings
   on the clipboard as a cfg construction, only the fields that moved. A
   storyboard plays camera moves and panel edits and saves a still or records a
-  video, with no window or display; `P` copies the camera as a storyboard's.
+  video, with no window or display; `P` copies the view as a storyboard's
+  `camera`.
 - **misina-lab**: what a generator builds its organs from. Strands, tubes
   swept along a polyline that swell at their bulges and collars; outlines
   filled into sheets that fold on their veins; the pieces of a lobed, toothed
