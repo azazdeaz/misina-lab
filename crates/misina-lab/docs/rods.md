@@ -6,13 +6,15 @@ builds, and an element is the code that builds one kind of thing in the
 scene. Only a rod, and what is placed on it, moves in a generated scene.
 
 [Newton](https://newton-physics.github.io/newton/latest/), a GPU physics
-engine that Isaac Lab can run on, simulates a rod as a chain of
-capsule-shaped rigid bodies, one per segment, joined by
+engine that [Isaac
+Lab](https://isaac-sim.github.io/IsaacLab/main/index.html) can run on,
+simulates a rod as a chain of capsule-shaped rigid bodies, one per segment,
+joined by
 [joints](https://newton-physics.github.io/newton/latest/concepts/deformable_objects.html)
 that bend, twist, stretch and shear. A capsule is a cylinder with a half
 sphere at each end, and each one is as thick as the organ is drawn there.
-The first segment is fixed to the plant's **wood**: its rigid parts, such
-as a trunk, which are static colliders.
+The first segment is fixed to the plant's **wood**: its rigid parts, such as
+a trunk, which are static colliders.
 
 A rod is set up in two places. In the generator, the element describes
 the organ as a curve ([Describing a rod](#describing-a-rod)). In Isaac
@@ -101,7 +103,7 @@ physics = make_physics_cfg_newton(
     contact_bodies=[".*/Robot/gripper_.*"],
     substeps=4,
 )
-sim_cfg = sim_utils.SimulationCfg(physics=physics)
+sim_cfg = sim_utils.SimulationCfg(dt=0.005, physics=physics)
 ```
 
 `PLANTS_CFG` is the scene's cfg. `robot` is a pattern for the robot's prim
@@ -217,23 +219,17 @@ nothing poses nothing. Without Kit, `drive_skins` does nothing. A uniform
 `scale` on the scene is allowed. A skin under a prim that scales unevenly
 or skews raises `ValueError` when it is posed.
 
-## Cutting a rod
-
-`Shears`, a class in `misina_lab.isaaclab`, cuts a rod at any point while
-the simulation runs. Newton cannot add a body once the model is built, so
-a cut reuses bodies the model already has ([cutting.md](cutting.md)).
-Build `Shears` after the first reset.
-
-When `Shears` cuts a rod, `skins.split` splits its skin at the cut. The
-part of the mesh before the cut follows the joints before it, and the rest
-follows the joints after it. Each part ends at the cut, closed by a cap.
-Both parts stay where they were drawn, even on a bent rod.
+When a rod is cut ([cutting.md](cutting.md)), `skins.split` splits its skin
+at the cut. The part of the mesh before the cut follows the joints before
+it, and the rest follows the joints after it. Each part ends at the cut,
+closed by a cap. Both parts stay where they were drawn, even on a bent rod.
 
 ## Moving a collider
 
-`Shears.colliders(body)` lists a body's collision shapes: their indices in
-the model, and each one's pose relative to the body. A pose is one array of
-7 numbers, a position (x, y, z) and then a rotation quaternion
+`Shears`, the class that cuts rods ([cutting.md](cutting.md)), also moves
+colliders. `Shears.colliders(body)` lists a body's collision shapes: their
+indices in the model, and each one's pose relative to the body. A pose is
+one array of 7 numbers, a position (x, y, z) and then a rotation quaternion
 (x, y, z, w). `Shears.place(shape, pose)` moves one shape to a new pose
 relative to its body while the simulation runs. It writes the pose into
 every copy of the model that the solvers use, as a cut does.

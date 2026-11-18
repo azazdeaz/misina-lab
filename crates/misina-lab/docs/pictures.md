@@ -14,19 +14,19 @@ picture's size, the parameters to change, and the camera. Without an output
 path, it opens the viewport of Kit, Isaac Sim's application framework, on
 the scene instead, so you can frame the shot by hand.
 
-The camera is given as in the viewer's storyboards. The viewer is the
-window that draws the scene, with a control for every parameter
-([generators.md](generators.md#what-the-framework-builds-from-it)), and a
-storyboard is a JSON file it plays back to record videos and stills of
-itself. The camera is the point looked at, a yaw and a pitch in degrees, a
-distance in meters and a field of view in degrees (`Pose` in
-[tour.rs](../src/tour.rs)). Press `P` in Kit's
-viewport, or in the viewer, to print the current camera in that form. A
-view framed in one app then gives the same view in the other. The module's
-docstring lists every field of a shot. A script builds its own scene
-between the module's calls. Below, `BOXES_CFG` is the cfg of the README's
-example scene, a row of boxes: an instance of its generator's Isaac Lab
-config class ([isaac-lab.md](isaac-lab.md)). `sim_cfg` is the script's own
+The camera is given as in the viewer's storyboards. The viewer is the window
+that draws the scene, with a control for every parameter
+([generators.md](generators.md#what-the-framework-builds-from-it)). A
+storyboard is a JSON file that the viewer plays back to record videos and
+stills of itself. The camera is the point looked at, a yaw and a pitch in
+degrees, a distance in meters and a field of view in degrees (`Pose` in
+[tour.rs](../src/tour.rs)). Press `P` in Kit's viewport, or in the viewer,
+to print the current camera in that form. A view framed in one app then
+gives the same view in the other. The module's docstring lists every field
+of a shot. A script builds its own scene between the module's calls. Below,
+`BOXES_CFG` is the cfg of the README's example scene, a row of boxes: an
+instance of its generator's Isaac Lab config class
+([isaac-lab.md](isaac-lab.md)). `sim_cfg` is the script's own
 `SimulationCfg`:
 
 ```python

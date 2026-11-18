@@ -255,10 +255,11 @@ maturin builds with the `extension-module` feature, puts the compiled
 module at `boxlab._core`, and takes the hand-written Python from
 `python/`. It also takes the package's version from `Cargo.toml`.
 
-`uv build` writes the wheel and the sdist (the source archive) to `dist/`.
-`uv sync` installs the project into `.venv`. It does not rebuild the
-extension when the Rust code changes. Run
-`uv sync --reinstall-package boxlab` to rebuild it.
+With [uv](https://docs.astral.sh/uv/), the Python package manager, `uv
+build` writes the wheel and the sdist (the source archive) to `dist/`. `uv
+sync` installs the project into `.venv`. It does not rebuild the extension
+when the Rust code changes. Run `uv sync --reinstall-package boxlab` to
+rebuild it.
 
 ## One misina-lab release
 
@@ -301,9 +302,10 @@ misina-lab = { git = "https://github.com/azazdeaz/misina-lab", rev = "<commit>",
 
 The Python package now has two pins, and each holds in a different place:
 
-- In the project's own `.venv`, [uv](https://docs.astral.sh/uv/) installs
-  misina-lab from the `[tool.uv.sources]` entry, at `<commit>`. It ignores
-  the version bound `misina-lab==X.Y.Z` while the entry is there.
+- In the project's own `.venv`, uv installs misina-lab from the
+  [`[tool.uv.sources]`](https://docs.astral.sh/uv/concepts/projects/dependencies/#dependency-sources)
+  entry, at `<commit>`. It ignores the version bound `misina-lab==X.Y.Z`
+  while the entry is there.
 - A wheel built from the project records only the version bound, not the
   entry. Whoever installs the wheel gets misina-lab by the bound.
 

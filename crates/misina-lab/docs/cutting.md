@@ -2,7 +2,7 @@
 
 A **rod** is how [Newton](https://newton-physics.github.io/newton/latest/),
 the physics engine under Isaac Lab, simulates a flexible **organ**: one
-stem or leaf that bends ([mesh-variations.md](mesh-variations.md)). A rod
+stem or leaf that bends ([rods.md](rods.md)). A rod
 is a chain of rigid bodies, one per segment of the organ, joined by joints
 that bend. Its first body is fixed to the **wood**, the part of the plant
 that the organ grows from and that does not move.

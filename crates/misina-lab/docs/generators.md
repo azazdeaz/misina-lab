@@ -65,9 +65,11 @@ copies it back out. With the generator's `python` feature on, the macro
 also writes [the Python module](#the-python-module). A `@Label` on a field
 is the title of that fragment's section in the panel. A fragment that the
 framework itself provides, here `TerrainParams`, is marked `as core`. The
-framework has already written its Python constructor, because
-[PyO3](https://pyo3.rs/), the library that binds Rust to Python, lets only
-the crate that defines a type add methods to it.
+framework has already written its Python constructor.
+[PyO3](https://pyo3.rs/), the library that binds Rust to Python, takes a
+type's Python methods from an `impl` block of the type
+([`#[pymethods]`](https://pyo3.rs/latest/class.html#instance-methods)), and
+Rust allows such a block only in the crate that defines the type.
 
 `SceneParams` is the generator's own struct, for whatever applies to the
 whole scene. The framework asks nothing of it; by convention it holds the

@@ -119,8 +119,10 @@ so does a how-to that is followed from top to bottom.
   release's tag.
 - Link another project's documentation where a page first leans on one of
   its terms: the page for that term, not the project's front page, at a URL
-  that follows the project's latest version. No test reads such a URL, so
-  check that it loads, and that its anchor exists, when you add it.
+  that follows the project's latest version. The project's own name, Bevy or
+  Newton, links the front page, which says what the project is. No test
+  reads such a URL, so check that it loads, and that its anchor exists, when
+  you add it.
 - For what a public Rust item takes and returns, link its page on docs.rs,
   `https://docs.rs/misina-lab/latest/misina_lab/...`, and leave the detail
   there. docs.rs shows the last release, so an item that no release has yet

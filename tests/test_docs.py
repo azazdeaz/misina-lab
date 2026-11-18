@@ -30,10 +30,22 @@ URL = re.compile(r"[a-z][a-z0-9+.-]*:")
 LINE = re.compile(r"#L\d+|:\d+$")
 """A line anchor, `#L42`, or a line suffix, `lib.rs:42`."""
 RUSTDOC = re.compile(
-    r"https://docs\.rs/misina-lab/latest/misina_lab/((?:\w+/)*)(?:index|\w+\.(\w+))\.html"
+    r"https://docs\.rs/misina-lab/latest/misina_lab/((?:\w+/)*)(?:index|(\w+)\.(\w+))\.html"
 )
 """A link to the framework's rustdoc at its latest release: the module's
-path, `scene/`, then the module's own page or an item's, `fn.cable.html`."""
+path, `scene/`, then the module's own page or an item's, its kind and its
+name: `fn.cable.html`."""
+
+DECLARES = {
+    "fn": "fn",
+    "struct": "struct",
+    "enum": "enum",
+    "trait": "trait",
+    "type": "type",
+    "constant": "const",
+    "static": "static",
+}
+"""The keyword that declares an item of each rustdoc kind but a macro."""
 GENERATOR = re.compile(
     r"\b(vine\w*|grape\w*|canes?|cordons?|spurs?|swards?"
     r"|greenhouse\w*|glasshouse\w*|tomato\w*|gutters?|slabs?|truss\w*)\b",
@@ -186,7 +198,8 @@ def test_every_picture_has_a_shot(page: Path) -> None:
 
 def test_a_rustdoc_link_names_what_the_source_has() -> None:
     """Nothing here reads docs.rs, so a link is checked against the source:
-    its module is a file of the crate, and that file names the item."""
+    its module is a file of the crate, and that file declares the item public.
+    An exported macro is on the crate's page wherever it is declared."""
     src = ROOT / "crates" / "misina-lab" / "src"
     stale = []
     for page in MARKDOWN:
@@ -195,9 +208,18 @@ def test_a_rustdoc_link_names_what_the_source_has() -> None:
                 continue
             match = RUSTDOC.fullmatch(target)
             path = match[1] if match else "nowhere/"
-            files = [src / f"{path}mod.rs", src / f"{path[:-1]}.rs"] if path else [src / "lib.rs"]
-            module = next((file for file in files if file.is_file()), None)
-            item = rf"\b{match[2]}\b" if match and match[2] else ""
-            if not module or not re.search(item, module.read_text(encoding="utf-8")):
+            kind, item = (match[2], match[3]) if match else (None, None)
+            if kind == "macro":
+                files = sorted(src.rglob("*.rs"))
+                declared = rf"macro_rules!\s+{item}\b"
+            else:
+                files = (
+                    [src / f"{path}mod.rs", src / f"{path[:-1]}.rs"] if path else [src / "lib.rs"]
+                )
+                files = [file for file in files if file.is_file()][:1]
+                declared = (
+                    rf"\bpub\s+(?:\w+\s+)*{DECLARES.get(kind, '?')}\s+{item}\b" if kind else ""
+                )
+            if not any(re.search(declared, file.read_text(encoding="utf-8")) for file in files):
                 stale.append(f"{name(page)}: {target}")
     assert not stale, stale
