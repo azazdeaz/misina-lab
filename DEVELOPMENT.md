@@ -121,8 +121,8 @@ while PyPI has none of the release's files, since it refuses one it already
 has.
 
 `.github/workflows/release.yml` then builds an sdist and a Linux x86_64 wheel
-for each package and publishes them. A manual run of it from a branch builds
-them without publishing.
+for each package, and publishes misina-lab's sdist and wheel alone. A manual
+run of it from a branch builds them without publishing.
 
 Publishing to PyPI goes through PyPI's trusted publishing, so no token is
 stored. misina-lab's publisher on PyPI names the `azazdeaz/misina-lab`

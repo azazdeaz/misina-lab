@@ -1,7 +1,7 @@
 name: Release
 
-# Builds the three Python packages and, on a `v*` tag, publishes misina-lab's
-# to PyPI. The generators' are built as a check and not published yet.
+# Builds the three Python packages and, on a `v*` tag, publishes misina-lab to
+# PyPI. The generators are built as a check and not published yet.
 # A manual run from a branch builds them without publishing. They release
 # together under the workspace version; DEVELOPMENT.md says how to cut one.
 on:
