@@ -36,10 +36,15 @@ for shot in "$@"; do
         # The pictures of the shots in `tiles`, `columns` to a row, each scaled
         # and cropped to `tile` pixels, `gap` apart with nothing between. A
         # tile's picture the folder lacks is rendered first; one it holds is
-        # used as it is.
-        read -r columns width height gap < <(jq -r '[.columns, .tile[], .gap] | @tsv' "$shot")
+        # used as it is. A tile is a shot of an example or a crate, never a
+        # montage.
+        layout=$(jq -r '[.columns, .tile[], .gap] | @tsv' "$shot")
+        read -r columns width height gap <<< "$layout"
+        names=$(jq -r '.tiles[]' "$shot")
+        mapfile -t names <<< "$names"
         inputs=() graph= tiles= n=0
-        for tile in $(jq -r '.tiles[]' "$shot"); do
+        for tile in "${names[@]}"; do
+            [[ $tile != montage/* ]] || { echo "$shot: a tile is not a montage: $tile" >&2; exit 1; }
             [[ -f $out/$tile.webp ]] || "$0" "$here/$tile.json"
             inputs+=(-i "$out/$tile.webp")
             graph+="[$n]scale=$width:$height:force_original_aspect_ratio=increase,"

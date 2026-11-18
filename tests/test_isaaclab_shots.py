@@ -1,9 +1,12 @@
-"""Tests for a shot's camera, which has to mean what it means to the viewer.
+"""Tests for a shot's camera, which has to mean what it means to the viewer,
+and its moment, which has to replay to the step it was framed at.
 
 Requires Isaac Lab; skipped entirely where it isn't installed.
 """
 
 from __future__ import annotations
+
+import json
 
 import pytest
 
@@ -47,3 +50,37 @@ def test_a_printed_camera_is_the_viewer_s(ground: Slope | None, under: float):
         '"camera": {"focus": [3.00, -4.50, 1.20], "yaw": -35.0, "pitch": 12.5,'
         ' "radius": 8.25, "fov": 30.0}'
     )
+
+
+class Run:
+    """A demo that is in stage `stages[i]` at its step i, and ends after the
+    last; `step` is the step it is at."""
+
+    def __init__(self, stages: str):
+        self.stages, self.step = stages, -1
+
+    def __iter__(self):
+        for self.step, stage in enumerate(self.stages):
+            yield {"stage": stage}
+
+
+STAGES = "a" * 10 + "b" * 10 + "a" * 10
+
+
+def test_a_printed_moment_replays_to_its_step():
+    """What P prints at a step, as a shot's `at` and `warmup`, reaches that
+    same step again: the first time the demo is doing it, and on by the
+    steps since it began."""
+    framed = Run(STAGES)
+    moments = shots.Moments(iter(framed), 0.005)
+    while framed.step < 14:
+        moments.step()
+    replayed = Run(STAGES)
+    shots.Moments(iter(replayed), 0.005).reach(json.loads("{" + str(moments) + "}"))
+    assert replayed.step == 14
+
+
+@pytest.mark.parametrize("at", [{"stage": "c"}, {"phase": "a"}], ids=["never", "unknown"])
+def test_a_moment_the_demo_never_comes_to_fails(at: dict):
+    with pytest.raises(ValueError):
+        shots.Moments(iter(Run(STAGES)), 0.005).reach({"at": at})

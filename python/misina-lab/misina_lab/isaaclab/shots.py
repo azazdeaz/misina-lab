@@ -70,10 +70,6 @@ renderer's accumulation to settle."""
 
 CAMERA = "/World/ShotCamera"
 
-PATIENCE = 3600.0
-"""Seconds of simulated time `Moments.reach` waits for a shot's `at` before
-giving up: longer than any demo takes to its last job."""
-
 APERTURE = 20.955
 """The horizontal aperture of Isaac Lab's pinhole camera, in the units of its
 focal length."""
@@ -106,7 +102,10 @@ def load(path: pathlib.Path, fields: frozenset[str] | set[str] = frozenset()) ->
 class Moments:
     """A demo run a physics step at a time, each step yielding what the demo
     is doing then as a dict, such as `{"box": 2, "stage": "carry"}`, which
-    a shot's `at` picks a moment by."""
+    a shot's `at` picks a moment by. Every step's dict has the same keys,
+    and names a moment once: a stage that comes again, as a job tried
+    again, tells which time it is. The steps end where the demo's run
+    does, its last job done, so a moment it never comes to fails."""
 
     def __init__(self, steps: Iterator[dict], dt: float):
         self.steps, self.dt = steps, dt
@@ -130,11 +129,9 @@ class Moments:
         at, warmup = shot.get("at", {}), shot.get("warmup", 0.0)
         if unknown := set(at) - set(self.now):
             raise ValueError(f"no moment {sorted(unknown)}: the demo tells {sorted(self.now)}")
-        waited = 0
         while not at.items() <= self.now.items():
-            if waited * self.dt > PATIENCE or not self.step():
-                raise ValueError(f"the demo never got to {at}")
-            waited += 1
+            if not self.step():
+                raise ValueError(f"the demo ended before {at}")
         for _ in range(round(warmup / self.dt)):
             if not self.step():
                 raise ValueError(f"the demo ended within {warmup} s of {at}")
@@ -329,7 +326,9 @@ def _frame(
     while sim.is_running():
         # A demo's step renders, as it does with Kit's window open.
         if playing:
-            playing = moments.step()
+            # A G pressed during the step, while it renders, pauses after it.
+            stepped = moments.step()
+            playing = playing and stepped
         else:
             sim.render()
     inputs.unsubscribe_to_input_events(listening)

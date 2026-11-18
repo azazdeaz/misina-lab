@@ -81,10 +81,10 @@ and `start`, with the `camera`, the parameters to `set` and a `note`.
 may add fields of its own, which its `shot.py` names: the quadruped demo's
 `waypoint`, where on its route the robot starts, and `warmup`, the simulated
 seconds it walks before the picture; the greenhouse's `harvest`, the paths
-the harvester works. The greenhouse's, the pruning demo's and the
-straddler's pick their moment by what the robot is doing, `at`, and the
-simulated seconds on from there, `warmup`: `{"truss": 2, "stage": "carry"}`
-is the second truss carried to the crate. Each `shot.py`'s docstring says
+the harvester works. The pruning demo's, the straddler's and a greenhouse
+shot with `harvest` pick their moment by what the robot is doing, `at`, and
+the simulated seconds on from there, `warmup`: `{"truss": 2, "stage":
+"carry"}` is the second truss carried to the crate. Each `shot.py`'s docstring says
 what its demo tells; `shots.Moments` is how.
 
 **A montage** in `docs/shots/montage/` is the pictures of the shots in

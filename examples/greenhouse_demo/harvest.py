@@ -659,6 +659,8 @@ class Harvest:
         self.beside: tuple[list[int], np.ndarray] = ([], np.zeros(3))
         """The stem the last cut was planned beside, its colliders, and where
         it was cut: the planner leaves the stem out of its world there."""
+        self.tries = 0
+        """How many times the job's truss has had its cut planned, of `TRIES`."""
         self._next()
 
     @property

@@ -27,11 +27,14 @@ ROW = 1
 """The row pruned: the middle one, as the demo prunes by default."""
 
 
-def doing(steps):
+def doing(steps, driver):
     """What the robot is doing at each step of the demo's `steps`: the cut it
-    works, counted from 1, and the stage of that cut."""
+    works, counted from 1, and the stage of that cut. It ends once the last
+    vine is pruned, when `driver` has no stop left to drive to."""
     cut, working = 0, None
     for pruning in steps:
+        if pruning is None and driver.stop is None:
+            return
         if pruning and pruning.cut is not None and pruning.cut is not working:
             cut, working = cut + 1, pruning.cut
         yield {"cut": cut, "stage": pruning.stage_name if pruning else "drive"}
@@ -51,7 +54,7 @@ def main():
         steps = demo.run_simulator(
             sim, robot, machine, driver, vines, to_row, shears, render=camera is None
         )
-        moments = shots.Moments(doing(steps), SIM_DT)
+        moments = shots.Moments(doing(steps, driver), SIM_DT)
         moments.reach(shot)
         shots.finish(sim, shot, driver.ground, camera, args.out, moments)
 

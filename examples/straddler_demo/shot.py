@@ -27,6 +27,18 @@ ROW = 3
 there are vines either side of it."""
 
 
+def doing(steps, driver):
+    """What the robot is doing at each step of the demo's `steps`: the
+    waypoint `driver` drives to. It ends once the route is driven round, back
+    at its first waypoint, every row driven."""
+    left = False
+    for _ in steps:
+        if left and driver.index == 0:
+            return
+        left = left or driver.index > 0
+        yield {"waypoint": driver.index}
+
+
 def main():
     args = shots.arguments("Renders a still of the straddler demo from a shot file.")
     shot = shots.load(args.shot, {"at", "warmup"})
@@ -40,7 +52,7 @@ def main():
         camera = shots.sensor(shot) if args.out else None
         driver, _ = demo.start(sim, robot, machine, vineyard, ROW)
         steps = demo.run_simulator(sim, robot, driver, render=camera is None)
-        moments = shots.Moments(({"waypoint": driver.index} for _ in steps), SIM_DT)
+        moments = shots.Moments(doing(steps, driver), SIM_DT)
         moments.reach(shot)
         shots.finish(sim, shot, driver.ground, camera, args.out, moments)
 
