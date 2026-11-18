@@ -7,8 +7,9 @@
 #
 # Renders every shot, into an emptied folder, when none is named. A shot is
 # rendered by what its folder is named after: an example with a shot.py, in
-# Isaac Sim, or else a crate's viewer, which plays the shot as a storyboard.
-# Needs cargo, uv and ffmpeg, an RTX GPU for Isaac Sim, and for
+# Isaac Sim, or else a crate's viewer, which plays the shot as a storyboard;
+# one in montage/ is other shots' pictures put together, see below.
+# Needs cargo, uv, ffmpeg and jq, an RTX GPU for Isaac Sim, and for
 # butom_capture's, BUTOM: see its shot.py.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -16,7 +17,9 @@ repo=$(cd "$here/../.." && pwd)
 out=$repo/target/docs-assets
 if (( $# == 0 )); then
     rm -rf "$out"
-    set -- "$here"/*/*.json
+    # Montages last, from the pictures rendered before them.
+    for shot in "$here"/*/*.json; do [[ $shot == */montage/* ]] || set -- "$@" "$shot"; done
+    set -- "$@" "$here"/montage/*.json
 fi
 png=$(mktemp --suffix .png)
 trap 'rm -f "$png"' EXIT
@@ -29,7 +32,26 @@ for shot in "$@"; do
     app=${name%%/*}
     # Gone until the renderer writes it, so a run that saves nothing fails below.
     rm -f "$png"
-    if [[ -f $repo/examples/$app/shot.py ]]; then
+    if [[ $app == montage ]]; then
+        # The pictures of the shots in `tiles`, `columns` to a row, each scaled
+        # and cropped to `tile` pixels, `gap` apart with nothing between. A
+        # tile's picture the folder lacks is rendered first; one it holds is
+        # used as it is.
+        read -r columns width height gap < <(jq -r '[.columns, .tile[], .gap] | @tsv' "$shot")
+        inputs=() graph= tiles= n=0
+        for tile in $(jq -r '.tiles[]' "$shot"); do
+            [[ -f $out/$tile.webp ]] || "$0" "$here/$tile.json"
+            inputs+=(-i "$out/$tile.webp")
+            graph+="[$n]scale=$width:$height:force_original_aspect_ratio=increase,"
+            graph+="crop=$width:$height,setsar=1,format=rgba[t$n];"
+            tiles+="[t$n]"
+            n=$((n + 1))
+        done
+        rows=$(((n + columns - 1) / columns))
+        ffmpeg -y -loglevel error "${inputs[@]}" -filter_complex \
+            "$graph${tiles}concat=n=$n,tile=${columns}x$rows:padding=$gap:color=0x00000000" \
+            -frames:v 1 "$png"
+    elif [[ -f $repo/examples/$app/shot.py ]]; then
         (cd "$repo/examples/$app" && uv run shot.py "$shot" "$png")
     else
         # The viewer's variables are named after its package: VINERY_LAB_TOUR.

@@ -1,0 +1,7 @@
+{
+  "size": [1920, 1080],
+  "set": {"terrain.length": 60, "terrain.width": 40},
+  "waypoint": 278,
+  "warmup": 4,
+  "camera": {"focus": [8.34, -0.51, -4.38], "yaw": -73.1, "pitch": 22.8, "radius": 18.98, "fov": 36.0}
+}

@@ -8,11 +8,16 @@ it, in Isaac Sim's RTX renderer.
 `docs/shots/render.sh` runs the first for every shot in
 `docs/shots/greenhouse_demo`. A shot is one of `misina_lab.isaaclab.shots`,
 whose docstring is its reference, its `set` changing a default
-`GreenhouseCfg`, with two fields of its own:
+`GreenhouseCfg`, with fields of its own:
 
 - `harvest`: the paths the harvester works, as `harvest.py --paths` takes
   them. With it the scene is `harvest.py`'s, and `set` changes its cfg.
-- `warmup`: seconds of simulated time it works before the picture.
+- `at` and `warmup`, with `harvest`: the moment of the picture
+  (`shots.Moments`). What the harvester is doing is `truss`, the truss it
+  works, counted from 1 over the run; `severed`, whether that truss is cut;
+  and `stage`, `Harvest.stage`, which repeats as a failed cut is tried
+  again: the second truss backed out once cut is `{"truss": 2, "severed":
+  true, "stage": "outward"}`.
 """
 
 import isaaclab.sim as sim_utils
@@ -29,7 +34,7 @@ GREENHOUSE_CFG = GreenhouseCfg()
 
 def main():
     args = shots.arguments("Renders a still of a generated greenhouse from a shot file.")
-    shot = shots.load(args.shot, {"harvest", "warmup"})
+    shot = shots.load(args.shot, {"harvest", "at", "warmup"})
     if "harvest" in shot:
         harvesting(shot, args.out)
         return
@@ -61,8 +66,8 @@ def main():
 
 
 def harvesting(shot: dict, out) -> None:
-    """The still of a shot with `harvest`: `harvest.py`'s scene, `warmup`
-    seconds into the harvest."""
+    """The still of a shot with `harvest`: `harvest.py`'s scene, at the
+    shot's moment of the harvest."""
     shots.configure(harvest.GREENHOUSE_CFG, shot.get("set", {}))
     sim_cfg = harvest.simulation_cfg()
     with launch_simulation(sim_cfg, shots.launcher(out)):
@@ -72,10 +77,20 @@ def harvesting(shot: dict, out) -> None:
         robot = harvest.design_scene(machine)
         camera = shots.sensor(shot) if out else None
         run = harvest.run(sim, robot, machine, shot["harvest"], render=camera is None)
-        for step, _ in enumerate(run):
-            if step * harvest.SIM_DT >= shot["warmup"]:
-                break
-        shots.finish(sim, shot, None, camera, out)
+        moments = shots.Moments(doing(run), harvest.SIM_DT)
+        moments.reach(shot)
+        shots.finish(sim, shot, None, camera, out, moments)
+
+
+def doing(run):
+    """What the harvester is doing at each step of `run`: the truss it works,
+    counted from 1, whether it is cut, and the stage of the job."""
+    truss, job = 0, None
+    for state in run:
+        if state.job is not job:
+            job = state.job
+            truss += isinstance(job, harvest.Truss)
+        yield {"truss": truss, "severed": state.severed, "stage": state.stage}
 
 
 if __name__ == "__main__":
