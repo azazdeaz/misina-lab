@@ -144,8 +144,9 @@ published. crates.io has no pending publishers, so a new crate's first
 version is published by hand before the release is tagged: `cargo publish -p
 <crate>` from a clean checkout of the release's commit, with an API token
 from `cargo login` scoped `publish-new` to that crate alone. Its publisher is
-added after, the token is revoked, and the crate joins the `crates-io` job
-from its next version. The licence files in a crate's folder are symlinks to
+added after, the token is revoked, and the `crates-io` job, which names each
+crate it publishes, gets a step like misina-lab's for it from its next
+version. The licence files in a crate's folder are symlinks to
 the root ones, so that checkout has to have them as links: one where git
 wrote them as plain files, as it may on Windows, packs their target paths
 instead of the licences.
