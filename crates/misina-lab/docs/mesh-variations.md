@@ -77,8 +77,8 @@ being grown.
   different kinds of plant, not different sizes, so the metric puts them
   further apart than any two plants of one kind can be. The same goes for a
   leaf cut from one of five outline drawings: they are five shapes, not five
-  nearby numbers, and with a gap that large a budget of five or more keeps
-  all five.
+  nearby numbers. With a gap that large, a budget of five or more keeps all
+  five, as long as `max_radius` is smaller than the gap.
 - **Two configs that build no mesh are zero apart.** Then at most one of
   them is picked as a representative, so things that cost nothing take at
   most one place in the budget.
