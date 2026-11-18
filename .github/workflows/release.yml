@@ -21,9 +21,10 @@ jobs:
       # Each wheel is built from its sdist in a scratch directory; one target
       # directory lets the second generator reuse the first one's Bevy build.
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
-      # glibc 2.34 and up: Ubuntu 22.04, Debian 12, RHEL 9 and later. maturin
-      # fails the build if the extension needs anything newer.
-      MATURIN_PEP517_ARGS: --compatibility manylinux_2_34
+      # glibc 2.35 and up: Ubuntu 22.04, Debian 12 and later. The extension
+      # calls `hypot`, whose symbol is versioned 2.35, so 2.34 is out of reach.
+      # maturin fails the build if the extension needs anything newer.
+      MATURIN_PEP517_ARGS: --compatibility manylinux_2_35
     steps:
       - uses: actions/checkout@v5
 

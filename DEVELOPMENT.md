@@ -101,11 +101,15 @@ agree.
 1. Set the release's version in all four places, give the changelog's
    `[Unreleased]` section that version and the date, open a new empty
    `[Unreleased]` above it, and merge.
-2. From a clean checkout of the merge commit, `cargo publish -p misina-lab`.
+2. Run the release workflow on the merge commit by hand, `gh workflow run
+   release.yml --ref main`, and wait for it to pass. It builds every package
+   as the tag's run will, without publishing, so a build that fails is fixed
+   before anything is out.
+3. From a clean checkout of the merge commit, `cargo publish -p misina-lab`.
    The crate's licence files are symlinks, so the checkout has to have them as
    links: one where git wrote them as plain files, as it may on Windows, packs
    their target paths instead of the licences.
-3. Tag the merge commit `v<version>` and push the tag.
+4. Tag the merge commit `v<version>` and push the tag.
 
 The crate goes first because a version on either registry can never be
 uploaded again: a crate that fails to publish is fixed before anything
