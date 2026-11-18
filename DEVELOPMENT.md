@@ -112,36 +112,40 @@ agree.
    latest one's commit is the merge commit: `gh run list --workflow
    release.yml --branch main --event workflow_dispatch --limit 1 --json
    headSha,conclusion`.
-3. From a clean checkout of the merge commit, `cargo publish -p misina-lab`.
-   The crate's licence files are symlinks, so the checkout has to have them as
-   links: one where git wrote them as plain files, as it may on Windows, packs
-   their target paths instead of the licences.
-4. Tag the merge commit `v<version>` and push the tag.
+3. Tag the merge commit `v<version>` and push the tag.
 
-The crate goes first because a version on either registry can never be
-uploaded again: a crate that fails to publish is fixed before anything
-reaches PyPI. `cargo publish` takes a crates.io API token, from `cargo
-login`; give it the `publish-update` scope on `misina-lab` alone, and the
-`publish-new` scope too for the crate's first version.
+The tag's run of `.github/workflows/release.yml` builds an sdist and a wheel
+for each package, a pure-Python wheel for misina-lab and a Linux x86_64 one
+for each generator. It then publishes the misina-lab crate to crates.io, and
+after it misina-lab's sdist and wheel to PyPI. The crate goes first because a
+version on either registry can never be uploaded again: a crate that fails to
+publish stops the run before anything reaches PyPI. A manual run from a
+branch builds the packages without publishing.
 
 Nothing that is out can be replaced, so a release whose packages have to
 change after any of them is up goes out again as the next patch version,
 every package together. An upload that failed for a passing reason is
-retried by re-running the release workflow's failed job; that works only
-while PyPI has none of the release's files, since it refuses one it already
-has.
+retried by re-running the run's failed jobs, not all of them: a registry
+refuses a version it already has, so the crates.io job fails once the crate
+is out, and the PyPI job waits on it.
 
-`.github/workflows/release.yml` then builds an sdist and a wheel for each
-package, a pure-Python wheel for misina-lab and a Linux x86_64 one for each
-generator, and publishes misina-lab's sdist and wheel alone. A manual
-run of it from a branch builds them without publishing.
+Both registries are published to through trusted publishing, so no token is
+stored: GitHub signs a token naming the repository, the workflow and the
+job's environment, and the registry trades it for an upload token that lasts
+the job. misina-lab's publisher on crates.io names the `azazdeaz/misina-lab`
+repository, the `release.yml` workflow and the `crates-io` environment, and
+its publisher on PyPI the same repository and workflow and the `pypi`
+environment. Renaming the repository means updating every publisher.
 
-Publishing to PyPI goes through PyPI's trusted publishing, so no token is
-stored. misina-lab's publisher on PyPI names the `azazdeaz/misina-lab`
-repository, the `release.yml` workflow and the `pypi` environment. A project
-not on PyPI yet takes a pending publisher, which its first upload turns into
-the project; a generator takes one when it is first published. Renaming the
-repository means updating every publisher.
+A package's first version is published another way. On PyPI, a pending
+publisher takes its place, and the first upload turns it into the project.
+crates.io has no pending publishers, so a crate's first version is published
+by hand, `cargo publish -p <crate>` from a clean checkout of the release's
+commit, with an API token from `cargo login` scoped `publish-new` to that
+crate alone; its publisher is added after. The crate's licence files are
+symlinks, so that checkout has to have them as links: one where git wrote
+them as plain files, as it may on Windows, packs their target paths instead
+of the licences. A generator needs both when it is first published.
 
 ## Viewer (interactive)
 
