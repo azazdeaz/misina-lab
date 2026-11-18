@@ -140,7 +140,7 @@ pub struct TerrainParams {
     /// since the roughness band stops at the shortest wave the grid carries.
     ///
     /// The grid steps `feature_size / detail` meters, capped at
-    /// [`MAX_SAMPLES`] samples per axis.
+    /// 256 samples per axis, `MAX_SAMPLES`.
     #[reflect(@Slider { min: 2.0, max: 64.0, step: 1.0 })]
     pub detail: u32,
 }

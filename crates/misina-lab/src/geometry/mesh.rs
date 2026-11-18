@@ -4,7 +4,7 @@
 //! [`MeshData`] is what [`strand`](super::strand) and
 //! [`outline`](super::outline) hand back: points plus **n-gon** faces, which is
 //! what a tube skinner and a polygon filler naturally produce. The scene holds
-//! Bevy [`Mesh`](bevy::mesh::Mesh)es, so [`MeshData::to_mesh`] triangulates on
+//! Bevy [`Mesh`]es, so [`MeshData::to_mesh`] triangulates on
 //! the way out — the one place a fan triangulation happens, rather than once
 //! per kernel.
 

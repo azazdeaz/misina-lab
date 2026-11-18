@@ -3,7 +3,7 @@
 //!
 //! Regions marked `# >>> generated: <name>` … `# <<< generated: <name>` in
 //! four files of the generator's Python package are rendered here from the
-//! params walk in [`params`](crate::params), and the parameters page is
+//! params walk in [`params`], and the parameters page is
 //! rendered whole:
 //!
 //! - `python/{PACKAGE}/_core.pyi` — the stub the type checker and the IDE read.

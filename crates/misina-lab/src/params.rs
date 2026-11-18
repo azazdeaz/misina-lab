@@ -230,7 +230,9 @@ macro_rules! fragment_python {
 }
 
 /// One fragment of [`Params::apply`]: inserts the resource if the world has
-/// none, and otherwise overwrites it only if the value differs.
+/// none, and otherwise overwrites it only if the value differs. Called by what
+/// [`generator!`](crate::generator) expands to, and hidden like `python`.
+#[doc(hidden)]
 pub fn set<T: Resource<Mutability = Mutable> + Clone + PartialEq>(world: &mut World, value: &T) {
     match world.get_resource_mut::<T>() {
         Some(mut live) => {

@@ -45,7 +45,7 @@ pub fn rigidity(modulus: f32, radius: f32) -> f32 {
 ///
 /// Each joint's turn is solved in turn from the tip, damped by how far its
 /// turn could move the loads past it, until a sweep moves none by more than
-/// [`SETTLED`]. Treated as a static beam, a joint resists twisting about the
+/// `SETTLED`. Treated as a static beam, a joint resists twisting about the
 /// rod as it does bending.
 pub fn sag(points: &[Vec3], rigidity: &[f32], loads: &[f32]) -> (Vec<Vec3>, Vec<Quat>) {
     assert!(

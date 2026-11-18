@@ -2,9 +2,9 @@
 //!
 //! Nothing here is estimated or recorded while building. Every figure is a
 //! query over the entities and the mesh library as they stand, so the footer
-//! cannot disagree with what is on screen. [`tally`] is the only thing that
+//! cannot disagree with what is on screen. `tally` is the only thing that
 //! counts and [`SceneStats`] the only thing the UI reads, so another figure is
-//! one field, one line in [`tally`] and one [`field`] in [`footer`].
+//! one field, one line in `tally` and one `field` in `footer`.
 //!
 //! The footer also carries the controls that say how the scene is *drawn*,
 //! which is not what the params panel is for — it says what the scene *is*.
@@ -52,7 +52,7 @@ pub fn plugin(app: &mut App) {
 #[derive(Component, Clone, Copy, Default)]
 pub struct Footer;
 
-/// What the scene currently weighs. Written by [`tally`], read by [`show`].
+/// What the scene currently weighs. Written by `tally`, read by `show`.
 #[derive(Resource, Default, Debug, PartialEq, Eq)]
 pub struct SceneStats {
     /// Named entities — one prim each in the exported stage.

@@ -25,7 +25,7 @@ pub fn salt(index: u64) -> u64 {
 /// A deterministic stream of floats, for the shape and scatter randomness
 /// elements need beyond picking a variation index.
 ///
-/// Same inlined [`split_mix_64`] as the variation picker, for the same
+/// Same inlined `split_mix_64` as the variation picker, for the same
 /// reason: a fixed algorithm is what makes the scene reproducible across
 /// machines and crate versions.
 ///
