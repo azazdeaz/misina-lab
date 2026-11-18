@@ -98,7 +98,8 @@ generator's `pyproject.toml`. `tests/test_versions.py` fails until all four
 agree.
 
 1. Set the release's version in all four places, give the changelog's
-   `[Unreleased]` section that version and the date, and merge.
+   `[Unreleased]` section that version and the date, open a new empty
+   `[Unreleased]` above it, and merge.
 2. From a clean checkout of the merge commit, `cargo publish -p misina-lab`.
    The crate's licence files are symlinks, so the checkout has to have them as
    links: one where git wrote them as plain files, as it may on Windows, packs
