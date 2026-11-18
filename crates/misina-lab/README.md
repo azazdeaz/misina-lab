@@ -3,11 +3,12 @@
 What a procedural scene generator is built from. A generator declares its
 parameters as plain Rust structs and builds its scene in
 [Bevy](https://bevy.org) as ordinary meshes and transforms; everything around
-that is here. The viewer with its parameter panel, the mesh quantizer, the
-seeded random stream, the export to a JSON scene document, the USD builder
-that turns the document into a stage, and the Isaac Lab spawner that
-generates and caches it. One crate ships a generator both as an interactive
-viewer and as a Python extension module.
+that is here. The viewer with its parameter panel, the clustering that lets
+thousands of parts share a few meshes, the seeded random stream, the export
+to a JSON scene document, the USD builder that turns the document into a
+stage, and the Isaac Lab spawner that generates and caches it. One crate
+ships a generator both as an interactive viewer and as a Python extension
+module.
 
 **Contents:** [The smallest generator](#the-smallest-generator) ·
 [Reading on](#reading-on) · [Development](#development)
@@ -133,17 +134,18 @@ whose `write_usd` runs this same build headlessly.
 
 ## Reading on
 
-Each page defines one idea, shows it, and ends with where it lives in the
-source. The module docs are each module's contract;
-[docs.rs](https://docs.rs/misina-lab) and `cargo doc --open -p misina-lab`
-render them, and these pages say how the modules fit. The pages are also on
-the [docs site](https://azazdeaz.github.io/misina-lab/crates/misina-lab/).
+Each page introduces one idea for someone new to the code, shows it, and
+ends with where it lives in the source. The module docs are each module's
+contract; [docs.rs](https://docs.rs/misina-lab) and
+`cargo doc --open -p misina-lab` render them, and these pages say how the
+modules fit. The pages are also on the
+[docs site](https://azazdeaz.github.io/misina-lab/crates/misina-lab/).
 
 | Page | What it answers |
 | --- | --- |
-| [generators.md](docs/generators.md) | what a generator declares, and every surface the framework builds from it |
+| [generators.md](docs/generators.md) | what a generator declares, and everything the framework builds from it |
 | [elements.md](docs/elements.md) | how a scene is built: layers, configs, the mesh library, and the rules a layer follows |
-| [quantization.md](docs/quantization.md) | how a population of configs becomes a budget of meshes, and how to write a metric |
+| [mesh-variations.md](docs/mesh-variations.md) | how thousands of parts share a budget of meshes, and how to write the metric that decides which |
 | [randomness.md](docs/randomness.md) | one seed, many streams: how a scene stays reproducible while every part varies |
 | [export.md](docs/export.md) | coordinates, the scene document, and what the USD builder makes of it |
 | [isaac-lab.md](docs/isaac-lab.md) | spawning a generated scene: the cfg base, the cache, rods, and moving and seeing colliders |

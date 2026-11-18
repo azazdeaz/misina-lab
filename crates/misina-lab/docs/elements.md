@@ -4,23 +4,61 @@
 > **Under development.** This page may not reflect the current state of
 > the source. We're working on it.
 
-An **element** is one module per kind of thing in the scene: a post, a
-plant, a leaf, a patch of ground cover. It owns a params fragment, a config
-component, a metric over configs, a build system, and the plugin that wires
-them. What a scene is made of is the list of its elements, and adding one is
-one file plus one line in the generator's plugin.
+A scene is the 3D world that a [generator](generators.md) builds and
+exports to a simulator such as Isaac Lab. An **element** is the code that
+builds one kind of thing in it: the posts, the plants, the leaves, a patch
+of ground cover. A generator builds its scene from a list of elements, and
+each element is one Rust module of the generator.
+
+An **organ** is one instance of what an element builds: one leaf, one
+stem. An element that sorts its organs into groups that share a mesh
+holds five things ([mesh-variations.md](mesh-variations.md) explains
+configs and metrics):
+
+- a **fragment**, its own struct of parameters
+  ([generators.md](generators.md#the-params-aggregate));
+- a **config**, the few numbers that decide one organ's mesh, such as its
+  length;
+- a **metric**, the distance between two configs, which decides which
+  organs are alike enough to share one mesh;
+- a build system, the function that makes the meshes and creates the
+  organs in the scene;
+- a plugin, the function that adds the fragment and the systems to the
+  app.
+
+An element with one mesh for all its organs, such as a wire of one gauge,
+or with a mesh for every organ, has no metric and skips the grouping.
+
+> [!NOTE]
+> **In Bevy terms.** Each organ is an entity, and its config is a
+> `Component` on it. The fragment is a `Resource`. A system is a function
+> Bevy runs every frame, given the data it asks for, and `run_if` adds a
+> run condition, a check that decides whether it runs this frame. A plugin
+> is a function that adds resources and systems to the `App`.
+
+To add an element:
+
+1. Write its module, as in the example below.
+2. Add its plugin to the generator's own `plugin` function.
+3. Add its fragment as a field of the `generator!` call, the macro that
+   declares the generator's parameters.
+4. In the element's plugin, put its systems in one of the generator's
+   stages ([The pipeline](#the-pipeline)). Add a new stage if no stage runs
+   at the right point.
 
 ```rust
-/// The mesh-library prefix this element registers its geometry under.
+/// The prefix this element's meshes are named under in the mesh library:
+/// `Leaf_0`, `Leaf_1`, ...
 pub const PART: &str = "Leaf";
 
-/// One leaf's shape, as the stem that grew it specified.
+/// One leaf's shape, as the stem it grows on wrote it.
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct LeafConfig { pub length: f32, pub droop: f32, /* ... */ }
 
-/// Two leaves share a mesh when they are close in every dimension that shows.
+/// Two leaves share a mesh when their configs are close in every field that
+/// changes the shape.
 pub struct LeafMetric;
-impl Metric<LeafConfig> for LeafMetric { /* weighted L2 over the fields that build */ }
+impl Metric<LeafConfig> for LeafMetric { /* weighted distance over the fields that build */ }
 
 /// The struct's doc comment is the Python class docstring.
 #[derive(Resource, Reflect, Clone, Debug, PartialEq)]
@@ -33,98 +71,89 @@ pub struct LeafParams {
 }
 
 pub fn plugin(app: &mut App) {
+    // `reauthor` writes edited params onto the leaves already placed. `build`
+    // then rebuilds the meshes if a config or the params changed. Both run in
+    // this element's stage, `Grow::Leaves`.
     app.init_resource::<LeafParams>().add_systems(PreUpdate, (
         reauthor.run_if(resource_changed::<LeafParams>),
-        build.run_if(configs_changed::<LeafConfig>),
+        build.run_if(configs_changed::<LeafConfig>.or_eager(resource_changed::<LeafParams>)),
     ).chain().in_set(Grow::Leaves));
 }
 
-/// Re-applies the params to every leaf already hanging, in place.
+/// Writes the params onto every leaf already placed, in place.
 fn reauthor(params: Res<LeafParams>, mut leaves: Query<&mut LeafConfig>) { /* ... */ }
 
 fn build(commands: Commands, library: Library, /* ... */) -> Result<()> { /* ... */ }
 ```
 
-The panel section, the config snippet, the Python class, the stub and the
-parameters page all follow from the params struct
-([editing-parameters.md](editing-parameters.md)), and `cargo test` fails on
-whatever was missed.
+`Metric`, `configs_changed` and `Library` come from the framework. `Grow`
+is the generator's own list of stages.
 
-## What an element is built from
-
-The geometry kernels know nothing about what they are shaping. `strand`
-skins a polyline of radii into a tube, swollen at its nodes and round the
-stalks leaving it, its rings evenly spaced or placed where its shape needs
-them to stay within a tolerance; `outline` fills a closed ring,
-`shapes` builds outlines in code and folds them, `scatter` spreads
-points over a band of ground, and `mesh` holds the type they all produce.
-`bending` finds where a rod settles under the weight it carries, so a stalk
-is laid out as it grew carrying nothing and then sagged under its load: one
-shape for every stage of its growth, its sag read off what it carries now.
-`packing` does the same for a cluster of fruit on stalks: each is laid out
-where it would hang alone, then the cluster is packed until no fruit lies in
-another, in a stem or on another's stalk, every stalk keeping its length.
-Stalks packed once and drawn under several clusters' fruit are packed for
-the biggest; `swing` turns each cluster's own fruit about the stalks' ends,
-back toward the way each would hang alone, until they touch.
-`palette` turns a hex colour linear, jitters it per mesh and pairs it with a
-`Response`, how a surface answers light; for a surface whose colour changes
-as it grows, `tissue` turns `Pigment` amounts, chlorophyll fading and
-lycopene building, into the colour they leave. `terrain` is the one element this
-crate ships: the ground, staged first by every generator, and the `Ground`
-height field everything placed on it drapes onto.
-
-What is specific to a kind of scene but is not an element, a layout solver,
-the pass that places a config on every plant, a named palette, belongs to the
-generator. The dividing line is identity: nothing there corresponds to a
-thing that exists in the scene, so nothing there gets a mesh-library prefix
-or a stage set.
-
-### Outlines
-
-A flat organ is an outline filled with triangles, and `geometry::outline`
-is the fill: a closed ring in one frame, the attachment on the origin and
-the shape running along +X, whatever drew the ring.
-
-A grass blade is a length, a width and a taper, and `geometry::shapes`
-builds those as outlines. A lobed, toothed margin is built from curves with
-the same module's pieces, `cubic`, `serrate`, `simplify` and `untangle`: a
-generator places the lobe tips from the organ's veins and strings the pieces
-into its own ring, so one builder cuts the organ at any stage of its growth,
-and a budget of meshes buys a different margin on every one.
-
-An organ that folds keeps its folds in the fill: `creased_mesh` takes lines
-across the ring, such as its veins, and keeps them as lines of edges spaced
-as finely as the fill, however finely the lines were traced, so a later
-bend creases the sheet on an edge rather than rounding it over the width of
-the triangles it would cross.
+Several things are generated from the fragment alone
+([editing-parameters.md](editing-parameters.md)). The viewer, the window
+in which every parameter is a slider, gets a section of sliders in its
+panel. The snippet, the Python code that constructs the Isaac Lab config
+with the current settings, gets its fields. So do the Python class, its
+type stub and the parameters page. `cargo test` fails if a field lacks
+something one of these needs, such as the doc comment that becomes its
+tooltip.
 
 ## The pipeline
 
-Every element is one layer of the same five-step pipeline:
+A scene is built in **layers**. Each layer is placed on what the layer
+before it created: first the ground, then the plants on the ground, then
+the stems on the plants, then the leaves on the stems. Each element is one
+layer.
 
-1. **Collect** every config of its own kind, sorted by `scene::Order`.
-2. **Cluster** them to `params.variations` representatives
-   ([quantization.md](quantization.md)).
-3. **Build** each representative's mesh once, into the shared `Prototypes`
-   library.
-4. **Assign** each instance the geometry of the representative it drew.
-5. **Expand**: author a *unique* config for the layer below at every frame
-   the representative offers.
+A generator orders the layers with **stages**. It lists its stages in
+build order, and each element runs in one of them
+([generators.md](generators.md#stage-sets)). Elements that do not read each
+other's output can share a stage, such as the leaves and the ground cover.
 
-Whatever places the first configs on the ground starts it; the bottom layer
-ends it, having nothing below to expand into.
+Every layer that groups its organs runs the same five steps:
 
-**Frames come from the representative; child configs are per instance.**
-Step 5 is where the two halves meet. The skeleton, how many branches and
-where the buds are, has to come from the mesh that actually got built, or a
-stem would hang in mid-air beside the wood. The *parameters* at each frame
-are drawn fresh per instance, so two plants sharing a mesh still carry
-different canopies. That split is what makes a hundred plants off four
-meshes not read as four meshes.
+1. **Collect** every config of its own kind, and sort them by
+   `scene::Order`, a number each organ is given when it is placed. The sort
+   makes the result the same on every run ([Rules](#rules)).
+2. **Cluster**: group similar configs, and pick at most
+   `params.variations` of them, the **representatives**, to get a mesh
+   ([mesh-variations.md](mesh-variations.md)).
+3. **Build** each representative's mesh once, into `Prototypes`, the
+   **mesh library**. It holds every mesh any layer built, by name, such as
+   `Leaf_2`, and every layer reads from it.
+4. **Assign** each organ the mesh of the representative nearest to its
+   config.
+5. **Expand**: the representative's mesh has **growth points**, the
+   places where the next layer's organs attach, such as its buds. For each
+   organ, create a config for the next layer at every growth point. Organs
+   that share a mesh still get configs of their own.
 
-**Geometry prims are childless and instanceable; structural prims are unique
-`Xform`s.**
+The first layer has no layer before it. So its configs come from the
+generator's layout code, or from an element that creates its own
+([Rules](#rules)). The last layer skips step 5.
+
+**The places come from the representative; the configs written there come
+from the organ.** In step 5, the growth points, such as how many branches
+there are and where the buds sit, are read from the mesh that was built.
+They must match the mesh the organ shows. Points taken from the organ's
+own config would not, and a stem could float in the air beside the wood
+it should grow from. The numbers in each new config are drawn for each
+organ on its own. So two plants that share one mesh still carry different
+leaves, and a hundred plants built from four meshes do not look like four
+copies.
+
+## The prims an element creates
+
+The exported scene is a tree of USD **prims**, the nodes of a USD stage. An
+element creates two kinds:
+
+- A **geometry prim** shows one mesh from the mesh library. It points to
+  the mesh and holds no copy of its points. It has no children, and is
+  exported **instanceable**: USD loads the mesh only once, however many
+  prims point to it.
+- A **structural prim**, such as a plant or a stem, only positions the
+  prims that sit on it. It is an `Xform`, a prim that holds only a position
+  and children, and each one is unique, not instanced.
 
 ```text
 /Scene/Planting/Row_00/Plant_047     Xform, unique
@@ -135,69 +164,158 @@ meshes not read as four meshes.
     /Leaf_00                          -> parts/Leaf_2, instanceable
 ```
 
-An instanceable prim's descendants are not addressable, and a geometry prim
-has none, so the rule is safe and mechanical. An organ with nothing hanging
-off it, a leaf, *is* the geometry prim rather than an `Xform` over one,
-which at six figures of leaves is half the prims in the scene.
+A geometry prim must have no children, because USD cannot address the
+children of an instanceable prim. The export stops with an error if one
+does. An organ with nothing growing on it, such as a leaf, is itself the
+geometry prim. Otherwise each leaf would need two prims, an `Xform` and a
+geometry child. In a scene with hundreds of thousands of leaves, one prim
+per leaf halves the number of prims.
+
+Two kinds of part are exported not instanceable, since each is used by
+one prim only: a part that is its own collider, the ground
+([export.md](export.md#colliders)), and a skin, one mesh that bends with a
+flexible organ ([export.md](export.md#skins)).
+
+> [!NOTE]
+> **In Bevy terms.** A geometry prim is an entity that carries the
+> `Geometry` bundle `Library::part` returns: the mesh handle, the material
+> and a `UsdReference` naming the part. Every organ of one representative
+> gets a clone of it, so they share one mesh and Bevy draws them together.
+
+## What an element is built from
+
+The `geometry` modules of this crate are the **geometry kernels**:
+general-purpose mesh builders. They do not know whether a mesh is a leaf
+or a stem.
+
+| Module | What it does |
+| --- | --- |
+| `geometry::mesh` | `MeshData`, the mesh type every kernel returns, and simple shapes built in it, such as a box and a cylinder |
+| `geometry::strand` | turns a polyline with a radius at each point into a tube. The tube can thicken all round at a node, where a branch or leaf joins (`Bulge`), and on one side where a stalk leaves it (`Collar`). Its rings are evenly spaced, or, given a tolerance (how far the mesh may lie from the true surface), placed only where the shape needs them |
+| `geometry::outline` | a closed ring of points and the flat mesh that fills it ([Outlines](#outlines)) |
+| `geometry::shapes` | rings built in code, the pieces to build a lobed or toothed edge, and `bent`, which fills a ring and folds it |
+| `geometry::scatter` | spreads points over a band of ground, for things placed within an area rather than along a line |
+| `geometry::bending` | `sag`: the shape a rod comes to rest in under the weight it carries. An element draws a stalk in the shape it grew into, carrying nothing, and `sag` bends it under its current load. So one shape works at every stage of growth: the heavier the load, the further it bends |
+| `geometry::packing` | `pack`: moves a cluster of fruit on stalks until no fruit lies inside another fruit, a stem or another fruit's stalk, and every stalk keeps its length. `swing`: used when the stalks were packed for larger fruit than they carry. It turns each fruit back toward the way it would hang alone, until it touches a neighbour |
+| `palette` | colour: `srgb` turns a hex colour into linear RGB, `shade` changes it a little for each mesh, `Response` says how a surface reflects light. `tissue` gives the colour of a mix of `Pigment` amounts, such as chlorophyll and lycopene, for a surface whose colour changes as the organ grows |
+| `terrain` | the ground, the one element this crate ships |
+
+`terrain` builds the ground mesh and `Ground`, a height field: it gives
+the ground's height at any (x, y), so an element can place things on the
+ground. A generator that uses the terrain puts it in its first stage.
+`terrain::build` is a system, not a plugin. So the generator itself adds
+it to that stage, runs it when `TerrainParams` changes, and initialises
+the `TerrainParams` and `Ground` resources.
+
+Code that belongs to one kind of scene but builds no mesh belongs to the
+generator, not to an element: a layout solver, the code that gives every
+plant its config, a named colour. It has no prefix in the mesh library. It
+may still run in a stage of its own, as a generator's planting pass can.
+
+### Outlines
+
+A flat organ, such as a leaf blade, is a ring of points filled with
+triangles. `geometry::outline` does the fill. Every ring is built in the
+same local frame: the point where the organ attaches is at the origin, the
+shape runs along +X and its width across Y. So the fill works the same for
+any ring, whatever built it.
+
+`geometry::shapes` builds simple rings from a length, a width and a taper;
+a grass blade is one. A lobed, toothed edge is built from curves with the
+same module's pieces. `cubic` samples a Bézier curve, `serrate` cuts teeth
+along an edge, `simplify` drops points that a tolerance does not need, and
+`untangle` cuts out loops. The generator places the lobe tips from the
+organ's veins, the lines its blade is built around, and joins the pieces
+into one ring. So one builder makes the organ at any stage of its growth,
+and each of its meshes gets an edge of its own.
+
+An organ that folds, such as a leaf along its veins, keeps each fold as
+edges of its mesh. `outline::creased_mesh` takes lines across the ring and
+makes each one a chain of mesh edges, cut into pieces as fine as the fill.
+A later bend can then fold the mesh sharply along those edges. A fold
+across the middle of triangles would come out rounded over their width.
 
 ## Rules
 
-**Each element owns its slice of the scene and rebuilds it from scratch.** A
-layer clears its prefix from the mesh library and despawns the children it
-spawned before repopulating, so a rebuild that produces fewer representatives
-leaves nothing stale behind.
+**Each element owns its part of the scene and rebuilds all of it every
+time.** So if a rebuild makes fewer representatives, no old mesh is left
+behind. Before it builds, a layer removes its meshes from the library,
+`Library::clear(PART)`, and despawns (deletes) the entities it created.
 
-**Elements compose by typed value, not by path.** A layer reads the configs
-spawned by the layer above and writes configs for the layer below; nothing
-reaches across by prim path.
+**Elements share configs and library meshes, not prim paths.** A layer
+reads the configs the layer before it created, and creates configs for the
+next layer. To use a mesh another layer built, it looks the mesh up in the
+library by its name, such as `Leaf_2`. No layer finds another layer's prims
+by their path.
 
-**Ordering is a `SystemSet` enum**, one variant per layer, chained once in
-the generator's plugin inside `Build`. The chain orders the layers: each
-set must have finished spawning before the one after it queries.
+**Layers run in a fixed order.** Each layer must finish before the next one
+reads what it created. The generator lists its stages in order once, in
+its plugin.
 
-**Rebuild only on change.** `run_if(configs_changed::<XConfig>)` is the
-dirty-tracking mechanism; curve tessellation is expensive enough that this
-matters. It fires when a config is added, re-authored or removed, so a layer
-whose configs are all gone still runs once and clears its parts from the
-library.
+> [!NOTE]
+> **In Bevy terms.** A stage is a variant of a `SystemSet` enum, a named
+> group of systems: `Grow::Leaves` in the example. The generator chains the
+> variants once, inside `Build`, the framework's set for everything that
+> builds the scene. An element adds its systems to its stage with `in_set`.
 
-**A params edit is re-applied in place, not re-authored from above.** A
-layer owns the configs the layer above placed, so it runs a `reauthor` pass
-that writes its own params onto them with `set_if_neq` and leaves everything
-else, the position and the draws they were authored from, exactly where it
-was. Editing a leaf param therefore re-cuts the blades instead of replanting
-the scene to reach them. Only a param that reaches no config field, such as
-`variations`, still needs a `resource_changed` on the layer's own build.
+**Rebuild only on change.** A layer builds only when one of its configs
+was added, changed or removed. Building meshes from curves is slow, so
+building every frame would make the viewer slow to respond. Removing a
+config also counts as a change. So when all of a layer's configs are
+removed, the layer runs one last time and clears its meshes from the
+library. The run condition is `run_if(configs_changed::<XConfig>)`.
 
-**Combine run conditions with `or_eager`, never `or_else`.** `or_else`
-short-circuits, and a condition system that does not run does not advance
-its `last_run`, so the change it skipped reads as new again the next frame
-and rebuilds the layer a second time.
+**Editing a parameter updates the existing configs in place.** When you
+edit a leaf parameter, only the leaf meshes are rebuilt, not the whole
+scene. The leaf configs were created by the layer before, so the leaf
+layer does not create them again. Instead it runs a `reauthor` system,
+which copies the layer's own params onto those configs. The rest of each
+config stays as it was: its position and the random values it was made
+from. A parameter that is copied into no config field, such as
+`variations`, changes no config. So the layer's build also needs a
+`resource_changed` condition on its params.
 
-**A layout-driven element authors its own configs.** An element that hangs
-off no layer above, ground cover for one, places configs in an `author`
-system from the layout, the `Ground` and the scene params, gated on all of
-them and on its own params, and has no `reauthor`: re-authoring the layer
-*is* the in-place edit at its scale.
+> [!NOTE]
+> **In Bevy terms.** `reauthor` runs on
+> `resource_changed::<LeafParams>` and writes with `set_if_neq`, which
+> marks a component changed only when its value differs. So
+> `configs_changed` fires only when a config's value moved.
 
-**A categorical param is a string naming one of the element's fixed list**,
-parsed once into a Rust enum with `ALL`, `NAMES` and `parse`, and declared on
-the field as `@Choices(&Kind::NAMES)`. The name is checked when the
-aggregate is handed to a build from Python; the element itself falls back to
-the default with a warning, because a build system is no place to fail. The
-viewer offers the list as a dropdown and only ever writes a valid name.
+**Combine run conditions with `or_eager`, never `or_else`.** Both combine
+two conditions with a logical or. `or_else` skips the second condition
+when the first is true, and `or_eager` always runs both. A condition
+counts changes from the last time it ran, its `last_run`. So a skipped
+condition reports the same change as new on the next frame, and one edit
+rebuilds the layer twice.
 
-**Determinism.** Bevy's query iteration order is not stable across runs and
-a codebook has to be a function of its population alone, so every organ
-carries a `scene::Order` assigned in authoring order and every layer sorts by
-it before clustering. `Prototypes` is a `BTreeMap` for the same reason: a
-document has to come out byte-identical across runs, because a downstream
-simulator keys its cache on those bytes.
+**An element that sits on no layer before it creates its own configs.**
+Ground cover is an example. Its `author` system creates configs from the
+layout, the `Ground` and the scene params. It runs again whenever its own
+params, the layout or the scene params change. It needs no `reauthor`,
+because running `author` again already updates its configs.
+
+**A parameter that must be one value from a fixed list is a string.** The
+field declares the allowed values, `@Choices(&Kind::NAMES)`. The element
+parses the string once into a Rust enum that has `ALL`, its variants,
+`NAMES`, their names, and `parse`, from a name to its variant. When
+Python hands the params to a build, an unknown name raises `ValueError`.
+Inside the build the element reads an unknown name as the default and logs
+a warning, because a build system must not fail. The viewer offers the
+list as a dropdown, so it only writes a valid name.
+
+**Determinism.** The same params must always give exactly the same scene,
+byte for byte. The Isaac Lab spawner builds a scene once, saves it under a
+key made from its params, and reuses the file after that
+([isaac-lab.md](isaac-lab.md#the-cache)). That is only correct if the same
+params always build the same scene. Bevy hands a system its entities in an
+order that changes from run to run. So every organ carries a
+`scene::Order`, given in the order organs are placed, and every layer
+sorts by it before clustering.
 
 ## Where it lives
 
-- [`src/scene/mod.rs`](../src/scene/mod.rs): the scene graph and its export directives; `Library`, `Prototypes`, `Order`, `configs_changed`, `placed`, and the capsule and cable proxies
-- [`src/geometry/`](../src/geometry/): the kernels
-- [`src/terrain.rs`](../src/terrain.rs): the ground
-- [`src/palette.rs`](../src/palette.rs): colour and surface response
+- [`src/scene/mod.rs`](../src/scene/mod.rs): the scene tree and the components that say what prim an entity becomes; `Library`, `Prototypes`, `Order`, `configs_changed`, `placed`, and the capsule and cable proxies
+- [`src/geometry/`](../src/geometry/): the geometry kernels
+- [`src/terrain.rs`](../src/terrain.rs): the ground and `Ground`
+- [`src/palette.rs`](../src/palette.rs): colour, `Response`, `tissue`
 - [`src/testing.rs`](../src/testing.rs): reading a built scene back in a test; `organs`, `prim`, `prim_path`

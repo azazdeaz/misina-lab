@@ -116,7 +116,7 @@ Only the `isaaclab` subpackages import Isaac Lab, so plain `import vinery_lab`,
 - [.claude/skills/pruning-video/SKILL.md](.claude/skills/pruning-video/SKILL.md) — the same for the pruning demo's video, filmed in Isaac Sim
 - [.claude/skills/docs-shots/SKILL.md](.claude/skills/docs-shots/SKILL.md) — rendering the docs' pictures from their shots, placing a shot's camera by hand, and publishing them
 - [examples/isaaclab_demo/DEVELOPMENT.md](examples/isaaclab_demo/DEVELOPMENT.md) — the pinned Isaac Lab release and how to bump it
-- [crates/misina-lab/docs/](crates/misina-lab/docs/) — the framework's: how a scene is built and exported, quantization, randomness, Isaac Lab, and how to add or change a parameter
+- [crates/misina-lab/docs/](crates/misina-lab/docs/) — the framework's: how a scene is built and exported, mesh variations, randomness, Isaac Lab, and how to add or change a parameter
 - [crates/misina-lab/docs/AGENTS.md](crates/misina-lab/docs/AGENTS.md) — how a page is written and kept current
 
 ## Rules that bite

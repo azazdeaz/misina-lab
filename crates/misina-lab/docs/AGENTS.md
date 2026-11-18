@@ -8,30 +8,41 @@ can, and this guide covers the rest.
 
 ## Who reads a page
 
-Someone who knows Rust, Bevy and the basics of USD, but not this code. A
-person reads a page from the top and stops once they have what they came
-for; an agent greps for a name and reads the paragraph it lands in. Both are
-served by the same order: the definition first, then one example, then the
-detail, with the source one link away.
+A person who wants to build a scene generator, or to understand one they
+use. They write Rust and Python and have used a simulator such as Isaac Lab,
+but they have not read this code, and may know Bevy only from the README's
+example. Many arrive from a search or a link, not from the page before, and
+English is a second language for many of them.
+
+So a page is an introduction: what a thing is, what it is for and how it
+fits with the rest, in plain words. It runs from the definition to one
+example to the detail, with the source one link away, and a reader stops
+once they have what they came for. A page is not written for an agent
+working on the code, which has the `AGENTS.md` maps and the module docs,
+and reads a page written for a person without trouble.
 
 ## What goes where
 
 | Place | What it holds |
 | --- | --- |
-| a module doc or a docstring | that module's contract: what it is, what it promises, the rules for using it |
-| a page in this folder | how modules fit together, and why they are built that way |
+| a module doc or a docstring | that module's contract: what it is, what it promises, the rules for using it, and why it is built the way it is |
+| a page in this folder | what an idea is and what it is for, how the modules fit together, and what someone building a generator has to know to use them |
 | [`../README.md`](../README.md) | the front door: what the crate is, the smallest generator, and the table of pages |
 | [`../AGENTS.md`](../AGENTS.md) | the map: where things are, and the rules that bite |
 
 Each fact is written once and linked from everywhere else. A sentence that
 would fit both a page and a module doc goes in the module doc, where it is
-read beside the code it describes and changes with it.
+read beside the code it describes and changes with it. Why the framework's
+own code is built the way it is goes there too; a page keeps what a reader
+needs to use it.
 
 ## Writing a page
 
-1. Title it with a noun naming the idea, `# Quantization`. A how-to is
-   titled with what it does, `# Editing parameters`.
-2. Define the idea in the first paragraph, in words that stand on their own.
+1. Title it with a noun naming the idea as a reader would ask for it,
+   `# Mesh variations`, not after the technique or the module behind it. A
+   how-to is titled with what it does, `# Editing parameters`.
+2. Define the idea in the first paragraph, and say what it is for, in words
+   a newcomer follows ([Prose](#prose)).
 3. Show one example. Code is the row of boxes from the README, or a generic
    plant, leaf or stem, trimmed with `/* ... */` to what the point needs.
 4. Give each further section a heading that names what it explains, so a
@@ -47,10 +58,25 @@ about 200 lines.
 
 ## Prose
 
-- Write for someone who has only the code in front of them. State a fact
-  about the code or a rule to follow, not how it was found, and not the
-  answer to a question only ever asked in a chat. If a detail doesn't change
-  what the reader does next, cut it.
+- State a fact about the code or a rule to follow, not how it was found, and
+  not the answer to a question only ever asked in a chat: a design that was
+  considered and dropped is not on the page. If a detail doesn't change what
+  the reader does next, cut it.
+- A page stands on its own. The first time it uses a term from elsewhere, a
+  fragment, the panel, the snippet, it says what that is in a few words and
+  links the page that defines it. The full definition stays on that page.
+  "The panel" cannot be a page's first mention of the panel.
+- Say what happens before how. State the effect in words a newcomer follows,
+  "an edit rebuilds only what depends on it", and the mechanism after it.
+  What a generator's own code has to do with Bevy, PyO3 or USD to get that
+  effect goes in a `> [!NOTE]` right after the paragraph it explains,
+  starting **In Bevy terms.**, **In PyO3 terms.** or **In USD terms.** A
+  page reads complete without its notes.
+- Use plain words and short sentences. Replace an idiom or a figure of
+  speech by what it means: "the framework is keyed on this type" by "the
+  framework is given this type", "is a function of it" by "is made from it",
+  "a budget buys variety" by "a larger budget gives more variety". A term of
+  art, k-center, a codebook, gets a few words of explanation at first use.
 - Give the reason for a rule that isn't obvious. A rule without one is
   broken by the first reader who thinks they know better.
 - Say what a measured number was measured on.
@@ -73,10 +99,25 @@ about 200 lines.
 A page is read on GitHub, in an editor and on a rendered site; the
 README is read through rustdoc as well. Write what all of them agree on: one
 H1, fenced code with a language tag, tables, Mermaid for diagrams. No raw
-HTML, and no renderer-specific callouts such as `!!! note`. The one
-exception is the `> [!WARNING]` under a page's title, which GitHub and the
-site draw as an alert and an editor as a blockquote: it says the page has
-not been checked against the current source, and is removed once it has.
+HTML, and no renderer-specific callouts such as `!!! note`. GitHub's alerts
+are the exception, since GitHub and the site draw them as boxes and an
+editor as a blockquote. They have two uses: the `> [!WARNING]` under a
+page's title, which says the page has not been checked against the current
+source and is removed once it has, and the `> [!NOTE]` that holds a
+mechanism of Bevy, PyO3 or USD ([Prose](#prose)).
+
+## Checking a page
+
+A writer cannot see what their own page leaves out, so a new or rewritten
+page is read once by someone who knows nothing of the project before it is
+done. For an agent that is a second agent, told to play the reader of
+[Who reads a page](#who-reads-a-page), to read that page and no other file,
+and to disregard what it was told about the repository. It lists every
+sentence where it stops: a term the page has not explained, a phrase that
+has to be decoded, a sentence too dense for one read.
+
+Fix what it finds, then check each rewritten claim against the source
+again. A sentence made simpler is often made less accurate.
 
 ## Keeping a page current
 

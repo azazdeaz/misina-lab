@@ -20,9 +20,6 @@ and a tomato greenhouse, to try it on and to start from. If you need help, or
 would like to work together on a generator of your own,
 [get in touch](#support).
 
-> 🌐 Try them in your browser, [the vineyard](https://azazdeaz.github.io/misina-lab/playground/vinery/) or
-> [the greenhouse](https://azazdeaz.github.io/misina-lab/playground/greenhouse/): a bit slower, and they need WebGPU.
->
 > 📚 The docs are at [azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/).
 
 **Contents:** [Features](#features) · [How it works](#how-it-works) ·
@@ -127,7 +124,7 @@ rolling terrain, down to every leaf.
 
 [README](crates/vinery-lab/README.md) ·
 [Parameters](crates/vinery-lab/docs/parameters.md) ·
-[Playground](https://azazdeaz.github.io/misina-lab/playground/vinery/) ·
+[Playground (experimental)](https://azazdeaz.github.io/misina-lab/playground/vinery/) ·
 `pip install vinery-lab`
 
 #### Examples
@@ -157,7 +154,7 @@ The rows of a high-wire tomato greenhouse, grown to any week of the season.
 
 [README](crates/greenhouse-lab/README.md) ·
 [Parameters](crates/greenhouse-lab/docs/parameters.md) ·
-[Playground](https://azazdeaz.github.io/misina-lab/playground/greenhouse/) ·
+[Playground (experimental)](https://azazdeaz.github.io/misina-lab/playground/greenhouse/) ·
 `pip install greenhouse-lab`
 
 #### Examples
@@ -168,11 +165,6 @@ The rows of a high-wire tomato greenhouse, grown to any week of the season.
 | [BUTom capture](examples/butom_capture/README.md) | A trolley laid out like PATHoBot films RGB-D sequences of the crop with BUTom-ST21's calibrated cameras, written in that dataset's layout. |
 
 ## Try it
-
-**In the browser.** Each generator's viewer runs at
-[azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/)
-and
-[azazdeaz.github.io/misina-lab/playground/greenhouse](https://azazdeaz.github.io/misina-lab/playground/greenhouse/).
 
 **From Python.**
 

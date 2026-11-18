@@ -19,7 +19,7 @@ nav = [
     { "Building a generator" = "crates/misina-lab/README.md" },
     "crates/misina-lab/docs/generators.md",
     "crates/misina-lab/docs/elements.md",
-    "crates/misina-lab/docs/quantization.md",
+    "crates/misina-lab/docs/mesh-variations.md",
     "crates/misina-lab/docs/randomness.md",
     "crates/misina-lab/docs/export.md",
     "crates/misina-lab/docs/isaac-lab.md",
