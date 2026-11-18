@@ -138,14 +138,17 @@ its publisher on PyPI the same repository and workflow and the `pypi`
 environment. Renaming the repository means updating every publisher.
 
 A package's first version is published another way. On PyPI, a pending
-publisher takes its place, and the first upload turns it into the project.
-crates.io has no pending publishers, so a crate's first version is published
-by hand, `cargo publish -p <crate>` from a clean checkout of the release's
-commit, with an API token from `cargo login` scoped `publish-new` to that
-crate alone; its publisher is added after. The crate's licence files are
-symlinks, so that checkout has to have them as links: one where git wrote
-them as plain files, as it may on Windows, packs their target paths instead
-of the licences. A generator needs both when it is first published.
+publisher takes its place, and the first upload turns it into the project; a
+generator, which ships only as a Python wheel, takes one when it is first
+published. crates.io has no pending publishers, so a new crate's first
+version is published by hand before the release is tagged: `cargo publish -p
+<crate>` from a clean checkout of the release's commit, with an API token
+from `cargo login` scoped `publish-new` to that crate alone. Its publisher is
+added after, the token is revoked, and the crate joins the `crates-io` job
+from its next version. The licence files in a crate's folder are symlinks to
+the root ones, so that checkout has to have them as links: one where git
+wrote them as plain files, as it may on Windows, packs their target paths
+instead of the licences.
 
 ## Viewer (interactive)
 

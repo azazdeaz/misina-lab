@@ -63,7 +63,9 @@ jobs:
     # Trusted publishing, as for PyPI below: misina-lab's crate on crates.io
     # names this repository, this file and this environment as its publisher.
     environment: crates-io
+    # A job's permissions replace the workflow's, so the checkout's is restated.
     permissions:
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v5
