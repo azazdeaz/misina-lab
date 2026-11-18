@@ -26,7 +26,7 @@ that build.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
@@ -135,6 +135,17 @@ correct: the kernels use it only as `tid // n`, `tid % n`, a strided loop
 `i += n` and a launch size `rows * n` behind a body guard. The 2.6% left is
 the five atomic adds each thread makes at the end of the per-body contact
 kernel, whether it had a contact or not."""
+
+PAIRS_PER_SHAPE = 16
+"""Candidate pairs the `"sap"` and `"nxn"` broad phases keep room for, per
+shape.
+
+Newton otherwise keeps a slot for every pair of shapes, which grows with the
+square of the scene: a scene of 14,000 shapes fills a 16 GB card with them
+before its first step. Rods find about a quarter of a pair per shape -- 912
+pairs among 3,100 shapes, 6,852 among 30,000, with a rod cut and its piece
+carried off -- so this is some sixty times that. Past it Newton warns of a
+buffer overflow each step."""
 
 PLANT_GROUPS = 2
 """The first collision group a plant takes; each plant gets the next one up.
@@ -580,6 +591,20 @@ def widen_contact_threads() -> None:
         module._NUM_CONTACT_THREADS_PER_BODY = wp.constant(CONTACT_THREADS)
 
 
+def _collision_pipeline(broad_phase: str) -> Callable:
+    """Makes the rods' collision pipeline on the coupler's view of the model,
+    with room for `PAIRS_PER_SHAPE` candidate pairs a shape, which the
+    `"explicit"` broad phase ignores for the pairs it lists."""
+
+    def pipeline(view):
+        from newton import CollisionPipeline
+
+        args = NewtonCollisionPipelineCfg(broad_phase=broad_phase).to_pipeline_args()
+        return CollisionPipeline(view, **args, shape_pairs_max=PAIRS_PER_SHAPE * view.shape_count)
+
+    return pipeline
+
+
 def make_physics_cfg_newton(
     cfg: GeneratedSceneCfg,
     robot: str,
@@ -610,8 +635,9 @@ def make_physics_cfg_newton(
             with a pair buffer sized for every pair of shapes: a cut gives
             its piece groups of its own, so it meets every plant and every
             other piece, all but the face across the cut, which the joint's
-            filter pair keeps out for good. No `ContactSlots` rows are
-            reserved, so the scene needs no static shapes to park them on.
+            filter pair keeps out for good, with room for `PAIRS_PER_SHAPE`
+            pairs a shape. No `ContactSlots` rows are reserved, so the scene
+            needs no static shapes to park them on.
 
     Returns:
         A physics config to hand to `SimulationCfg(physics=...)`.
@@ -659,7 +685,7 @@ def make_physics_cfg_newton(
                     # The pipeline on the rods' view, which finds every
                     # contact a rod makes: with a rod, a proxy or a static
                     # shape.
-                    collision_pipeline=NewtonCollisionPipelineCfg(broad_phase=broad_phase),
+                    collision_pipeline=_collision_pipeline(broad_phase),
                 )
             ],
         ),
