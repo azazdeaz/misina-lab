@@ -7,6 +7,7 @@ Requires Isaac Lab; skipped entirely where it isn't installed.
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 
 import pytest
 
@@ -86,11 +87,16 @@ def test_a_moment_the_demo_never_comes_to_fails(at: dict):
         shots.Moments(iter(Run(STAGES)), 0.005).reach({"at": at})
 
 
-def test_a_demo_stalled_short_of_the_moment_fails(monkeypatch):
-    """One that never comes to it gives up after `PATIENCE`, 200 steps here,
-    long before its steps end."""
+@pytest.mark.parametrize(
+    ("stalled", "outcome"),
+    [(200, nullcontext()), (201, pytest.raises(ValueError))],
+    ids=["at the limit", "past it"],
+)
+def test_reach_waits_patience_and_no_longer(monkeypatch, stalled, outcome):
+    """A moment `PATIENCE` in, 200 steps here, is still found; one a step
+    later is given up on, long before the demo's steps end."""
     monkeypatch.setattr(shots, "PATIENCE", 1.0)
-    run = Run("a" * 10_000)
-    with pytest.raises(ValueError):
+    run = Run("a" * stalled + "b" + "a" * 10_000)
+    with outcome:
         shots.Moments(iter(run), 0.005).reach({"at": {"stage": "b"}})
     assert run.step == 200

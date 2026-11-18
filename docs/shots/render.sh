@@ -46,7 +46,7 @@ for shot in "$@"; do
             # By its real path, so `./montage/x` is caught as a montage too.
             json=$(realpath -m "$here/${names[i]}.json")
             [[ $json == "$here"/*/*.json && $json != "$here"/montage/* ]] \
-                || { echo "$shot: a tile is a shot, not a montage: ${names[i]}" >&2; exit 1; }
+                || { echo "$shot: a tile must be a shot outside montage/: ${names[i]}" >&2; exit 1; }
             [[ -f $json ]] || { echo "$shot: no shot ${names[i]}" >&2; exit 1; }
             names[i]=${json#"$here"/}
             names[i]=${names[i]%.json}
