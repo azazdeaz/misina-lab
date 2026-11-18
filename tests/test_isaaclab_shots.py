@@ -93,4 +93,4 @@ def test_a_demo_stalled_short_of_the_moment_fails(monkeypatch):
     run = Run("a" * 10_000)
     with pytest.raises(ValueError):
         shots.Moments(iter(run), 0.005).reach({"at": {"stage": "b"}})
-    assert run.step <= 201
+    assert run.step == 200

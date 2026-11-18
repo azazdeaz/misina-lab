@@ -137,8 +137,8 @@ the five atomic adds each thread makes at the end of the per-body contact
 kernel, whether it had a contact or not."""
 
 PAIRS_PER_SHAPE = 16
-"""Candidate pairs the `"sap"` and `"nxn"` broad phases keep room for, per
-shape.
+"""How many times as many candidate pairs as there are shapes the `"sap"` and
+`"nxn"` broad phases keep room for, in one buffer for the whole scene.
 
 Newton otherwise keeps a slot for every pair of shapes, which grows with the
 square of the scene: a scene of 14,000 shapes fills a 16 GB card with them
@@ -157,8 +157,8 @@ N(N-1)/2 pairs before a step is taken: ten thousand segments is 55 million
 pairs and 4 GiB. Filtering happens as the list is built, not inside a kernel,
 so a group that declines a pair never allocates it. That is the explicit
 broad phase, the default; the NxN and SAP ones `make_physics_cfg_newton` can
-pick instead read the groups in a kernel every step, with a pair buffer sized
-for every pair of shapes.
+pick instead read the groups in a kernel every step, with a pair buffer of
+`PAIRS_PER_SHAPE` times the shape count.
 
 A group is one signed integer per shape. A positive group meets itself and
 every negative one; a negative group meets everything but its own; zero meets
@@ -593,8 +593,9 @@ def widen_contact_threads() -> None:
 
 def _pair_capped(broad_phase: str) -> Callable:
     """Makes the rods' collision pipeline on the coupler's view of the model,
-    with room for `PAIRS_PER_SHAPE` candidate pairs a shape, which the
-    `"explicit"` broad phase ignores for the pairs it lists."""
+    with room for `PAIRS_PER_SHAPE` times as many candidate pairs as it has
+    shapes, which the `"explicit"` broad phase ignores for the pairs it
+    lists."""
 
     def pipeline(view):
         from newton import CollisionPipeline
@@ -635,7 +636,8 @@ def make_physics_cfg_newton(
             meets its own plant and passes through every other
             (`PLANT_GROUPS`), and `ContactSlots` lets the two faces of a cut
             meet. `"nxn"` and `"sap"` read the groups every step instead,
-            with room for `PAIRS_PER_SHAPE` candidate pairs a shape: a cut
+            with room for `PAIRS_PER_SHAPE` times as many candidate pairs as
+            there are shapes: a cut
             gives its piece groups of its own, so it meets every plant and
             every other piece, all but the face across the cut, which the
             joint's filter pair keeps out for good. No `ContactSlots` rows

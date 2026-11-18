@@ -42,9 +42,14 @@ for shot in "$@"; do
         read -r columns width height gap <<< "$layout"
         names=$(jq -r '.tiles[]' "$shot")
         mapfile -t names <<< "$names"
-        for tile in "${names[@]}"; do
-            [[ $tile != montage/* ]] || { echo "$shot: a tile is not a montage: $tile" >&2; exit 1; }
-            [[ -f $here/$tile.json ]] || { echo "$shot: no shot $tile" >&2; exit 1; }
+        for i in "${!names[@]}"; do
+            # By its real path, so `./montage/x` is caught as a montage too.
+            json=$(realpath -m "$here/${names[i]}.json")
+            [[ $json == "$here"/*/*.json && $json != "$here"/montage/* ]] \
+                || { echo "$shot: a tile is a shot, not a montage: ${names[i]}" >&2; exit 1; }
+            [[ -f $json ]] || { echo "$shot: no shot ${names[i]}" >&2; exit 1; }
+            names[i]=${json#"$here"/}
+            names[i]=${names[i]%.json}
         done
         inputs=() graph= tiles= n=0
         for tile in "${names[@]}"; do
