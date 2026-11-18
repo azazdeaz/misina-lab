@@ -33,9 +33,11 @@ scene.
 | the re-exports in `python/{PACKAGE}/isaaclab/__init__.py` | generated into the regions `imports` and `all`, the second inside `__all__` |
 | the generator's parameters page, `docs/parameters.md` by convention | generated whole |
 
-The first three rows need no extra step: a new field shows up the next
-time that code runs. The generated text is written to files in the
-generator's crate by a command, and a test checks that it is up to date.
+The first three rows are compiled Rust that reads the field, so a new field
+shows up the next time that code is built: `cargo run` builds the viewer,
+and step 4 below rebuilds the Python module. The generated text is written
+to files in the generator's crate by a command, and a test checks that it
+is up to date.
 
 > [!NOTE]
 > **In Bevy terms.** Every fragment derives `Reflect`, so its field names,
@@ -76,11 +78,18 @@ generator's crate by a command, and a test checks that it is up to date.
    `cargo test -p <generator-crate> regen_params -- --ignored`.
 
 3. Run `cargo test`, with `-p <generator-crate>` in a Cargo workspace. Two
-   of the generator's tests check the result. One
-   calls `codegen::stale` and fails while a generated file is out of date.
-   The other calls `testing::check_params` and names the first field with
-   no doc comment, with no slider or choice list, or with a default outside
-   its slider range or choice list.
+   of the generator's tests check the result. One calls `codegen::stale`
+   and fails while a generated file is out of date. The other calls
+   `testing::check_params` and names the first field with no doc comment,
+   with no slider or choice list, or with a default outside its slider
+   range or choice list.
+
+4. To use the change from Python, rebuild the extension module, the
+   compiled Rust that Python imports. Neither the regeneration nor
+   `cargo test` does that. In a project laid out as
+   [outside-projects.md](outside-projects.md#pyprojecttoml) describes, the
+   command is `uv sync --reinstall-package <package>`. Until then, a new
+   field is in the generated Python files and not in the installed module.
 
 The declaration needs nothing else. A new field has no effect until the
 element's code reads it. If the element copies the field into its configs,

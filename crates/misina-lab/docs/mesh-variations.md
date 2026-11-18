@@ -75,9 +75,9 @@ being grown.
   leaf cut from one of five outline drawings: they are five shapes, not five
   nearby numbers, and with a gap that large a budget of five or more keeps
   all five.
-- **Two configs that build no mesh are zero apart.** All of them then share
-  one representative, so things that cost nothing take at most one place
-  in the budget.
+- **Two configs that build no mesh are zero apart.** Then at most one of
+  them is picked as a representative, so things that cost nothing take at
+  most one place in the budget.
 
 ## The budget
 
