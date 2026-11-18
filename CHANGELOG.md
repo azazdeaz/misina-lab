@@ -20,6 +20,11 @@ Two kinds of change break a project that worked on the release before:
 
 ## [Unreleased]
 
+### Added
+
+- **misina-lab**: the Python package's page on PyPI has a description and
+  links to the docs site, the repository and the changelog.
+
 ## [0.1.0] - 2026-11-18
 
 The first release. Scene document format 12. vinery-lab and greenhouse-lab

@@ -8,9 +8,16 @@ name = "misina-lab"
 # the generators release under and pin this package to.
 version = "0.1.0"
 description = "The Python side of a generated scene: the USD builder and the Isaac Lab spawner every generator shares."
+readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT OR Apache-2.0"
 authors = [{ name = "Andras Polgar", email = "azazdeaz@gmail.com" }]
 # `misina_lab.usd` authors the stage; `misina_lab.isaaclab` needs Isaac Lab
 # installed beside it and is not imported by default.
 dependencies = ["usd-core>=24.11"]
+
+[project.urls]
+Homepage = "https://azazdeaz.github.io/misina-lab/"
+Documentation = "https://azazdeaz.github.io/misina-lab/crates/misina-lab/"
+Repository = "https://github.com/azazdeaz/misina-lab"
+Changelog = "https://github.com/azazdeaz/misina-lab/blob/main/CHANGELOG.md"
