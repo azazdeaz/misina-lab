@@ -38,7 +38,7 @@ first config. Then it keeps adding the config that is worst matched so far:
 the one farthest from its nearest representative. It stops when it has `k`
 representatives, or when every config is within `max_radius` of one. Pass
 0 for `max_radius` to use the whole budget: the picking then stops early
-only when every config left is the same as a representative.
+only when every config left is at distance zero from a representative.
 
 Picking the farthest config each time keeps the *largest* distance from any
 organ to its representative small. If `max_radius` does not stop the picking
@@ -87,7 +87,9 @@ lower it to save memory at the cost of variety. To see what a budget cost,
 read `radius` on the `Codebook`: how far the worst-matched organ is from the
 representative whose mesh it uses. An element may pass `farthest_first` a
 larger `k` than `variations` where it has to: one that builds several
-kinds of organ keeps at least one mesh for each kind present.
+kinds of organ keeps at least one mesh for each kind present. A `k` of
+zero gives an empty `Codebook`, with no representative for any config, so
+elements pass at least 1: `params.variations.max(1)`.
 
 A larger budget cannot create variety that is not in the configs. If every
 config is identical there is one representative, however large the budget.

@@ -82,8 +82,11 @@ generator's crate by a command, and a test checks that it is up to date.
    no doc comment, with no slider or choice list, or with a default outside
    its slider range or choice list.
 
-Nothing else needs to change. Do not edit the generated regions by hand:
-the next regeneration overwrites them.
+The declaration needs nothing else. A new field has no effect until the
+element's code reads it. If the element copies the field into its configs,
+the per-instance values its meshes are built from, its `reauthor` system
+has to copy it too ([elements.md](elements.md#rules)). Do not edit the
+generated regions by hand: the next regeneration overwrites them.
 
 ## What a field declares
 
@@ -136,8 +139,9 @@ mesh is built.
 
 ## Add a fragment
 
-A new element's struct of parameters is a new fragment. Beyond the element
-file itself:
+A new element's struct of parameters is a new fragment.
+[elements.md](elements.md) lists the steps for the element itself: its
+module, its plugin and its stage. For the fragment:
 
 1. Name the struct `<Stem>Params`. The stem names its classes: `CoverParams`
    is `CoverParams` in Python and `CoverCfg` in Isaac Lab. Derive

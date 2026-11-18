@@ -91,8 +91,10 @@ about 200 lines.
   while a symbol survives and can be grepped. The test fails on a line link.
 - Link a heading, `elements.md#rules`, to land a reader on one section. The
   test checks that the heading exists.
-- Keep links relative and inside the repository. The test fails on one that
-  resolves to nothing.
+- Link a file of this repository by its relative path. The test fails on
+  one that resolves to nothing. A URL is for what a relative path cannot
+  reach: another project's documentation, or this repository at a
+  release's tag.
 
 ## Markdown that renders everywhere
 

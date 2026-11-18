@@ -32,8 +32,10 @@ while that number stays the same.
 Not every stream starts from the seed. The terrain, the ground element the
 framework provides, has no seed parameter yet. It computes the height of
 the ground from noise, a smooth random field, made from a fixed seed of its
-own. Some elements also build a mesh from fixed numbers and the organ's
-index or config alone. Changing the seed changes neither of these.
+own, so changing the seed does not change the ground. Some elements also
+start the stream a mesh is built with from a fixed number and the mesh's
+index, without the seed. Changing the seed leaves those draws as they
+were; the mesh still changes if its config does.
 
 ## Starting a stream
 
@@ -62,7 +64,8 @@ representative's index:
 ```rust
 use misina_lab::rng::{Rng, salt};
 
-/// Any fixed number. Only that it never changes matters.
+/// Any fixed number that no other stream constant has. It must never
+/// change.
 const STEM_STREAM: u64 = 0x589A_B41E_A1D2_F35B;
 
 let mut rng = Rng::new(scene.seed ^ STEM_STREAM ^ salt(index as u64));
