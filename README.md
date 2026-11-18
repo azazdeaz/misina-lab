@@ -10,8 +10,10 @@ package, and an Isaac Lab spawner that brings the scene in as USD.
 > [!WARNING]
 > **Developer preview.** Expect breaking changes.
 
-![A vineyard built on Misina Lab, in Isaac Lab](https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/isaaclab_demo/alley.webp)
-*A vineyard built on Misina Lab, in Isaac Lab*
+![Four robots working scenes built on Misina Lab, in Isaac Lab: a quadruped walking a vineyard, an arm pruning dormant canes, a harvester cutting a tomato truss, a straddler driving over a row](https://raw.githubusercontent.com/azazdeaz/misina-lab-docs-assets/main/montage/demos.webp)
+*Scenes built on Misina Lab, in Isaac Lab: the [quadruped](examples/isaaclab_demo/README.md),
+[pruning](examples/pruning_demo/README.md), [harvesting](examples/greenhouse_demo/README.md) and
+[straddler](examples/straddler_demo/README.md) demos*
 
 It ships with two [reference generators](#reference-generators), a vineyard
 and a tomato greenhouse, to try it on and to start from. If you need help, or

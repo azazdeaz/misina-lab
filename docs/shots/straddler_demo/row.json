@@ -1,0 +1,7 @@
+{
+  "size": [1920, 1080],
+  "set": {"shoot.stray": 0.35},
+  "at": {"waypoint": 21},
+  "warmup": 0.09,
+  "camera": {"focus": [2.91, -1.95, -0.89], "yaw": 103.2, "pitch": 21.7, "radius": 9.00, "fov": 40.0}
+}

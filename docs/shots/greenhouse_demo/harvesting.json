@@ -1,0 +1,8 @@
+{
+  "size": [1920, 1080],
+  "set": {"layout.rows": 6, "layout.row_length": 12.0},
+  "harvest": [3],
+  "at": {"truss": 3, "severed": false, "stage": "close"},
+  "warmup": 0.84,
+  "camera": {"focus": [2.33, -0.10, 1.09], "yaw": -134.5, "pitch": 24.8, "radius": 1.72, "fov": 50.0}
+}

@@ -13,22 +13,31 @@ A shot is a JSON object:
   side; `pitch`, degrees above the horizon; `radius`, meters from the focus;
   and `fov`, the vertical field of view in degrees, 45 if left out.
 
-A script may add fields of its own, such as where a robot starts. It takes
-`SHOT.json [OUT.png]` and makes these calls around its own scene:
+A script may add fields of its own, such as where a robot starts, and a
+script of a demo that moves takes the moment of the picture as two:
+
+- `at`: what the demo is doing, as `Moments` tells it, e.g. `{"box": 2,
+  "stage": "carry"}`; the picture is taken the first time it holds every
+  item. Optional: from the start.
+- `warmup`: seconds of simulated time on from there.
+
+It takes `SHOT.json [OUT.png]` and makes these calls around its own scene:
 
     args = arguments("Renders a still of ...")
-    shot = load(args.shot, {"its_own_field"})
+    shot = load(args.shot, {"its_own_field", "at", "warmup"})
     configure(cfg, shot.get("set", {}))
     with launch_simulation(sim_cfg, launcher(args.out)):
         ...  # the scene
         camera = sensor(shot) if args.out else None
         sim.reset()
-        ...  # on to the moment of the picture
-        finish(sim, shot, ground, camera, args.out)
+        moments = Moments(doing(steps), dt)  # the demo's steps, told as dicts
+        moments.reach(shot)
+        finish(sim, shot, ground, camera, args.out, moments)
 
 Without OUT, Kit opens on the moment the picture shows, the simulation stopped
-there and the viewport aimed as the shot, and P prints the viewport's camera
-as the shot's `camera`.
+there and the viewport aimed as the shot. P prints the viewport's camera as
+the shot's `camera`, and the moment as its `at` and `warmup`; G plays the
+demo on from there and pauses it again.
 """
 
 from __future__ import annotations
@@ -37,6 +46,7 @@ import argparse
 import json
 import math
 import pathlib
+from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
 import isaaclab.sim as sim_utils
@@ -59,6 +69,11 @@ SETTLE = 32
 renderer's accumulation to settle."""
 
 CAMERA = "/World/ShotCamera"
+
+PATIENCE = 3600.0
+"""Seconds of simulated time `Moments.reach` steps a demo through before it
+gives up on a shot's `at`: longer than any demo's run, for one that stalls
+short of its end."""
 
 APERTURE = 20.955
 """The horizontal aperture of Isaac Lab's pinhole camera, in the units of its
@@ -87,6 +102,52 @@ def load(path: pathlib.Path, fields: frozenset[str] | set[str] = frozenset()) ->
         raise ValueError(f"{path}: no shot field {sorted(unknown)}")
     shot["camera"].setdefault("fov", 45.0)
     return shot
+
+
+class Moments:
+    """A demo run a physics step at a time, each step yielding what the demo
+    is doing then as a dict, such as `{"box": 2, "stage": "carry"}`, which
+    a shot's `at` picks a moment by. Every step's dict has the same keys,
+    and names a moment once: a stage that comes again, as a job tried
+    again, tells which time it is. The steps end where the demo's run
+    does, its last job done, so a moment it never comes to fails; one it
+    stalls short of fails after `PATIENCE`."""
+
+    def __init__(self, steps: Iterator[dict], dt: float):
+        self.steps, self.dt = steps, dt
+        self.now = next(steps)
+        """What the demo is doing."""
+        self.since = 0
+        """Physics steps since it started doing that."""
+
+    def step(self) -> bool:
+        """Steps the demo on; False once it has ended."""
+        now = next(self.steps, None)
+        if now is None:
+            return False
+        self.since = self.since + 1 if now == self.now else 0
+        self.now = now
+        return True
+
+    def reach(self, shot: dict) -> None:
+        """Steps on to the shot's moment: until what the demo is doing holds
+        every item of its `at`, then `warmup` seconds on."""
+        at, warmup = shot.get("at", {}), shot.get("warmup", 0.0)
+        if unknown := set(at) - set(self.now):
+            raise ValueError(f"no moment {sorted(unknown)}: the demo tells {sorted(self.now)}")
+        waited = 0
+        while not at.items() <= self.now.items():
+            # The time once the step is taken, so none past `PATIENCE` is.
+            if (waited + 1) * self.dt > PATIENCE or not self.step():
+                raise ValueError(f"the demo never got to {at}")
+            waited += 1
+        for _ in range(round(warmup / self.dt)):
+            if not self.step():
+                raise ValueError(f"the demo ended within {warmup} s of {at}")
+
+    def __str__(self) -> str:
+        """The moment as a shot's `at` and `warmup`."""
+        return f'"at": {json.dumps(self.now)}, "warmup": {self.since * self.dt:.3f}'
 
 
 def configure(cfg: GeneratedSceneCfg, changes: dict) -> None:
@@ -185,11 +246,13 @@ def finish(
     ground: Ground | None,
     camera: Camera | None,
     out: pathlib.Path | None,
+    moments: Moments | None = None,
 ) -> None:
     """Saves what the shot's `camera` sees of the scene as it stands to `out`;
-    with no camera, opens Kit's viewport on it instead, to frame by hand."""
+    with no camera, opens Kit's viewport on it instead, to frame by hand and,
+    given the demo's `moments`, to play it on."""
     if camera is None:
-        _frame(sim, shot, ground)
+        _frame(sim, shot, ground, moments)
         return
     place(sim_utils.get_current_stage().GetPrimAtPath(CAMERA), *aim(shot["camera"], ground))
     _take(sim, camera, out)
@@ -217,9 +280,12 @@ def _take(sim: sim_utils.SimulationContext, camera: Camera, out: pathlib.Path) -
     Image.fromarray(rgb).save(out)
 
 
-def _frame(sim: sim_utils.SimulationContext, shot: dict, ground: Ground | None) -> None:
+def _frame(
+    sim: sim_utils.SimulationContext, shot: dict, ground: Ground | None, moments: Moments | None
+) -> None:
     """Holds the shot's moment in Kit's viewport, aimed and shaped as the shot,
-    and prints the viewport's camera each time P is pressed."""
+    and prints the viewport's camera, and the moment, each time P is pressed.
+    G plays `moments` on and pauses them."""
     import carb.input
     from omni.kit.viewport.utility import get_active_viewport
     from pxr import Gf, Usd, UsdGeom
@@ -237,13 +303,19 @@ def _frame(sim: sim_utils.SimulationContext, shot: dict, ground: Ground | None) 
     with Usd.EditContext(stage, stage.GetSessionLayer()):
         camera.GetFocalLengthAttr().Set(lens(shot["camera"]["fov"], shot["size"], aperture))
 
+    playing = False
+
     def on_input(event) -> bool:
+        nonlocal playing
         key = event.event
         if (
-            event.deviceType == carb.input.DeviceType.KEYBOARD
-            and key.type == carb.input.KeyboardEventType.KEY_PRESS
-            and key.input.name == "P"
+            event.deviceType != carb.input.DeviceType.KEYBOARD
+            or key.type != carb.input.KeyboardEventType.KEY_PRESS
         ):
+            return True
+        if key.input.name == "G" and moments:
+            playing = not playing
+        elif key.input.name == "P":
             to_world = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
             # Kit keeps the point the viewport orbits in the camera's own frame.
             orbited = prim.GetAttribute("omni:kit:centerOfInterest").Get() or Gf.Vec3d(0, 0, -10)
@@ -252,11 +324,20 @@ def _frame(sim: sim_utils.SimulationContext, shot: dict, ground: Ground | None) 
             fov = math.degrees(2 * math.atan(aperture * height / width / (2 * focal)))
             eye, target = to_world.ExtractTranslation(), to_world.Transform(orbited)
             print(pose(np.array(eye), np.array(target), fov, ground), flush=True)
+            if moments:
+                print(moments, flush=True)
         return True
 
     inputs = carb.input.acquire_input_interface()
     listening = inputs.subscribe_to_input_events(on_input)
-    print("[INFO]: frame the shot in the viewport; P prints its camera", flush=True)
+    plays = "; G plays the demo on and pauses it" if moments else ""
+    print(f"[INFO]: frame the shot in the viewport; P prints its camera{plays}", flush=True)
     while sim.is_running():
-        sim.render()
+        # A demo's step renders, as it does with Kit's window open.
+        if playing:
+            # A G pressed during the step, while it renders, pauses after it.
+            stepped = moments.step()
+            playing = playing and stepped
+        else:
+            sim.render()
     inputs.unsubscribe_to_input_events(listening)

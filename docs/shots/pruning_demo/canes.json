@@ -1,0 +1,6 @@
+{
+  "size": [1920, 1080],
+  "at": {"cut": 3, "stage": "close"},
+  "warmup": 0.45,
+  "camera": {"focus": [4.94, 1.16, -0.73], "yaw": 49.9, "pitch": 42.8, "radius": 4.40, "fov": 40.0}
+}

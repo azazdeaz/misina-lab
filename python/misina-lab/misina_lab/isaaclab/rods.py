@@ -26,7 +26,7 @@ that build.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
@@ -136,6 +136,17 @@ correct: the kernels use it only as `tid // n`, `tid % n`, a strided loop
 the five atomic adds each thread makes at the end of the per-body contact
 kernel, whether it had a contact or not."""
 
+PAIRS_PER_SHAPE = 16
+"""How many times as many candidate pairs as there are shapes the `"sap"` and
+`"nxn"` broad phases keep room for, in one buffer for the whole scene.
+
+Newton otherwise keeps a slot for every pair of shapes, which grows with the
+square of the scene: a scene of 14,000 shapes fills a 16 GB card with them
+before its first step. Rods find about a quarter of a pair per shape -- 912
+pairs among 3,100 shapes, 6,852 among 30,000, with a rod cut and its piece
+carried off -- so this is some sixty times that. Past it Newton warns of a
+buffer overflow each step."""
+
 PLANT_GROUPS = 2
 """The first collision group a plant takes; each plant gets the next one up.
 
@@ -146,8 +157,8 @@ N(N-1)/2 pairs before a step is taken: ten thousand segments is 55 million
 pairs and 4 GiB. Filtering happens as the list is built, not inside a kernel,
 so a group that declines a pair never allocates it. That is the explicit
 broad phase, the default; the NxN and SAP ones `make_physics_cfg_newton` can
-pick instead read the groups in a kernel every step, with a pair buffer sized
-for every pair of shapes.
+pick instead read the groups in a kernel every step, with a pair buffer of
+`PAIRS_PER_SHAPE` times the shape count.
 
 A group is one signed integer per shape. A positive group meets itself and
 every negative one; a negative group meets everything but its own; zero meets
@@ -542,7 +553,7 @@ def reads_contact_pairs(physics: PhysicsCfg | None) -> bool:
     of each proxy mapping into a VBD entry of a coupled solver
     (`make_physics_cfg_newton`), or `collision_cfg` under a VBD solver on its
     own. Either left unset is Newton's default, explicit, and so is a pipeline
-    given as a callable, which names no broad phase."""
+    given as a callable that names no `broad_phase`."""
     solver = getattr(physics, "solver_cfg", None)
     entries = getattr(solver, "entries", None)
     if entries is None:
@@ -580,6 +591,24 @@ def widen_contact_threads() -> None:
         module._NUM_CONTACT_THREADS_PER_BODY = wp.constant(CONTACT_THREADS)
 
 
+def _pair_capped(broad_phase: str) -> Callable:
+    """Makes the rods' collision pipeline on the coupler's view of the model,
+    with room for `PAIRS_PER_SHAPE` times as many candidate pairs as it has
+    shapes, which the `"explicit"` broad phase ignores for the pairs it
+    lists."""
+
+    def pipeline(view):
+        from newton import CollisionPipeline
+
+        args = NewtonCollisionPipelineCfg(broad_phase=broad_phase).to_pipeline_args()
+        return CollisionPipeline(view, **args, shape_pairs_max=PAIRS_PER_SHAPE * view.shape_count)
+
+    # A function: Isaac Lab writes a cfg's callables out by their name. Its
+    # broad phase is for `reads_contact_pairs`.
+    setattr(pipeline, "broad_phase", broad_phase)  # noqa: B010
+    return pipeline
+
+
 def make_physics_cfg_newton(
     cfg: GeneratedSceneCfg,
     robot: str,
@@ -607,11 +636,13 @@ def make_physics_cfg_newton(
             meets its own plant and passes through every other
             (`PLANT_GROUPS`), and `ContactSlots` lets the two faces of a cut
             meet. `"nxn"` and `"sap"` read the groups every step instead,
-            with a pair buffer sized for every pair of shapes: a cut gives
-            its piece groups of its own, so it meets every plant and every
-            other piece, all but the face across the cut, which the joint's
-            filter pair keeps out for good. No `ContactSlots` rows are
-            reserved, so the scene needs no static shapes to park them on.
+            with room for `PAIRS_PER_SHAPE` times as many candidate pairs as
+            there are shapes: a cut
+            gives its piece groups of its own, so it meets every plant and
+            every other piece, all but the face across the cut, which the
+            joint's filter pair keeps out for good. No `ContactSlots` rows
+            are reserved, so the scene needs no static shapes to park them
+            on.
 
     Returns:
         A physics config to hand to `SimulationCfg(physics=...)`.
@@ -659,7 +690,7 @@ def make_physics_cfg_newton(
                     # The pipeline on the rods' view, which finds every
                     # contact a rod makes: with a rod, a proxy or a static
                     # shape.
-                    collision_pipeline=NewtonCollisionPipelineCfg(broad_phase=broad_phase),
+                    collision_pipeline=_pair_capped(broad_phase),
                 )
             ],
         ),

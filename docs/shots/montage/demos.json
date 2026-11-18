@@ -1,0 +1,11 @@
+{
+  "tiles": [
+    "isaaclab_demo/walking",
+    "pruning_demo/canes",
+    "greenhouse_demo/harvesting",
+    "straddler_demo/row"
+  ],
+  "columns": 2,
+  "tile": [1200, 675],
+  "gap": 0
+}

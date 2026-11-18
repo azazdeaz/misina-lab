@@ -20,7 +20,12 @@ repository. `tests/test_docs.py` fails on a link to a picture no shot renders.
 | Shot | Rendered by | Shown at |
 | --- | --- | --- |
 | `docs/shots/vinery-lab/editor.json` | the vineyard's viewer | the top of `crates/vinery-lab/README.md` |
-| `docs/shots/isaaclab_demo/alley.json` | `examples/isaaclab_demo/shot.py` | the top of `README.md` and of `crates/vinery-lab/README.md` |
+| `docs/shots/montage/demos.json` | `render.sh`, from the four shots it names | the top of `README.md` |
+| `docs/shots/isaaclab_demo/alley.json` | `examples/isaaclab_demo/shot.py` | the top of `crates/vinery-lab/README.md` |
+| `docs/shots/isaaclab_demo/walking.json` | `examples/isaaclab_demo/shot.py` | the montage |
+| `docs/shots/pruning_demo/canes.json` | `examples/pruning_demo/shot.py` | the montage |
+| `docs/shots/greenhouse_demo/harvesting.json` | `examples/greenhouse_demo/shot.py` | the montage |
+| `docs/shots/straddler_demo/row.json` | `examples/straddler_demo/shot.py` | the montage |
 | `docs/shots/greenhouse-lab/editor.json` | the greenhouse's viewer | the top of `crates/greenhouse-lab/README.md` |
 | `docs/shots/greenhouse_demo/rows.json` | `examples/greenhouse_demo/shot.py` | the top of `crates/greenhouse-lab/README.md`, and its section of `README.md` |
 | `docs/shots/greenhouse_demo/harvest.json` | `examples/greenhouse_demo/shot.py` | the top of `examples/greenhouse_demo/README.md` |
@@ -36,9 +41,9 @@ docs/shots/render.sh docs/shots/vinery-lab/editor.json   # one
 Each picture lands in `target/docs-assets/`, laid out as the assets
 repository is, as WebP. The folder a shot is in names what renders it: an
 example with a `shot.py` renders it in Isaac Sim, headless, in a few minutes
-on an RTX GPU; any other folder is a crate whose viewer renders it in about
-ten seconds, into an image at the shot's size: it opens no window and needs
-no display.
+on an RTX GPU; `montage` puts other shots' pictures together; any other folder is a crate
+whose viewer renders it in about ten seconds, into an image at the shot's
+size: it opens no window and needs no display.
 `butom_capture`'s sets its frames beside the real dataset's, so it needs
 `BUTOM` set to the folder BUTom-ST21's `rgb.tar.gz` unpacks its sequences
 into. Look at every picture before publishing.
@@ -76,7 +81,20 @@ and `start`, with the `camera`, the parameters to `set` and a `note`.
 may add fields of its own, which its `shot.py` names: the quadruped demo's
 `waypoint`, where on its route the robot starts, and `warmup`, the simulated
 seconds it walks before the picture; the greenhouse's `harvest`, the paths
-the harvester works, and `warmup`, the seconds it works first.
+the harvester works. The pruning demo's, the straddler's and a greenhouse
+shot with `harvest` pick their moment by what the robot is doing, `at`, and
+the simulated seconds on from there, `warmup`: `{"truss": 2, "stage":
+"carry"}` is the second truss carried to the crate. Each `shot.py`'s docstring says
+what its demo tells; `shots.Moments` is how.
+
+**A montage** in `docs/shots/montage/` is the pictures of the shots in
+`tiles`, `columns` to a row, each scaled and cropped to `tile` pixels, `gap`
+apart and transparent between. `render.sh` uses a tile's picture already in
+`target/docs-assets` as it is, and renders a montage only when named or in a
+full run: after rendering a tile, render its montage too, or `publish.sh`
+keeps the published montage, made of the old tile.
+Render a tile at its tile's shape, so the viewport frames what the montage
+shows.
 
 **The camera** is the same in both, in the scene's coordinates, Z up and in
 meters: `focus`, x and y and then a height above the ground there; `yaw`, 0
@@ -111,8 +129,10 @@ will be, the viewport at the shot's size and camera. Navigate the viewport and
 press `P`: the terminal prints the camera. The log's
 `after the warmup the robot is at (x, y)` says where to aim. To move the robot
 instead, change `waypoint`, a meter apart down one alley and back up the next,
-or `warmup`. The greenhouse's opens the same way from `examples/greenhouse_demo`;
-to move the harvester, change `warmup`.
+or `warmup`. The pruning demo's, the straddler's and the greenhouse's open
+the same way from their folders, and in those that take `at`, `G` plays the
+demo on and pauses it again, and `P` prints the moment too, as the shot's
+`at` and `warmup`.
 
 Then render the shot and look at it.
 

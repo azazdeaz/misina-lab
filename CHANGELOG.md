@@ -65,7 +65,8 @@ The first release, 0.1.0. Scene document format 12.
   cut piece as a hand does.
 - **misina-lab**: Isaac Sim tools. `ColliderView` draws every collider of the
   running Newton model in Kit's viewport, `shots` renders a still of a scene
-  from a shot file, and `film` films a video of the running simulation.
+  from a shot file, at a moment picked by what the demo is doing, and `film`
+  films a video of the running simulation.
 - **vinery-lab**: a parametric vineyard. Rows on rolling terrain with bumps a
   wheel feels, posts and trellis wires, vines trained up to the fruiting wire
   and along it, leaves built from their veins and bent along them, a cover crop
