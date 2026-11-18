@@ -37,13 +37,14 @@ for shot in "$@"; do
         # and cropped to `tile` pixels, `gap` apart with nothing between. A
         # tile's picture the folder lacks is rendered first; one it holds is
         # used as it is. A tile is a shot of an example or a crate, never a
-        # montage.
+        # montage, and every one is checked before the first renders.
         layout=$(jq -r '[.columns, .tile[], .gap] | @tsv' "$shot")
         read -r columns width height gap <<< "$layout"
         names=$(jq -r '.tiles[]' "$shot")
         mapfile -t names <<< "$names"
         for tile in "${names[@]}"; do
             [[ $tile != montage/* ]] || { echo "$shot: a tile is not a montage: $tile" >&2; exit 1; }
+            [[ -f $here/$tile.json ]] || { echo "$shot: no shot $tile" >&2; exit 1; }
         done
         inputs=() graph= tiles= n=0
         for tile in "${names[@]}"; do

@@ -137,7 +137,7 @@ class Moments:
             raise ValueError(f"no moment {sorted(unknown)}: the demo tells {sorted(self.now)}")
         waited = 0
         while not at.items() <= self.now.items():
-            if waited * self.dt > PATIENCE or not self.step():
+            if waited * self.dt >= PATIENCE or not self.step():
                 raise ValueError(f"the demo never got to {at}")
             waited += 1
         for _ in range(round(warmup / self.dt)):

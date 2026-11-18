@@ -6,7 +6,6 @@ Requires Isaac Lab; skipped entirely where it isn't installed.
 
 from __future__ import annotations
 
-import itertools
 import json
 
 import pytest
@@ -88,7 +87,10 @@ def test_a_moment_the_demo_never_comes_to_fails(at: dict):
 
 
 def test_a_demo_stalled_short_of_the_moment_fails(monkeypatch):
-    """One whose steps never end gives up after `PATIENCE`."""
+    """One that never comes to it gives up after `PATIENCE`, 200 steps here,
+    long before its steps end."""
     monkeypatch.setattr(shots, "PATIENCE", 1.0)
+    run = Run("a" * 10_000)
     with pytest.raises(ValueError):
-        shots.Moments(itertools.repeat({"stage": "a"}), 0.005).reach({"at": {"stage": "b"}})
+        shots.Moments(iter(run), 0.005).reach({"at": {"stage": "b"}})
+    assert run.step <= 201
