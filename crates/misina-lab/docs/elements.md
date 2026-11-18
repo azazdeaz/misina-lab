@@ -1,9 +1,5 @@
 # Elements
 
-> [!WARNING]
-> **Under development.** This page may not reflect the current state of
-> the source. We're working on it.
-
 A scene is the 3D world that a [generator](generators.md) builds and
 exports to a simulator such as Isaac Lab. An **element** is the code that
 builds one kind of thing in it: the posts, the plants, the leaves, a patch
@@ -30,11 +26,15 @@ An element with one mesh for all its organs, such as a wire of one gauge,
 or with a mesh for every organ, has no metric and skips the grouping.
 
 > [!NOTE]
-> **In Bevy terms.** Each organ is an entity, and its config is a
-> `Component` on it. The fragment is a `Resource`. A system is a function
-> Bevy runs every frame, given the data it asks for, and `run_if` adds a
-> run condition, a check that decides whether it runs this frame. A plugin
-> is a function that adds resources and systems to the `App`.
+> **In Bevy terms.** Each organ is an
+> [entity](https://bevy.org/learn/quick-start/getting-started/ecs/), and
+> its config is a `Component` on it. The fragment is a
+> [`Resource`](https://bevy.org/learn/quick-start/getting-started/resources/).
+> A system is a function Bevy runs every frame, given the data it asks for,
+> and `run_if` adds a run condition, a check that decides whether it runs
+> this frame. A
+> [plugin](https://bevy.org/learn/quick-start/getting-started/plugins/) is
+> a function that adds resources and systems to the `App`.
 
 To add an element:
 
@@ -86,8 +86,11 @@ fn reauthor(params: Res<LeafParams>, mut leaves: Query<&mut LeafConfig>) { /* ..
 fn build(commands: Commands, library: Library, /* ... */) -> Result<()> { /* ... */ }
 ```
 
-`Metric`, `configs_changed` and `Library` come from the framework. `Grow`
-is the generator's own list of stages.
+[`Metric`](https://docs.rs/misina-lab/latest/misina_lab/quantize/trait.Metric.html),
+[`configs_changed`](https://docs.rs/misina-lab/latest/misina_lab/scene/fn.configs_changed.html)
+and
+[`Library`](https://docs.rs/misina-lab/latest/misina_lab/scene/struct.Library.html)
+come from the framework. `Grow` is the generator's own list of stages.
 
 Several things are generated from the fragment alone
 ([editing-parameters.md](editing-parameters.md)). The viewer, the window
@@ -114,8 +117,9 @@ other's output can share a stage, such as the leaves and the ground cover.
 Every layer that groups its organs runs the same five steps:
 
 1. **Collect** every config of its own kind, and sort them by
-   `scene::Order`, a number each organ is given when it is placed. The sort
-   makes the result the same on every run ([Rules](#rules)).
+   [`scene::Order`](https://docs.rs/misina-lab/latest/misina_lab/scene/struct.Order.html),
+   a number each organ is given when it is placed. The sort makes the
+   result the same on every run ([Rules](#rules)).
 2. **Cluster**: group similar configs, and pick a limited number of them,
    the **representatives**, to get a mesh. The limit is
    `params.variations`, which an element raises where it has to keep a mesh
@@ -147,13 +151,15 @@ copies.
 
 ## The prims an element creates
 
-The exported scene is a tree of USD **prims**, the nodes of a USD stage. An
-element creates two kinds:
+The exported scene is a tree of USD
+[**prims**](https://openusd.org/release/glossary.html#usdglossary-prim),
+the nodes of a USD stage. An element creates two kinds:
 
 - A **geometry prim** shows one mesh from the mesh library. It points to
   the mesh and holds no copy of its points. It has no children, and is
-  exported **instanceable**: USD loads the mesh only once, however many
-  prims point to it.
+  exported
+  [**instanceable**](https://openusd.org/release/glossary.html#usdglossary-instanceable):
+  USD loads the mesh only once, however many prims point to it.
 - A **structural prim**, such as a plant or a stem, only positions the
   prims that sit on it. It is an `Xform`, a prim that holds only a position
   and children, and each one is unique, not instanced.
@@ -178,7 +184,7 @@ Two kinds of part are exported not instanceable. One is a part that is
 its own collider, the ground: physics cannot reach a collider inside a
 shared copy ([export.md](export.md#colliders)). The other is a skin, one
 mesh that bends with a flexible organ: each skin bends on its own, so it
-cannot be a shared copy ([export.md](export.md#skins)).
+cannot be a shared copy ([rods.md](rods.md#skins)).
 
 > [!NOTE]
 > **In Bevy terms.** A geometry prim is an entity that carries the
@@ -188,56 +194,24 @@ cannot be a shared copy ([export.md](export.md#skins)).
 
 ## What an element is built from
 
-The `geometry` modules of this crate are the **geometry kernels**:
-general-purpose mesh builders. They do not know whether a mesh is a leaf
-or a stem.
+An element builds its meshes with the **geometry kernels**, the
+framework's general-purpose mesh builders: tubes, flat outlines and folds,
+bending under load, packing, and colour
+([mesh-builders.md](mesh-builders.md)). They do not know whether a mesh is
+a leaf or a stem.
 
-| Module | What it does |
-| --- | --- |
-| `geometry::mesh` | `MeshData`, the mesh type every kernel returns, and simple shapes built in it, such as a box and a cylinder |
-| `geometry::strand` | turns a polyline with a radius at each point into a tube. The tube can thicken all round at a node, where a branch or leaf joins (`Bulge`), and on one side where a stalk leaves it (`Collar`). Its rings are evenly spaced, or, given a tolerance (how far the mesh may lie from the true surface), placed only where the shape needs them |
-| `geometry::outline` | a closed ring of points and the flat mesh that fills it ([Outlines](#outlines)) |
-| `geometry::shapes` | rings built in code, the pieces to build a lobed or toothed edge, and `bent`, which fills a ring and folds it |
-| `geometry::scatter` | spreads points over a band of ground, for things placed within an area rather than along a line |
-| `geometry::bending` | `sag`: the shape a rod comes to rest in under the weight it carries. An element draws a stalk in the shape it grew into, carrying nothing, and `sag` bends it under its current load. So one shape works at every stage of growth: the heavier the load, the further it bends |
-| `geometry::packing` | `pack`: moves a cluster of fruit on stalks until no fruit lies inside another fruit, a stem or another fruit's stalk, and every stalk keeps its length. `swing`: used when the stalks were packed for larger fruit than they carry. It turns each fruit back toward the way it would hang alone, until it touches a neighbour |
-| `palette` | colour: `srgb` turns a hex colour into linear RGB, `shade` changes it a little for each mesh, `Response` says how a surface reflects light. `tissue` gives the colour of a mix of `Pigment` amounts, such as chlorophyll and lycopene, for a surface whose colour changes as the organ grows |
-| `terrain` | the ground, the one element this crate ships |
-
-`terrain` builds the ground mesh and `Ground`, a height field: it gives
-the ground's height at any (x, y), so an element can place things on the
-ground. A generator that uses the terrain puts it in its first stage.
-`terrain::build` is a system, not a plugin. So the generator itself adds
-it to that stage, runs it when `TerrainParams` changes, and initialises
-the `TerrainParams` and `Ground` resources.
+The framework also ships one element, `terrain`. It builds the ground mesh
+and `Ground`, a height field: it gives the ground's height at any (x, y),
+so an element can place things on the ground. A generator that uses the
+terrain puts it in its first stage. `terrain::build` is a system, not a
+plugin. So the generator itself adds it to that stage, runs it when
+`TerrainParams` changes, and initialises the `TerrainParams` and `Ground`
+resources.
 
 Code that belongs to one kind of scene but builds no mesh belongs to the
 generator, not to an element: a layout solver, the code that gives every
 plant its config, a named colour. It has no prefix in the mesh library. It
 may still run in a stage of its own, as a generator's planting pass can.
-
-### Outlines
-
-A flat organ, such as a leaf blade, is a ring of points filled with
-triangles. `geometry::outline` does the fill. Every ring is built in the
-same local frame: the point where the organ attaches is at the origin, the
-shape runs along +X and its width across Y. So the fill works the same for
-any ring, whatever built it.
-
-`geometry::shapes` builds simple rings from a length, a width and a taper;
-a grass blade is one. A lobed, toothed edge is built from curves with the
-same module's pieces. `cubic` samples a Bézier curve, `serrate` cuts teeth
-along an edge, `simplify` drops points that a tolerance does not need, and
-`untangle` cuts out loops. The generator places the lobe tips from the
-organ's veins, the lines its blade is built around, and joins the pieces
-into one ring. So one builder makes the organ at any stage of its growth,
-and each of its meshes gets an edge of its own.
-
-An organ that folds, such as a leaf along its veins, keeps each fold as
-edges of its mesh. `outline::creased_mesh` takes lines across the ring and
-makes each one a chain of mesh edges, cut into pieces as fine as the fill.
-A later bend can then fold the mesh sharply along those edges. A fold
-across the middle of triangles would come out rounded over their width.
 
 ## Rules
 
@@ -257,10 +231,12 @@ reads what it created. The generator lists its stages in order once, in
 its plugin.
 
 > [!NOTE]
-> **In Bevy terms.** A stage is a variant of a `SystemSet` enum, a named
-> group of systems: `Grow::Leaves` in the example. The generator chains the
-> variants once, inside `Build`, the framework's set for everything that
-> builds the scene. An element adds its systems to its stage with `in_set`.
+> **In Bevy terms.** A stage is a variant of a
+> [`SystemSet`](https://docs.rs/bevy/latest/bevy/ecs/schedule/trait.SystemSet.html)
+> enum, a named group of systems: `Grow::Leaves` in the example. The
+> generator chains the variants once, inside `Build`, the framework's set
+> for everything that builds the scene. An element adds its systems to its
+> stage with `in_set`.
 
 **Rebuild only on change.** A layer builds only when one of its configs
 was added, changed or removed, or when its own params changed (the next
@@ -281,18 +257,21 @@ from. A parameter that is copied into no config field, such as
 `resource_changed` condition on its params.
 
 > [!NOTE]
-> **In Bevy terms.** `reauthor` runs on
-> `resource_changed::<LeafParams>` and writes with `set_if_neq`, which
-> marks a component changed only when its value differs. So a `reauthor`
-> that writes the values a config already has does not make
+> **In Bevy terms.** `reauthor` runs on `resource_changed::<LeafParams>`
+> and writes with
+> [`set_if_neq`](https://docs.rs/bevy/latest/bevy/ecs/change_detection/trait.DetectChangesMut.html#method.set_if_neq),
+> which marks a component changed only when its value differs. So a
+> `reauthor` that writes the values a config already has does not make
 > `configs_changed` fire.
 
-**Combine run conditions with `or_eager`, never `or_else`.** Both combine
-two conditions with a logical or. `or_else` skips the second condition
-when the first is true, and `or_eager` always runs both. A condition
-counts changes from the last time it ran, its `last_run`. So a skipped
-condition reports the same change as new on the next frame, and one edit
-rebuilds the layer twice.
+**Combine run conditions with `or_eager`, never `or_else`.** Both are
+methods of Bevy's
+[`SystemCondition`](https://docs.rs/bevy/latest/bevy/ecs/schedule/trait.SystemCondition.html)
+that combine two conditions with a logical or. `or_else` skips the second
+condition when the first is true, and `or_eager` always runs both. A
+condition counts changes from the last time it ran, its `last_run`. So a
+skipped condition reports the same change as new on the next frame, and one
+edit rebuilds the layer twice.
 
 **An element that sits on no layer before it creates its own configs.**
 Ground cover is an example. Its `author` system creates configs from the

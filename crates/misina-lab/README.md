@@ -141,15 +141,30 @@ contract; [docs.rs](https://docs.rs/misina-lab) and
 modules fit. The pages are also on the
 [docs site](https://azazdeaz.github.io/misina-lab/crates/misina-lab/).
 
+**How a scene is built**
+
 | Page | What it answers |
 | --- | --- |
 | [generators.md](docs/generators.md) | what a generator declares, and everything the framework builds from it |
 | [elements.md](docs/elements.md) | how a scene is built: layers, configs, the mesh library, and the rules a layer follows |
+| [mesh-builders.md](docs/mesh-builders.md) | what an element builds a mesh with: tubes, outlines and folds, bending under load, packing, and colour |
 | [mesh-variations.md](docs/mesh-variations.md) | how thousands of parts share a budget of meshes, and how to write the metric that decides which parts share one |
 | [randomness.md](docs/randomness.md) | one seed, many streams: how a scene stays reproducible while every part varies |
+
+**From the scene to the simulator**
+
+| Page | What it answers |
+| --- | --- |
 | [export.md](docs/export.md) | coordinates, the scene document, and what the USD builder makes of it |
-| [isaac-lab.md](docs/isaac-lab.md) | spawning a generated scene: the cfg base, the cache, rods, and moving and seeing colliders |
+| [isaac-lab.md](docs/isaac-lab.md) | spawning a generated scene: the cfg base, the cache, and seeing the colliders |
+| [rods.md](docs/rods.md) | a part that bends: the curve an element describes, the physics that moves it, its tuning, and skins |
 | [cutting.md](docs/cutting.md) | cutting a rod while it runs: moving a joint onto the cut, and how the two faces of a cut come to touch |
+| [pictures.md](docs/pictures.md) | rendering a still or a video of a scene in Isaac Sim |
+
+**How-to**
+
+| Page | What it answers |
+| --- | --- |
 | [editing-parameters.md](docs/editing-parameters.md) | how to add or change a parameter |
 | [outside-projects.md](docs/outside-projects.md) | a generator in its own repository: the dependencies, the layout, and pinning both halves to one release |
 

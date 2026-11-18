@@ -1,11 +1,8 @@
 # Generators
 
-> [!WARNING]
-> **Under development.** This page may not reflect the current state of
-> the source. We're working on it.
-
 A **generator** is the code that produces one kind of scene, such as a row
-of boxes. You write it as one Rust type that implements the `Generator`
+of boxes. You write it as one Rust type that implements the
+[`Generator`](https://docs.rs/misina-lab/latest/misina_lab/trait.Generator.html)
 trait. The trait asks for four things: the scene's name, the Python package
 it is published in, its parameters, and the code that builds it.
 
@@ -32,22 +29,23 @@ impl Generator for Boxes {
 | `Params` | one struct holding every parameter of the scene, [the params aggregate](#the-params-aggregate); declared with the `generator!` macro |
 | `NAME` | the name of the scene's root prim, and the stem of the Python names: `BoxesParams`, `BoxesCfg`, `BOXES_CFG`, `boxes_cfg.py` |
 | `PACKAGE` | the name of the scene's Python package. The package holds `_core`, the compiled Rust extension module, and `boxlab.isaaclab`, its Isaac Lab side. The name is also the prefix of the environment variables, `BOXLAB_PERF`, and of the custom USD attributes, `boxlab:` |
-| `plugin` | adds every [element](elements.md), the code that builds one kind of thing in the scene, as a Bevy plugin; the elements run in the order of the generator's [stage sets](#stage-sets) |
+| `plugin` | adds every [element](elements.md), the code that builds one kind of thing in the scene, as a [Bevy plugin](https://bevy.org/learn/quick-start/getting-started/plugins/); the elements run in the order of the generator's [stage sets](#stage-sets) |
 
 ## The params aggregate
 
-Each [element](elements.md) has a struct of parameters of its own, called a
-**fragment**: `BoxParams` for the boxes. The **aggregate** is the struct
-that contains every fragment, one field each, so it holds every parameter
-of the scene: `BoxesParams` here.
+An [element](elements.md) that has parameters keeps them in a struct of
+its own, called a **fragment**: `BoxParams` for the boxes. The **aggregate**
+is the struct that contains every fragment, one field each, so it holds
+every parameter of the scene: `BoxesParams` here.
 
 The aggregate is what gets passed around. Python code constructs it, the
 viewer's panel of sliders edits it, and a **headless build** takes it. A
 headless build makes the scene once without opening a window; it is how
 Python and the tests build a scene.
 
-The `generator!` macro declares the aggregate, from a list with one line per
-fragment:
+The
+[`generator!`](https://docs.rs/misina-lab/latest/misina_lab/macro.generator.html)
+macro declares the aggregate, from a list with one line per fragment:
 
 ```rust
 misina_lab::generator! {
@@ -67,9 +65,9 @@ copies it back out. With the generator's `python` feature on, the macro
 also writes [the Python module](#the-python-module). A `@Label` on a field
 is the title of that fragment's section in the panel. A fragment that the
 framework itself provides, here `TerrainParams`, is marked `as core`. The
-framework has already written its Python constructor, because PyO3, the
-library that binds Rust to Python, lets only the crate that defines a type
-add methods to it.
+framework has already written its Python constructor, because
+[PyO3](https://pyo3.rs/), the library that binds Rust to Python, lets only
+the crate that defines a type add methods to it.
 
 `SceneParams` is the generator's own struct, for whatever applies to the
 whole scene. The framework asks nothing of it; by convention it holds the
@@ -82,12 +80,14 @@ elements that read it and the elements built on top of those, and the rest
 of the scene stays as it was.
 
 > [!NOTE]
-> **In Bevy terms.** Each fragment is a `Resource`. An element's systems
-> run when a fragment they read has changed,
+> **In Bevy terms.** Each fragment is a
+> [`Resource`](https://bevy.org/learn/quick-start/getting-started/resources/).
+> An element's systems run when a fragment they read has changed,
 > `run_if(resource_changed::<BoxParams>)`, or when the layer before them
 > changed what they build on ([elements.md](elements.md#rules)).
-> `Params::apply` writes each fragment with `set_if_neq`, which marks a
-> resource as changed only when the new value differs.
+> `Params::apply` writes each fragment with
+> [`set_if_neq`](https://docs.rs/bevy/latest/bevy/ecs/change_detection/trait.DetectChangesMut.html#method.set_if_neq),
+> which marks a resource as changed only when the new value differs.
 
 ## Stage sets
 
@@ -100,9 +100,10 @@ complete before the next one starts and can read what it placed
 other's output can share a stage.
 
 > [!NOTE]
-> **In Bevy terms.** A stage is a variant of a `SystemSet` enum. The
-> generator chains its sets inside `Build`, the framework's set in
-> `PreUpdate`, where everything that builds the scene runs. The panel
+> **In Bevy terms.** A stage is a variant of a
+> [`SystemSet`](https://docs.rs/bevy/latest/bevy/ecs/schedule/trait.SystemSet.html)
+> enum. The generator chains its sets inside `Build`, the framework's set
+> in `PreUpdate`, where everything that builds the scene runs. The panel
 > applies an edit before `Build` runs.
 
 ## What the framework builds from it
@@ -155,10 +156,10 @@ feature, the `#[pymodule] fn _core`. It calls `module`, a function the macro
 wrote, which registers the classes.
 
 > [!NOTE]
-> **In PyO3 terms.** The aggregate holds each fragment as a `Py<T>`, and
-> fragments are `skip_from_py_object`, so Python always gets the same object
-> and never a copy: with a plain field, `params.boxes.count = 5` would
-> change a copy and the scene would keep the old value. Both methods release
+> **In PyO3 terms.** The aggregate holds each fragment as a `Py<T>`, so
+> Python always gets the same object and never a copy: with a plain field,
+> `params.boxes.count = 5` would change a copy and the scene would keep the
+> old value. Both methods release
 > the GIL while Rust builds the scene. `module` sets each class's
 > `__module__` to the extension module's name, which the Isaac Lab spawner
 > reads to find the extension the params came from
@@ -166,16 +167,19 @@ wrote, which registers the classes.
 
 ## What a generator's tests run
 
-- `testing::check_params::<P>()` panics on the first field that does not
-  declare what the panel, the snippet and the parameters page need: a doc
-  comment, a slider or a choice list, a default in range.
-- `testing::nudged::<P>()` is a set of params with each number moved up
-  one slider step (rounded, for an integer field), each flag flipped and
-  each name moved to the next choice, for a test that `apply` and `read`
-  return what was put in.
-- A test over `codegen::stale::<G>(root, docs)` fails while a generated file
-  is out of date with the structs; `regen_params`, an ignored test beside
-  it, rewrites the files
+- [`testing::check_params::<P>()`](https://docs.rs/misina-lab/latest/misina_lab/testing/fn.check_params.html)
+  panics on the first field that does not declare what the panel, the
+  snippet and the parameters page need: a doc comment, a slider on a number
+  or a choice list on a name, and a default inside that range or on that
+  list.
+- [`testing::nudged::<P>()`](https://docs.rs/misina-lab/latest/misina_lab/testing/fn.nudged.html)
+  is a set of params with each number moved up one slider step (rounded,
+  for an integer field), each flag flipped and each name moved to the next
+  choice, for a test that `apply` and `read` return what was put in.
+- A test over
+  [`codegen::stale::<G>(root, docs)`](https://docs.rs/misina-lab/latest/misina_lab/codegen/fn.stale.html)
+  fails while a generated file is out of date with the structs;
+  `regen_params`, an ignored test beside it, rewrites the files
   ([editing-parameters.md](editing-parameters.md)).
 
 ## Where it lives

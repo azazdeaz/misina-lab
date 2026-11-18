@@ -1,9 +1,5 @@
 # Editing parameters
 
-> [!WARNING]
-> **Under development.** This page may not reflect the current state of
-> the source. We're working on it.
-
 A parameter is one setting of a scene, such as the edge length of a box.
 It is declared once, as a field of a **fragment**. A fragment is an
 element's own struct of parameters
@@ -40,12 +36,13 @@ to files in the generator's crate by a command, and a test checks that it
 is up to date.
 
 > [!NOTE]
-> **In Bevy terms.** Every fragment derives `Reflect`, so its field names,
-> types, doc comments and `#[reflect(@...)]` attributes can be read at run
-> time. [`src/params.rs`](../src/params.rs) reads them for all of the above,
-> and [`src/codegen.rs`](../src/codegen.rs) writes the generated files.
-> misina-lab turns on Bevy's `reflect_documentation` feature, which keeps
-> the doc comments readable at run time.
+> **In Bevy terms.** Every fragment derives
+> [`Reflect`](https://docs.rs/bevy/latest/bevy/reflect/trait.Reflect.html),
+> so its field names, types, doc comments and `#[reflect(@...)]` attributes
+> can be read at run time. [`src/params.rs`](../src/params.rs) reads them
+> for all of the above, and [`src/codegen.rs`](../src/codegen.rs) writes
+> the generated files. misina-lab turns on Bevy's `reflect_documentation`
+> feature, which keeps the doc comments readable at run time.
 
 ## Change or add a parameter
 
@@ -78,11 +75,12 @@ is up to date.
    `cargo test -p <generator-crate> regen_params -- --ignored`.
 
 3. Run `cargo test`, with `-p <generator-crate>` in a Cargo workspace. Two
-   of the generator's tests check the result. One calls `codegen::stale`
+   of the generator's tests check the result. One calls
+   [`codegen::stale`](https://docs.rs/misina-lab/latest/misina_lab/codegen/fn.stale.html)
    and fails while a generated file is out of date. The other calls
-   `testing::check_params` and names the first field with no doc comment,
-   with no slider or choice list, or with a default outside its slider
-   range or choice list.
+   [`testing::check_params`](https://docs.rs/misina-lab/latest/misina_lab/testing/fn.check_params.html)
+   and names the first field with no doc comment, with no slider or choice
+   list, or with a default outside its slider range or choice list.
 
 4. To use the change from Python, rebuild the extension module, the
    compiled Rust that Python imports. Neither the regeneration nor
@@ -117,27 +115,30 @@ parameters page. So it says what the element is and how its fields
 relate. `check_params` fails if any of its paragraphs uses rustdoc link
 syntax.
 
-**A number field has a `@Slider` attribute.** It sets the range the panel
-offers and the step the slider moves by. The number of decimals shown
-follows from the step. The range limits only the slider. Python accepts
-any value, so the element's code must clamp a value it cannot build with.
+**A number field has a
+[`@Slider`](https://docs.rs/misina-lab/latest/misina_lab/params/struct.Slider.html)
+attribute.** It sets the range the panel offers and the step the slider
+moves by. The number of decimals shown follows from the step. The range
+limits only the slider. Python accepts any value, so the element's code
+must clamp a value it cannot build with.
 
-**A string field has a `@Choices` attribute.** It points at the fixed list
-of allowed names, an array of strings the element defines:
-`@Choices(&Kind::NAMES)`. The panel offers the names in a dropdown. In the
-stub, the field's type lists the names, so a type checker flags any other.
-Python raises `ValueError` for a name that is not on the list when the
-scene is built, not when the field is set.
+**A string field has a
+[`@Choices`](https://docs.rs/misina-lab/latest/misina_lab/params/struct.Choices.html)
+attribute.** It points at the fixed list of allowed names, an array of
+strings the element defines: `@Choices(&Kind::NAMES)`. The panel offers the
+names in a dropdown. In the stub, the field's type lists the names, so a
+type checker flags any other. Python raises `ValueError` for a name that is
+not on the list when the scene is built, not when the field is set.
 
 **A `bool` has no attribute** and gets a checkbox.
 
-**`@Label("...")` sets the caption.** Without it the caption is the field
-name with underscores as spaces and a capital first letter:
-`feature_size` shows as "Feature size". Use a label for units,
-`@Label("Feature size (m)")`, or for other wording on screen. A label can
-also go on a field of the aggregate. There it is the title of that
-fragment's section in the panel and its heading on the parameters page:
-`@Label("The boxes")`.
+**[`@Label("...")`](https://docs.rs/misina-lab/latest/misina_lab/params/struct.Label.html)
+sets the caption.** Without it the caption is the field name with
+underscores as spaces and a capital first letter: `feature_size` shows as
+"Feature size". Use a label for units, `@Label("Feature size (m)")`, or for
+other wording on screen. A label can also go on a field of the aggregate.
+There it is the title of that fragment's section in the panel and its
+heading on the parameters page: `@Label("The boxes")`.
 
 A field is an `f32`, `u32`, `u64`, `bool` or `String`; the code that
 reads the structs panics on any other type. The order of declaration is

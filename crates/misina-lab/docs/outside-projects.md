@@ -85,15 +85,17 @@ opt-level = 3
   the root of a build, so misina-lab's own are not used in yours. They
   compile the dependencies with optimization, so a debug build of the
   viewer runs at a usable frame rate.
-- **`bevy`** is the version misina-lab uses. Bevy is the game engine that
-  misina-lab builds the scene in. List no Bevy features on this line.
-  Cargo compiles Bevy once for the whole build, with every feature that any
-  crate asks for, so the features misina-lab needs are already on.
-- **`pyo3`** has the same minor version as misina-lab's, 0.29. PyO3 is the
-  library that binds Rust to Python. A build can contain only one copy of
-  it: `pyo3-ffi` declares `links = "python"`, and Cargo allows only one
-  package per `links` value. With another minor version, Cargo cannot
-  resolve the dependencies, even with the `python` feature off.
+- **`bevy`** is the version misina-lab uses. [Bevy](https://bevy.org) is
+  the game engine that misina-lab builds the scene in. List no Bevy
+  features on this line. Cargo compiles Bevy once for the whole build, with
+  every feature that any crate asks for, so the features misina-lab needs
+  are already on.
+- **`pyo3`** has the same minor version as misina-lab's, 0.29.
+  [PyO3](https://pyo3.rs/) is the library that binds Rust to Python. A
+  build can contain only one copy of it: `pyo3-ffi` declares
+  `links = "python"`, and Cargo allows only one package per `links` value.
+  With another minor version, Cargo cannot resolve the dependencies, even
+  with the `python` feature off.
 - **The feature must be called `python`.** The `generator!` macro, which
   declares the parameters, expands inside your crate. It wraps its Python
   code in `#[cfg(feature = "python")]`, and Cargo checks that condition
@@ -101,9 +103,9 @@ opt-level = 3
 - **`extension-module`** tells PyO3 not to link libpython, the Python
   runtime library, because the Python that loads the module provides it. A
   binary built this way cannot start on its own, so `cargo run` and
-  `cargo test` fail with this feature on. Only maturin turns it on. maturin
-  is the tool that builds a Rust crate into a Python package
-  ([pyproject.toml](#pyprojecttoml)).
+  `cargo test` fail with this feature on. Only maturin turns it on.
+  [maturin](https://www.maturin.rs/) is the tool that builds a Rust crate
+  into a Python package ([pyproject.toml](#pyprojecttoml)).
 
 To build the viewer for the browser as well, as WebAssembly, also copy the
 `[profile.wasm-release]` table from misina-lab's root `Cargo.toml`. You add
@@ -299,9 +301,9 @@ misina-lab = { git = "https://github.com/azazdeaz/misina-lab", rev = "<commit>",
 
 The Python package now has two pins, and each holds in a different place:
 
-- In the project's own `.venv`, uv installs misina-lab from the
-  `[tool.uv.sources]` entry, at `<commit>`. It ignores the version bound
-  `misina-lab==X.Y.Z` while the entry is there.
+- In the project's own `.venv`, [uv](https://docs.astral.sh/uv/) installs
+  misina-lab from the `[tool.uv.sources]` entry, at `<commit>`. It ignores
+  the version bound `misina-lab==X.Y.Z` while the entry is there.
 - A wheel built from the project records only the version bound, not the
   entry. Whoever installs the wheel gets misina-lab by the bound.
 

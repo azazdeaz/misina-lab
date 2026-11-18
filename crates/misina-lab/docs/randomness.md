@@ -1,9 +1,5 @@
 # Randomness
 
-> [!WARNING]
-> **Under development.** This page may not reflect the current state of
-> the source. We're working on it.
-
 The random numbers in a scene depend only on its params, the settings that
 describe the scene ([generators.md](generators.md#the-params-aggregate)).
 Most of them start from one number, the **seed**, which is itself one of
@@ -20,14 +16,16 @@ the generator's own struct for the params that apply to the whole scene.
 
 Each [element](elements.md), the code that builds one kind of thing in the
 scene such as the leaves, takes its numbers from its own **streams**. A
-stream is an `Rng`, the framework's random number generator. It starts from
-the seed combined with a fixed number that belongs to the element
-([Starting a stream](#starting-a-stream)). So the numbers one element
-draws never shift the numbers another element draws: setting a plant to
-carry more stems adds stems, and the trunk under them keeps its shape. A
-stream also starts from a number that identifies what it is for, such as a
-stem's place in the build order. The stem keeps its random numbers only
-while that number stays the same.
+stream is an
+[`Rng`](https://docs.rs/misina-lab/latest/misina_lab/rng/struct.Rng.html),
+the framework's random number generator. It starts from the seed combined
+with a fixed number that belongs to the element
+([Starting a stream](#starting-a-stream)). So the numbers one element draws
+never shift the numbers another element draws: setting a plant to carry
+more stems adds stems, and the trunk under them keeps its shape. A stream
+also starts from a number that identifies what it is for, such as a stem's
+place in the build order. The stem keeps its random numbers only while that
+number stays the same.
 
 Not every stream starts from the seed. The terrain, the ground element the
 framework provides, has no seed parameter yet. It computes the height of

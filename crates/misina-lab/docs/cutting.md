@@ -1,9 +1,5 @@
 # Cutting
 
-> [!WARNING]
-> **Under development.** This page may not reflect the current state of
-> the source. We're working on it.
-
 A **rod** is how [Newton](https://newton-physics.github.io/newton/latest/),
 the physics engine under Isaac Lab, simulates a flexible **organ**: one
 stem or leaf that bends ([mesh-variations.md](mesh-variations.md)). A rod
@@ -46,7 +42,7 @@ while simulation_app.is_running():
 A generator makes an organ flexible by writing it into the scene document
 as a `Cable`, a curve. The scene document is the JSON description of the
 built scene, which Python turns into USD
-([export.md](export.md#flexible-organs)). Newton's rod importer turns each
+([rods.md](rods.md#describing-a-rod)). Newton's rod importer turns each
 segment of the curve into one capsule body. A capsule is a cylinder with a
 half sphere on each end. The bodies are numbered from the wood outward.
 Between each two bodies the importer puts a
@@ -55,7 +51,7 @@ which has four stiffnesses: stretch, shear, bend and twist. The importer
 works them out from the organ's material. `tune_rods`, in
 [`rods.py`](../../../python/misina-lab/misina_lab/isaaclab/rods.py),
 softens stretch and shear and damps bend and twist
-([isaac-lab.md](isaac-lab.md#rods)). The first body has no mass, which
+([rods.md](rods.md#the-tuning)). The first body has no mass, which
 Newton treats as fixed: no force moves it, so it holds the organ to the
 wood.
 
@@ -67,7 +63,7 @@ version of MuJoCo. So a scene with rods runs both in one
 Each of its two entries steps its own bodies: `rigid` the robot, `rods`
 the rods. The robot bodies named in `contact_bodies` are copied to the VBD
 side as **proxies**, bodies that follow the robot's and that the rods
-collide with. [isaac-lab.md](isaac-lab.md#rods) covers that setup.
+collide with. [rods.md](rods.md#simulating-rods) covers that setup.
 
 Newton allows no new body and no new joint once the model is built. So a
 cut only changes values the model already holds:
@@ -76,7 +72,9 @@ cut only changes values the model already holds:
 - one joint, which is turned off;
 - one row of the contact-pair list
   ([below](#letting-the-two-faces-meet));
-- the collision groups of the piece's shapes;
+- the
+  [collision groups](https://newton-physics.github.io/newton/latest/concepts/collisions.html#collision-groups)
+  of the piece's shapes;
 - the place of any collider that the cut hides.
 
 The two bodies on either side of a cut are bodies the model already had.
@@ -137,7 +135,7 @@ What is drawn follows every cut:
   segment's prim. A prim is one object in the USD scene. The tube is
   scaled along its axis to the capsule's new length.
 - A rod drawn by a skin, a mesh that the rod's bodies bend
-  ([isaac-lab.md](isaac-lab.md#skins)), has its skin split at the cut.
+  ([rods.md](rods.md#skins)), has its skin split at the cut.
 - Anything else under body i's segment prim past the cut, such as a leaf,
   is hidden. A prim stays on the body it was placed under, and body i no
   longer reaches past the cut. A collider under the hidden prim, which
@@ -146,9 +144,11 @@ What is drawn follows every cut:
 
 ## How Newton finds contacts
 
-Newton finds contacts in two steps. The **broad phase** picks the pairs of
-shapes close enough to be worth testing, and the narrow phase tests them.
-Two settings on the shapes decide which pairs may ever collide:
+Newton finds contacts in two steps. The
+[**broad phase**](https://newton-physics.github.io/newton/latest/concepts/collisions.html#broad-phase-and-shape-compatibility)
+picks the pairs of shapes close enough to be worth testing, and the narrow
+phase tests them. Two settings on the shapes decide which pairs may ever
+collide:
 
 - A **collision group** is one integer per shape:
   - a positive group collides with itself and with every negative group;
@@ -162,7 +162,7 @@ every pair of shapes. It keeps each pair that the groups allow and no
 filter pair forbids. It stores them in `Model.shape_contact_pairs`, the
 **contact-pair list**: an array with one row per pair.
 `make_physics_cfg_newton`, which builds the physics config of a scene with
-rods ([isaac-lab.md](isaac-lab.md#rods)), takes a `broad_phase` argument:
+rods ([rods.md](rods.md#simulating-rods)), takes a `broad_phase` argument:
 
 | `broad_phase` | What it tests every step |
 | --- | --- |
