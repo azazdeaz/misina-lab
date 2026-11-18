@@ -1,11 +1,21 @@
 [package]
 name = "misina-lab"
-description = "What a procedural scene generator is built from."
+description = "A Bevy framework for procedural scene generators, exported to USD for robotics simulation in Isaac Lab."
 readme = "README.md"
+keywords = ["bevy", "procedural", "robotics", "usd", "isaac-lab"]
+categories = ["simulation", "game-development", "graphics", "science"]
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+
+# One target is enough: the API is the same on every one, and each is a full
+# Bevy build.
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 bevy = { workspace = true }

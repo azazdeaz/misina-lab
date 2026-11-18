@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
+# Ships as a Python wheel; only misina-lab goes to crates.io.
+publish = false
 
 [lib]
 # `cdylib` is the extension module Python imports; `rlib` is what the viewer
