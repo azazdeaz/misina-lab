@@ -89,8 +89,17 @@ From the repository root,
 cargo run --release -p greenhouse-lab
 ```
 
-opens the viewer and its parameter panel. From Python, after
-`pip install greenhouse-lab`:
+opens the viewer and its parameter panel. greenhouse-lab is not on PyPI
+yet, so pip builds it from the repository at a release's tag:
+
+```bash
+pip install "greenhouse-lab @ git+https://github.com/azazdeaz/misina-lab@v0.1.0#subdirectory=crates/greenhouse-lab"
+```
+
+That needs Git, Python 3.12 or later,
+[Rust](https://www.rust-lang.org/tools/install) 1.97.1 or later, and on Linux
+pkg-config and the ALSA, udev and Wayland headers: `pkg-config`,
+`libasound2-dev`, `libudev-dev` and `libwayland-dev` on Debian and Ubuntu. Then, from Python:
 
 ```python
 import greenhouse_lab

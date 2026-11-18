@@ -89,16 +89,18 @@ in front of a commit.
 
 ## Releasing
 
-`misina-lab`, `vinery-lab` and `greenhouse-lab` release to PyPI together, and
-`misina-lab` to crates.io with them, under the workspace version,
-`[workspace.package]` in the root `Cargo.toml`. The generators' wheels take it
-from their crates. Two other places spell it out: `version` in
+`misina-lab` releases to crates.io and PyPI under the workspace version,
+`[workspace.package]` in the root `Cargo.toml`. `vinery-lab` and
+`greenhouse-lab` carry the same version but are not published yet:
+`release.yml` builds their wheels as a check and uploads misina-lab's alone.
+The generators' wheels take the version from their crates. Two other places spell it out: `version` in
 `python/misina-lab/pyproject.toml`, and the `misina-lab==` pin in each
 generator's `pyproject.toml`. `tests/test_versions.py` fails until all four
 agree.
 
 1. Set the release's version in all four places, give the changelog's
-   `[Unreleased]` section that version and the date, and merge.
+   `[Unreleased]` section that version and the date, open a new empty
+   `[Unreleased]` above it, and merge.
 2. From a clean checkout of the merge commit, `cargo publish -p misina-lab`.
    The crate's licence files are symlinks, so the checkout has to have them as
    links: one where git wrote them as plain files, as it may on Windows, packs
@@ -119,14 +121,15 @@ while PyPI has none of the release's files, since it refuses one it already
 has.
 
 `.github/workflows/release.yml` then builds an sdist and a Linux x86_64 wheel
-for each package and publishes them. A manual run of it from a branch builds
-them without publishing.
+for each package, and publishes misina-lab's sdist and wheel alone. A manual
+run of it from a branch builds them without publishing.
 
-Publishing to PyPI goes through PyPI's trusted publishing, so no token is stored. Each
-project's publisher on PyPI names the `azazdeaz/misina-lab` repository, the
-`release.yml` workflow and the `pypi` environment. A project not on PyPI yet
-takes a pending publisher, which its first upload turns into the project.
-Renaming the repository means updating all three publishers.
+Publishing to PyPI goes through PyPI's trusted publishing, so no token is
+stored. misina-lab's publisher on PyPI names the `azazdeaz/misina-lab`
+repository, the `release.yml` workflow and the `pypi` environment. A project
+not on PyPI yet takes a pending publisher, which its first upload turns into
+the project; a generator takes one when it is first published. Renaming the
+repository means updating every publisher.
 
 ## Viewer (interactive)
 
