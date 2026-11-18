@@ -14,6 +14,11 @@ but they have not read this code, and may know Bevy only from the README's
 example. Many arrive from a search or a link, not from the page before, and
 English is a second language for many of them.
 
+That reader sets what a page may assume. Rust and Python, a terminal, git
+and JSON need no explaining, and neither does what any user of a simulator
+has met: a mesh, a rigid body, a joint, a collider, a quaternion. Everything
+else is explained or linked ([Prose](#prose)).
+
 So a page is an introduction: what a thing is, what it is for and how it
 fits with the rest, in plain words. It runs from the definition to one
 example to the detail, with the source one link away, and a reader stops
@@ -50,11 +55,16 @@ needs to use it.
 5. End with `## Where it lives`: the files, each with the symbols a reader
    would open it for. A how-to has numbered steps in place of the sections,
    and links each file where a step uses it.
-6. Add a row to the README's table. The test fails while a page is missing
-   from it.
+6. Add a row to the README's table and an entry to the nav in
+   `zensical.toml`, each under the group the page belongs to. The test fails
+   while a page is missing from either.
 
-One idea per page. Split a page when it takes on a second idea or passes
-about 200 lines.
+One idea per page. Split a page when it takes on a second idea: a part that
+answers a question of its own, which a reader would come for without the
+rest, and which stands alone after a sentence or two of setup. Length alone
+is no reason to split. Past about 300 lines, look again for such a part. An
+explanation in which each section needs the one before it stays whole, and
+so does a how-to that is followed from top to bottom.
 
 ## Prose
 
@@ -62,10 +72,22 @@ about 200 lines.
   not the answer to a question only ever asked in a chat: a design that was
   considered and dropped is not on the page. If a detail doesn't change what
   the reader does next, cut it.
-- A page stands on its own. The first time it uses a term from elsewhere, a
-  fragment, the panel, the snippet, it says what that is in a few words and
-  links the page that defines it. The full definition stays on that page.
-  "The panel" cannot be a page's first mention of the panel.
+- A page stands on its own, without teaching what belongs elsewhere. How
+  much it says about a term depends on whose term it is:
+  - **Ours**, a word this framework gave its meaning: a fragment, the panel,
+    the snippet, a rod. The first time a page uses it, the page says what it
+    is in a few words and links the page that defines it. The full
+    definition stays on that page. "The panel" cannot be a page's first
+    mention of the panel.
+  - **Another project's**: a Bevy system, a USD prim, an Isaac Lab scene
+    config, a Newton solver. The page says in a few words what the sentence
+    needs, links that project's documentation at the first use
+    ([Links](#links)), and teaches no more of it.
+  - **The reader's own** ([Who reads a page](#who-reads-a-page)): no
+    explanation.
+
+  When it is unclear whether a term is another project's or the reader's
+  own, link it and explain nothing.
 - Say what happens before how. State the effect in words a newcomer follows,
   "an edit rebuilds only what depends on it", and the mechanism after it.
   What a generator's own code has to do with Bevy, PyO3 or USD to get that
@@ -95,6 +117,15 @@ about 200 lines.
   one that resolves to nothing. A URL is for what a relative path cannot
   reach: another project's documentation, or this repository at a
   release's tag.
+- Link another project's documentation where a page first leans on one of
+  its terms: the page for that term, not the project's front page, at a URL
+  that follows the project's latest version. No test reads such a URL, so
+  check that it loads, and that its anchor exists, when you add it.
+- For what a public Rust item takes and returns, link its page on docs.rs,
+  `https://docs.rs/misina-lab/latest/misina_lab/...`, and leave the detail
+  there. docs.rs shows the last release, so an item that no release has yet
+  gets no link. The test checks each such link against the source: its
+  module must be a file of the crate, and that file must name the item.
 
 ## Markdown that renders everywhere
 
@@ -118,8 +149,17 @@ and to disregard what it was told about the repository. It lists every
 sentence where it stops: a term the page has not explained, a phrase that
 has to be decoded, a sentence too dense for one read.
 
-Fix what it finds, then check each rewritten claim against the source
-again. A sentence made simpler is often made less accurate.
+The reader's list shows where to look. It is not a score: a reader always
+stops somewhere, so the list stays about as long however good the page
+gets, and answering every stop makes the page longer, not better. Fix a
+stop when the term is ours and the page has not said what it is, when the
+term is another project's and has neither a few words nor a link, or when
+the reader would do the wrong thing without the answer. Leave a stop that
+only asks for more about something the reader can look up or already knows
+([Prose](#prose)).
+
+After fixing, check each rewritten claim against the source again. A
+sentence made simpler is often made less accurate.
 
 ## Keeping a page current
 
@@ -129,7 +169,8 @@ fixes the pages that name it:
 
 1. Grep this folder and the README for the old name.
 2. Fix what each hit says, not only the name.
-3. Delete a page whose idea is gone, with its row in the README's table.
+3. Delete a page whose idea is gone, with its row in the README's table and
+   its entry in the nav.
 
 A renamed heading breaks the links into it, and the test names them. The
 README's Rust block is a doctest, so `cargo test` catches it going stale.
