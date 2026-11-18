@@ -89,10 +89,11 @@ in front of a commit.
 
 ## Releasing
 
-`misina-lab`, `vinery-lab` and `greenhouse-lab` release to PyPI together, and
-`misina-lab` to crates.io with them, under the workspace version,
-`[workspace.package]` in the root `Cargo.toml`. The generators' wheels take it
-from their crates. Two other places spell it out: `version` in
+`misina-lab` releases to crates.io and PyPI under the workspace version,
+`[workspace.package]` in the root `Cargo.toml`. `vinery-lab` and
+`greenhouse-lab` carry the same version but are not published yet:
+`release.yml` builds their wheels as a check and uploads misina-lab's alone.
+The generators' wheels take the version from their crates. Two other places spell it out: `version` in
 `python/misina-lab/pyproject.toml`, and the `misina-lab==` pin in each
 generator's `pyproject.toml`. `tests/test_versions.py` fails until all four
 agree.
@@ -123,11 +124,12 @@ has.
 for each package and publishes them. A manual run of it from a branch builds
 them without publishing.
 
-Publishing to PyPI goes through PyPI's trusted publishing, so no token is stored. Each
-project's publisher on PyPI names the `azazdeaz/misina-lab` repository, the
-`release.yml` workflow and the `pypi` environment. A project not on PyPI yet
-takes a pending publisher, which its first upload turns into the project.
-Renaming the repository means updating all three publishers.
+Publishing to PyPI goes through PyPI's trusted publishing, so no token is
+stored. misina-lab's publisher on PyPI names the `azazdeaz/misina-lab`
+repository, the `release.yml` workflow and the `pypi` environment. A project
+not on PyPI yet takes a pending publisher, which its first upload turns into
+the project; a generator takes one when it is first published. Renaming the
+repository means updating every publisher.
 
 ## Viewer (interactive)
 

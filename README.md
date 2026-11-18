@@ -126,7 +126,7 @@ rolling terrain, down to every leaf.
 [README](crates/vinery-lab/README.md) ·
 [Parameters](crates/vinery-lab/docs/parameters.md) ·
 [Playground](https://azazdeaz.github.io/misina-lab/playground/vinery/) ·
-`pip install vinery-lab`
+[Install](crates/vinery-lab/README.md#install)
 
 #### Examples
 
@@ -156,7 +156,7 @@ The rows of a high-wire tomato greenhouse, grown to any week of the season.
 [README](crates/greenhouse-lab/README.md) ·
 [Parameters](crates/greenhouse-lab/docs/parameters.md) ·
 [Playground](https://azazdeaz.github.io/misina-lab/playground/greenhouse/) ·
-`pip install greenhouse-lab`
+[Install](crates/greenhouse-lab/README.md#running-it)
 
 #### Examples
 
@@ -172,16 +172,18 @@ The rows of a high-wire tomato greenhouse, grown to any week of the season.
 and
 [azazdeaz.github.io/misina-lab/playground/greenhouse](https://azazdeaz.github.io/misina-lab/playground/greenhouse/).
 
-**From Python.**
+**From Python.** The generators are not on PyPI yet, so pip builds them
+from the repository at a release's tag:
 
 ```bash
-pip install vinery-lab        # the vineyard
-pip install greenhouse-lab    # the greenhouse
+pip install "vinery-lab @ git+https://github.com/azazdeaz/misina-lab@v0.1.0#subdirectory=crates/vinery-lab"
+pip install "greenhouse-lab @ git+https://github.com/azazdeaz/misina-lab@v0.1.0#subdirectory=crates/greenhouse-lab"
 ```
 
-Wheels are built for Linux x86_64 and Python 3.12 and later; anywhere else
-pip builds from source, which needs
-[Rust](https://www.rust-lang.org/tools/install).
+That needs Python 3.12 or later,
+[Rust](https://www.rust-lang.org/tools/install), and on Linux the ALSA, udev
+and Wayland headers: `libasound2-dev`, `libudev-dev` and `libwayland-dev` on
+Debian and Ubuntu.
 
 **From a checkout**, with Rust installed, either reference generator opens in
 the viewer:
