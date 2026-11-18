@@ -125,9 +125,9 @@ branch builds the packages without publishing.
 Nothing that is out can be replaced, so a release whose packages have to
 change after any of them is up goes out again as the next patch version,
 every package together. An upload that failed for a passing reason is
-retried by re-running the run's failed jobs, not all of them: a registry
-refuses a version it already has, so the crates.io job fails once the crate
-is out, and the PyPI job waits on it.
+retried by re-running the run's failed jobs. The crates.io job skips a
+version that is already out, so a crate that went out before its job failed
+does not hold back the PyPI job, which waits on it.
 
 Both registries are published to through trusted publishing, so no token is
 stored: GitHub signs a token naming the repository, the workflow and the
