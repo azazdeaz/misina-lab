@@ -34,9 +34,11 @@ pub fn farthest_first<T: Clone, M: Metric<T>>(
 
 The element supplies the `Metric`, which says how different two configs
 look, and `farthest_first` picks the representatives. It starts from the
-first config and keeps adding the config farthest from every one picked so
-far. It stops when it has `k` representatives, or when every config is
-within `max_radius` of one.
+first config. Then it keeps adding the config that is worst matched so far:
+the one farthest from its nearest representative. It stops when it has `k`
+representatives, or when every config is within `max_radius` of one. Pass
+0 for `max_radius` to use the whole budget: the picking then stops early
+only when every config left is the same as a representative.
 
 Picking the farthest config each time keeps the *largest* distance from any
 organ to its representative small. If the metric obeys the triangle
@@ -45,9 +47,9 @@ shorter than going directly), that distance is at most twice the smallest
 possible. A method that keeps the average distance small, such as k-means,
 lets the common shapes outweigh a rare one. Here a rare config is kept: one
 diseased leaf among ten thousand healthy ones still gets a mesh of its own,
-provided the metric puts it far from the rest and the budget has room for
-it. The method is Gonzalez's farthest-first traversal for the **k-center**
-problem.
+provided the metric puts it far from the rest, farther than `max_radius`,
+and the budget has room for it. The method is Gonzalez's farthest-first
+traversal for the **k-center** problem.
 
 `quantize.rs` holds all of it, and depends on neither Bevy nor on what is
 being grown.
@@ -72,8 +74,9 @@ being grown.
   leaf cut from one of five outline drawings: they are five shapes, not five
   nearby numbers, and with a gap that large a budget of five or more keeps
   all five.
-- **Two configs that build no mesh are zero apart**, so that none of the
-  budget goes to things that cost nothing.
+- **Two configs that build no mesh are zero apart.** All of them then share
+  one representative, so things that cost nothing take at most one place
+  in the budget.
 
 ## The budget
 

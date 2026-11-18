@@ -36,9 +36,9 @@ while simulation_app.is_running():
 | Call | What it does |
 | --- | --- |
 | `cut_through(corner, u, v)` | cuts each rod body not yet cut free where its centre line passes through the rectangle. The rectangle's points are `corner + a*u + b*v`, with `a` and `b` from 0 to 1. Returns how many cuts it made |
-| `crossing(corner, u, v)` | reports where rods cross the rectangle, without cutting: each crossing body as an index into `bodies`, the fraction along it where it crosses, and where on the rectangle. A rod that crosses twice is listed twice |
+| `crossing(corner, u, v)` | reports where rods cross the rectangle, without cutting: each crossing body as an index into `bodies`, the fraction along it where it crosses, and where on the rectangle. A rod that crosses twice is listed twice. A crossing that falls exactly on a joint, where one body ends and the next begins, is not reported, so `cut_through` makes no cut there |
 | `cut(body, at)` | cuts one rod body at `at`, a fraction of its length from 0 at the end nearer the wood to 1 at the other; returns whether anything fell |
-| `hold(body, frame)` | holds a rod body at its place in `frame`, a pose in world coordinates, and moves it with the frame, for example to carry a piece in a gripper. The held body turns kinematic: only code moves it, not forces. Call it before every step. The rest of the rod hangs from the held body. `hold(None, frame)` lets it go |
+| `hold(body, frame)` | holds a rod body at its place in `frame`, and moves it with the frame, for example to carry a piece in a gripper. `frame` is a pose in world coordinates: an array of seven numbers, the position and then the rotation as a quaternion (x, y, z, w). The held body turns kinematic: only code moves it, not forces. Call it before every step. The rest of the rod hangs from the held body. `hold(None, frame)` lets it go |
 | `bodies`, `loose`, `capsules()` | every rod body, by its index in the model; which of them are cut free; each one's centre line in world coordinates, as its two ends |
 
 ## A rod in Newton
@@ -108,10 +108,11 @@ to end at the cut, and the next body, i+1, is lengthened to start there.
 The joint between them is then turned off. The part of body i past the cut
 is now part of body i+1, and falls with the piece.
 
-Each body's mass is scaled with its length, so the rod's total mass stays
-the same. Its centre of mass moves to the middle of the new capsule, and
-its inertia is recomputed as that of a solid cylinder of the new length.
-The rod's first body has no mass, and keeps none.
+The mass of the part past the cut moves from body i to body i+1 with it,
+so the rod's total mass stays the same. Each body's centre of mass moves
+to the middle of its new capsule, and its inertia is recomputed as that of
+a solid cylinder of the new length. The rod's first body has no mass, and
+keeps none.
 
 ```mermaid
 flowchart LR

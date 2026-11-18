@@ -113,10 +113,11 @@ needs, Bevy's WebGPU backend and the `wasm_js` feature of `getrandom`.
 ## lib.rs
 
 Beside the generator, the crate root holds two more things: the extension
-module's entry point, and two tests for the generated files. The params
-structs are the Rust structs that declare the scene's parameters. The first
-test fails while a generated file differs from what the structs give, and
-the second rewrites the files
+module's entry point, and three tests. The params structs are the Rust
+structs that declare the scene's parameters. The first test fails on a
+parameter that does not declare what the panel and the generated files
+need, such as a doc comment. The second fails while a generated file
+differs from what the structs give, and the third rewrites the files
 ([generators.md](generators.md#what-a-generators-tests-run)):
 
 ```rust
@@ -133,6 +134,14 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use misina_lab::codegen;
+    use misina_lab::testing::check_params;
+
+    /// Every field has a doc comment, a slider or a choice list, and a
+    /// default inside it.
+    #[test]
+    fn every_field_declares_what_the_panel_and_the_docs_need() {
+        check_params::<super::BoxesParams>();
+    }
 
     fn stale() -> Vec<(PathBuf, String)> {
         codegen::stale::<super::Boxes>(Path::new(env!("CARGO_MANIFEST_DIR")), "docs/parameters.md")
@@ -162,7 +171,7 @@ mod tests {
 classes of the parameters, and `__version__`, to the extension module.
 `codegen::stale` renders every generated file from the params structs as
 they are now, and returns each file whose text differs, with its new text.
-So the first test fails while a generated file is out of date, and
+So the second test fails while a generated file is out of date, and
 `regen_params` writes the new text out.
 
 ## The generated files
@@ -179,8 +188,10 @@ files it rewrites only marked regions, from a line
 `# >>> generated: <region>` to a line `# <<< generated: <region>`.
 Everything outside the markers is written by hand and left alone. So when
 you start a project, create each Python file yourself, with an empty pair
-of markers for each region. A missing file or a missing pair
-fails the test, and the message names the file and the region.
+of markers for each region. A missing file or a missing pair fails the
+test, and the message names the file and the region. Create the `docs/`
+folder too: `regen_params` writes the parameters page into it, and does
+not create the folder.
 
 | File | Regions |
 | --- | --- |

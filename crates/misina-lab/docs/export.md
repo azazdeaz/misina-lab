@@ -39,10 +39,11 @@ units and axes that ROS and Isaac Lab use. Build every element in it. An
 as the leaves ([elements.md](elements.md)).
 
 The Python builder ([The builder](#the-builder)) writes `upAxis = "Z"` on
-the stage. USD reads `upAxis` only from the file that is opened, not from
-a file that file references. So a stage that references this one cannot
-change the axis. Where `upAxis` is missing, USD assumes Y-up, so the
-builder always writes it.
+the stage. Where `upAxis` is missing, USD assumes Y-up, so the builder
+always writes it. USD reads `upAxis` only from the file that is opened,
+not from a file that file references, and it does not turn a referenced
+file to match. So a Y-up stage that references this scene gets it lying on
+its side, and has to add the rotation itself.
 
 Bevy's axes are Y-up. So the viewer rotates the whole scene with one extra
 parent entity above the scene root, turned by `scene::z_up_to_y_up()`. The
@@ -126,9 +127,10 @@ framework, such as a cached scene, fails with an error.
 
 `misina_lab.usd.build_usd(doc, path)`, in the framework's Python package,
 writes the document as a stage at `path`. The path must not exist yet.
-`.usd` or `.usdc` gives a binary file, `.usda` a text file. A generator's
-Python module has `write_usd(path)`, which builds the scene and passes the
-document to `build_usd` ([generators.md](generators.md#the-python-module)).
+`.usd` or `.usdc` gives a binary file, `.usda` a text file. The params
+aggregate in a generator's Python module has a method `write_usd(path)`,
+which builds the scene and passes the document to `build_usd`
+([generators.md](generators.md#the-python-module)).
 In the viewer, the `S` key saves the document as `scene.json` in the
 working directory. `python -m misina_lab.usd scene.json scene.usd` builds
 a stage from it, and `--force` overwrites an existing file.

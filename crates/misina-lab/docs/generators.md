@@ -169,8 +169,9 @@ wrote, which registers the classes.
 - `testing::check_params::<P>()` panics on the first field that does not
   declare what the panel, the snippet and the parameters page need: a doc
   comment, a slider or a choice list, a default in range.
-- `testing::nudged::<P>()` is a set of params with every field moved off its
-  default, for a test that `apply` and `read` return what was put in.
+- `testing::nudged::<P>()` is a set of params with each number moved up
+  one slider step, each flag flipped and each name moved to the next
+  choice, for a test that `apply` and `read` return what was put in.
 - A test over `codegen::stale::<G>(root, docs)` fails while a generated file
   is out of date with the structs; `regen_params`, an ignored test beside
   it, rewrites the files

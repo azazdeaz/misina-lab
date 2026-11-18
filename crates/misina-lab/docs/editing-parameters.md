@@ -75,7 +75,8 @@ generator's crate by a command, and a test checks that it is up to date.
    Cargo workspace, name the crate:
    `cargo test -p <generator-crate> regen_params -- --ignored`.
 
-3. Run `cargo test`. Two of the generator's tests check the result. One
+3. Run `cargo test`, with `-p <generator-crate>` in a Cargo workspace. Two
+   of the generator's tests check the result. One
    calls `codegen::stale` and fails while a generated file is out of date.
    The other calls `testing::check_params` and names the first field with
    no doc comment, with no slider or choice list, or with a default outside

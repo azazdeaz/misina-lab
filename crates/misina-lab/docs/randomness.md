@@ -54,7 +54,7 @@ whose mesh is built once and shared with the organs like it
 ([mesh-variations.md](mesh-variations.md)). `Order` numbers the organs in
 the order they were placed ([elements.md](elements.md#rules)). `salt` turns
 a small index such as 1, 2 or 3 into very different 64-bit numbers, so
-organs with neighbouring indices get unrelated streams.
+the streams of organs with neighbouring indices start far apart.
 
 In code, where `scene` is the generator's `SceneParams` and `index` is the
 representative's index:
@@ -96,7 +96,9 @@ reader might otherwise reorder the draws.
 an organ may fill or not, such as a bud that may grow a stem. If a bud
 grows no stem, the element still draws that stem's numbers. So the other
 stems get the same numbers as before: when one bud stops growing a stem,
-only that stem goes away, and every other stem keeps its shape.
+only that stem goes away, and every other stem keeps its config. Which
+mesh a stem is given can still change, since the meshes are picked from
+the configs that remain ([mesh-variations.md](mesh-variations.md)).
 
 **If a value differs from organ to organ, draw it for each organ and keep
 it in the organ's config.** The element builds only a limited number of
