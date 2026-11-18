@@ -41,15 +41,16 @@ representatives, or when every config is within `max_radius` of one. Pass
 only when every config left is the same as a representative.
 
 Picking the farthest config each time keeps the *largest* distance from any
-organ to its representative small. If the metric obeys the triangle
-inequality (going from one config to another by way of a third is never
-shorter than going directly), that distance is at most twice the smallest
-possible. A method that keeps the average distance small, such as k-means,
-lets the common shapes outweigh a rare one. Here a rare config is kept: one
-diseased leaf among ten thousand healthy ones still gets a mesh of its own,
-provided the metric puts it far from the rest, farther than `max_radius`,
-and the budget has room for it. The method is Gonzalez's farthest-first
-traversal for the **k-center** problem.
+organ to its representative small. If `max_radius` does not stop the picking
+first, and the metric obeys the triangle inequality (going from one config
+to another by way of a third is never shorter than going directly), that
+distance is at most twice the smallest possible. A method that keeps the
+average distance small, such as k-means, lets the common shapes outweigh a
+rare one. Here a rare config is kept: one diseased leaf among ten thousand
+healthy ones still gets a mesh of its own, provided the metric puts it far
+from the rest, farther than `max_radius`, and the budget has room for it.
+The method is Gonzalez's farthest-first traversal for the **k-center**
+problem.
 
 `quantize.rs` holds all of it, and depends on neither Bevy nor on what is
 being grown.
