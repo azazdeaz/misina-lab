@@ -101,10 +101,12 @@ agree.
 1. Set the release's version in all four places, give the changelog's
    `[Unreleased]` section that version and the date, open a new empty
    `[Unreleased]` above it, and merge.
-2. Run the release workflow on the merge commit by hand, `gh workflow run
-   release.yml --ref main`, and wait for it to pass. It builds every package
-   as the tag's run will, without publishing, so a build that fails is fixed
-   before anything is out.
+2. Run the release workflow by hand, `gh workflow run release.yml --ref
+   main`, and wait for it to pass. It builds every package as the tag's run
+   will, without publishing, so a build that fails is fixed before anything
+   is out. A run builds whatever `main` is when it starts, so check that its
+   commit, `gh run list --workflow release.yml --json headSha`, is the merge
+   commit.
 3. From a clean checkout of the merge commit, `cargo publish -p misina-lab`.
    The crate's licence files are symlinks, so the checkout has to have them as
    links: one where git wrote them as plain files, as it may on Windows, packs
