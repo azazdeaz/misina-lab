@@ -30,7 +30,7 @@ uv run pytest tests -q
 ```
 
 Everything below the first two lines is what `.github/workflows/ci.yml` runs on
-every push and pull request. Isaac Lab is not installed there, so the tests
+every push to `main` and every pull request. Isaac Lab is not installed there, so the tests
 that need it skip themselves; run those from a demo venv — see
 [DEVELOPMENT.md](DEVELOPMENT.md).
 
