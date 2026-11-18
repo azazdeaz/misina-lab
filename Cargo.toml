@@ -11,6 +11,10 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 authors = ["Andras Polgar <azazdeaz@gmail.com>"]
+repository = "https://github.com/azazdeaz/misina-lab"
+homepage = "https://azazdeaz.github.io/misina-lab/"
+# Bevy's own.
+rust-version = "1.97.1"
 
 # Pinned once, here, so both crates build against the same Bevy.
 [workspace.dependencies]
@@ -19,8 +23,6 @@ authors = ["Andras Polgar <azazdeaz@gmail.com>"]
 # come from.
 bevy = { version = "0.20.1", features = [
     "bevy_feathers",
-    "ghost_nodes",
-    "bevy_ui_debug",
     "reflect_documentation",
     # Without this, `Clipboard` on desktop writes to an in-process buffer no
     # other application can see; the web build reaches `navigator.clipboard`

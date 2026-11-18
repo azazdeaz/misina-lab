@@ -20,7 +20,7 @@ params ──▶ build systems ──▶ Bevy entities ──▶ scene document 
 
 Two halves make one product. The Rust crate, `misina-lab`, builds and exports
 the scene. The Python package, `misina_lab` in
-[`python/misina-lab`](../../python/misina-lab), turns the document into USD
+[`python/misina-lab`](https://github.com/azazdeaz/misina-lab/tree/main/python/misina-lab), turns the document into USD
 and spawns it. The line between them is one serde struct,
 `scene::doc::SceneDoc`, and the same JSON is what a test in either half
 asserts against.
@@ -135,8 +135,9 @@ whose `write_usd` runs this same build headlessly.
 
 Each page defines one idea, shows it, and ends with where it lives in the
 source. The module docs are each module's contract;
-`cargo doc --open -p misina-lab` renders them, and these pages say how the
-modules fit.
+[docs.rs](https://docs.rs/misina-lab) and `cargo doc --open -p misina-lab`
+render them, and these pages say how the modules fit. The pages are also on
+the [docs site](https://azazdeaz.github.io/misina-lab/crates/misina-lab/).
 
 | Page | What it answers |
 | --- | --- |
@@ -157,5 +158,5 @@ modules fit.
 generator's own tests get from this crate is in `src/testing.rs`.
 `--features python` compiles the PyO3 side, which is off by default. The full
 check list is the repository's, in
-[DEVELOPMENT.md](../../DEVELOPMENT.md). How a page under `docs/`
+[DEVELOPMENT.md](https://azazdeaz.github.io/misina-lab/DEVELOPMENT/). How a page under `docs/`
 is written and kept current is [docs/AGENTS.md](docs/AGENTS.md).

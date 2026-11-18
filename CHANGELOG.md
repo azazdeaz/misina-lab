@@ -20,570 +20,7 @@ Two kinds of change break a project that worked on the release before:
 
 ## [Unreleased]
 
-Scene document format 12.
-
-### Added
-
-- **misina-lab**: `palette::tissue` gives the colour of a tissue that
-  scatters light back out, a fruit's flesh, from the `Pigment` amounts it
-  holds: chlorophyll, carotenoids, lycopene, and a peel's chalcone over
-  them. A colour that changes as an organ grows can be written as pigments
-  fading and building, which passes through the colours a real one does,
-  where a blend of two hexes passes through olive and khaki.
-- **greenhouse-lab**: A fruit's outline has knobs of its own:
-  `FruitCfg.widest`, where it is widest; `FruitCfg.stem_dip`, how deep its
-  stem scar is sunk; `FruitCfg.stem_blockiness` and
-  `FruitCfg.blossom_blockiness`, how blocky either half is; and
-  `FruitCfg.blossom_tip`, a blossom end drawn out to a point or dented. Each
-  fruit strays a little from all but the stem dip, as far as its
-  `irregularity` says. The defaults grow a round truss tomato, its shoulders
-  a little blockier than its blossom end, and the greenhouse README gives
-  the settings for a cherry, a plum and a beefsteak tomato. A fruit's
-  collider follows `blossom_tip`, down to a pointed blossom end or to the rim
-  round a dented one.
-- **misina-lab**: A rod can be drawn by one skin that bends with it, rather
-  than a tube on each segment, which kinks at every joint.
-  `strand_mesh_ringed` meshes a strand with rings close enough to bend,
-  `skin_mesh` binds a mesh to the rod's segments by where its points lie
-  along the rod, and `spawn_rod` takes it in place of the tubes. The builder
-  authors it as a UsdSkel `SkelRoot`, with a joint per segment and each
-  point bound to three of them. Under Newton, `drive_skins`, which the
-  spawner calls, poses every skin that moved at its bodies before a frame is
-  drawn, and `Shears` splits a skin where it cuts the rod: the two parts
-  end on the cut, each closed by a cap, and the skin stays where it was
-  drawn. Scene document format 12.
-- **greenhouse-lab**: `StemCfg.skinned` draws each truss that bends as its
-  rachis mesh, skinned to the truss's rod.
-- **vinery-lab**: `ShootCfg.skinned` and `WeedCfg.skinned` draw each cane
-  and each weed stem that bends as its stem mesh, skinned to its rod. The
-  pruning demo draws both so.
-- **greenhouse-lab**: `FruitCfg.detail` sets how finely a fruit's skin is
-  meshed, as a multiplier, each fruit for its own size: its rings go where
-  its outline curves and its sides follow its girth, so a young fruit costs
-  less. At the default 3 its rings and meridians keep within 0.2 mm of its
-  shape and its faces within 0.4 mm, and its outline stays round from close
-  up, where its rings strayed about 0.6 mm and showed its corners; a
-  full-grown fruit comes to about 1250 triangles with its calyx, and 1
-  meshes it about as coarsely as before. The skin's colour is sampled at
-  every ring, so the shoulders' last band of colour shows with the crisper
-  edge its stage gives it.
-- **misina-lab**: `geometry::shapes::simplify_with` is `simplify` over any
-  items, told how far one strays from the chord between two others: points
-  that carry more than a position, or whole rows of points kept or dropped
-  together.
-- **greenhouse-lab**: A truss's fruit are packed. Each is laid out where it
-  would hang alone, then moved, its pedicel swinging round the rachis and
-  bending at its knuckle, until none lies in another, in the stems or on
-  another's pedicel; each fruit turns its top toward its knuckle, so the
-  last, pushed out past the rachis's end, faces back along it. A flower is
-  packed as far as its petals reach, and an elongated fruit as far as its
-  ends, as a capsule. The trusses sharing a mesh share its pedicels, packed
-  for the biggest fruit any of them hangs on each; each truss swings its own
-  fruit about their calyxes, back toward the way each would hang alone, up
-  to 20° off its pedicel, so crowded fruit touch rather than hang apart.
-  A truss's stalks are now as long as a
-  measured truss's, whatever the size of its fruit: a ripe medium truss's
-  fruit hang in a bunch off a rachis under 9 cm long, where it was up to
-  22 cm, and a cherry truss's hang apart on pedicels longer than they are
-  wide. New:
-  `TrussCfg.pedicel_length`, 31 mm by default, and
-  `TrussCfg.rachis_internode`, the rachis between two pedicels, 14 mm.
-- **misina-lab**: `geometry::packing::pack` moves a cluster of `Bob`s,
-  balls hung on stalks of two straight runs, each drawn out into a capsule
-  the way it hangs as far as its `drawn` says, apart until none lies in
-  another, in a stem or on another's stalk, every stalk keeping its length.
-  `packing::swing` swings each ball about its stalk's end, the stalks held
-  where they are, toward the way it would hang alone until it touches the
-  others. `packing::nearest` finds the points of two segments nearest each
-  other.
-- **greenhouse-lab**: A truss's stalks grow with its flowers. Each pedicel,
-  and the internode of rachis leading to it, is a third of its full length
-  when its flower opens, shorter in bud, and grows to full length over the
-  two and a half weeks after, before its fruit is full size. So a truss in
-  flower is short, its buds crowded at its tip, and the peduncle and rachis
-  thicken as it grows. New: `TrussCfg.stalks_in_flower`, a stalk's length
-  when its flower opens as a share of its full length, 0.35 by default.
-- **greenhouse-lab**: A truss sags under its fruit's weight. It grows
-  standing out from the stem, its rachis level, and its fruit bend its
-  peduncle and rachis down as they swell: a truss in flower stands out, and
-  one of grown fruit hangs from its bend much as every truss did before.
-  New: `TrussCfg.stiffness`, the Young's modulus they bend against, 70 MPa
-  by default. `TrussCfg.variations` is 24 by default, up from 16, as how far
-  a truss sags is one more way two trusses differ.
-- **misina-lab**: `geometry::bending::sag` finds where a rod held by its
-  first segment settles under the masses on its points, against its
-  flexural rigidity, and how each point turned, so whatever rides the rod
-  turns with it; `bending::rigidity` is a round section's. An organ is drawn
-  in the shape it grew into carrying nothing, then sagged under its load.
-- **greenhouse-lab**: Trusses flower. A truss shows at the head as a
-  cluster of buds, opens its flowers from its base to its tip from about
-  15 cm below the head, and sets them over the week after. A flower is a
-  calyx, five or six yellow petals swept back and the anther cone, on the
-  prim its fruit grows from, and a young fruit's calyx grows on from the
-  flower's. `greenhouse_lab:stage` is `bud` or `flower` until a fruit sets.
-  New: `FruitCfg.petal_length` and `FruitCfg.petal_reflex`.
-  `FruitCfg.variations` is 32 by default, up from 24, so the flowers' meshes
-  leave the fruit as many of their own as they had.
-- **greenhouse-lab**: Leaves change colour with age. A leaf at the head is
-  a lighter, yellower green than a grown one, and from fourteen nodes below
-  the head a leaf may fade toward a senescent leaf's pale yellow-green, each
-  by a draw of its own. New: `LeafCfg.yellowing`, how far the oldest leaves
-  fade, 1 by default and 0 for every leaf green. `LeafCfg.variations` is 40
-  by default, up from 32, which keeps the leaves' shapes about as close to
-  what each leaf drew as they were.
-- **greenhouse-lab**: Stems are deleafed as growers do it, up to a truss.
-  `StemParams.deleafed_to_truss` is the truss a pass strips a stem up to,
-  counted up from the lowest still on it: 3 by default, which leaves the
-  two trusses nearest their picking on bare stem and 18–20 leaves on a
-  stem. `StemParams.days_since_deleafing` is how long ago the crop was
-  deleafed: a stem carries three more leaves a week than the pass left it,
-  its lowest, which the next pass strips; 0 by default. A young crop keeps
-  every leaf until its first truss nears its picking.
-- **greenhouse-lab**: A path's heating pipes are one loop. At the row head
-  each turns down through an elbow into the floor, to the mains under the
-  main path, and at the far end two more elbows and a pipe across join the
-  pair; each collides as a chain of capsules. The floor's film reaches half
-  a pitch past the row ends.
-- **greenhouse-lab**: Leaflets in relief. A leaflet's midrib and lobe veins
-  are edges of its mesh, and its blade is bent along them: folded up on the
-  midrib, puckered between the veins, ruffled at the margin, and twisting
-  toward the tip where it is lopsided. The leaves at the head are cut
-  narrower, less lobed and coarser toothed than a grown one, and still
-  folded shut from the bud, their leaflets held up along the rachis, opening
-  out as they grow. New: `LeafCfg.lobing`,
-  `LeafCfg.curl`, `LeafCfg.fold` and `LeafCfg.asymmetry`, the cut and the
-  relief from the panel or the cfg. `LeafCfg.detail` now also sets how
-  finely the blade is cut across, which the pucker and the ruffle bend; the
-  triangle counts are about what they were.
-- **misina-lab**: `shapes::Ruffle`, a few plane sinusoids summed over a
-  sheet, drawn off a stream to a given steepness: what both generators'
-  leaves ruffle their margins with.
-- **vinery-lab**: Weeds bend. With `WeedCfg.flexible` on, every weed stem
-  at least 30 cm long, a bolter's wand or a broadleaf's runners, is a rod a
-  solver bends, held at its base, under `Weed_nnnn/Stalk_n`, its leaves
-  riding the segments; the rest of the plant stays one mesh as
-  `Weed_nnnn/Crown`. `VineyardCfg.without_rods()` spawns them rigid under a
-  backend that cannot step them. Off by default.
-- **misina-lab**: `Strand::centerline` cuts a strand's centerline, the curve
-  its mesh is skinned along, into even segments by arc length, with the
-  radius at each cut: a strand ready to be simulated as a rod.
-- **vinery-lab**: `ShootCfg.segment` is how long a segment of a bending
-  shoot's rod is, a stray shoot's or a dormant cane's: 9 cm, as it was.
-- **misina-lab**: `GeneratedSceneCfg.LONE_ROD_DAMPING` damps a rod under no
-  plant's prim in place of `rods.ROD_DAMPING`, through `tune_rods`' new
-  `lone_damping`. **vinery-lab** sets it for the weeds' stems, which now
-  spring back a little past upright before they settle, where they stopped
-  dead.
-- **misina-lab**: `GeneratedSceneCfg.ROD_STRETCH` and `ROD_DAMPING` tune a
-  scene's rods in place of `rods.ROD_STRETCH` and `rods.ROD_DAMPING`.
-  **greenhouse-lab** sets them for its trusses: their fruit no longer bounce
-  for a second after a push or a lift lets go, and a pushed truss swings back
-  a little past rest before it settles, where it stopped dead.
-- **greenhouse-lab**: Stems collide, as a chain of capsules along each
-  stem's axis from where it takes off from the lowered bundle,
-  `Stem_n/Collision_00 …`, each straight from one of the axis's points to
-  another, none of the points between more than 3 mm off it, and
-  overlapping the next over their joint: a capsule from truss to truss and
-  one over each kink. A robot meets them, and so do the stem's own plant's
-  trusses. The lowered runs, below anything a robot reaches for, do not
-  collide.
-- **misina-lab**: `Shears.hold(body, frame)` holds a rod body where it lies
-  in a frame and carries it as the frame moves, kinematic, the rest of its
-  rod hanging from it, until it is let go: a hand's hold on a piece it cut.
-- **misina-lab**: `rods.let_rods_out_of_their_wood` lets each rod through
-  any of its own plant's wood colliders it is authored inside, which
-  `tune_rods` runs: a proxy can be fatter than the wood, and the segments
-  next to a held one start in it. A pair let through stays so, a piece cut
-  free included; the rod's other shapes still meet that wood.
-- **misina-lab**: `geometry::outline::creased_mesh` fills an outline with
-  lines across it kept as edges, spaced as finely as the fill however
-  finely they were traced, so a bend can fold the sheet sharply on them;
-  the parts of a line outside the ring are left out.
-  `geometry::outline::spacing` is how far apart a fill spaces its points.
-- **misina-lab**: `geometry::shapes` gains `cubic`, `serrate`, `simplify`
-  and `untangle`, the pieces a lobed, toothed margin is built from, so a
-  generator strings its own ring from an organ's veins.
-- **misina-lab**: `misina_lab.isaaclab.film` films a video of the running
-  simulation in Isaac Sim: `Rig` eases a camera from shot to shot and cuts
-  the long moves, and `Film` pipes the frames to ffmpeg and writes their
-  captions as SubRip. Every demo's video is filmed through it.
-- **greenhouse-lab**: Every fruit has a collider: a sphere round its body, a
-  capsule on an elongated one, as `Fruit_nn/Collision`; the mesh moved under
-  the fruit's prim as `Fruit_nn/Skin`. On a bent truss it rides the
-  segment's body.
-- **misina-lab**: `rods.carry_riders` seats a collider authored under a rod
-  segment's prim on that segment's body, which the importer had left static,
-  and lets it through its own rod; `tune_rods` calls it. `Shears` finds a
-  body's rod capsule by its label, so a body may carry other shapes, and
-  parks the colliders of whatever a cut hides.
-- **greenhouse-lab**: Trusses bend. One whose node on its stem is below
-  `StemCfg.flexible_below` is a rod a solver bends and `Shears` cuts, its
-  peduncle and first rachis the rod and everything else riding the segment
-  that carries it: the pedicels, the fruit, and `Bend`. The fruit weigh on
-  the rod, so a truss hangs with its fruit's weight and falls with it once
-  cut. `Cut` sits within a centimetre of the rod's first joint, so a flush
-  cut there drops the whole truss. `GreenhouseCfg.PLANT` groups a plant's
-  rods for collisions, and `GreenhouseCfg.without_rods()` spawns them rigid
-  under a backend that cannot step them. The default, 0, bends none.
-- **misina-lab**: `spawn_rod` authors a rod's curve and a prim per segment
-  carrying its tube, for whatever else rides the rod; `segment_frames`,
-  `segment_tubes`, `segment_of`, `rebase`, `segment_name` and `STEM` are
-  what a generator places riders with. They were vinery-lab's.
-- **misina-lab**: `ColliderView` draws every collider of the running Newton
-  model in Kit's viewport, translucent, and follows the ones moved or resized
-  while it runs. Kit draws only a PhysX scene's colliders.
-- **greenhouse-lab**: leaves. A compound tomato leaf at every node of a stem
-  from the head down to where it was stripped: a terminal leaflet, three or
-  four pairs of laterals and small leaflets between them, each leaflet
-  outlined from its veins. Leaves are small and upright at the head and
-  droop further down. The stem below them is stripped, with a stub at each
-  node. Leaves are visual only, with no collider. New: `LeafCfg`.
-- **greenhouse-lab**: `LeafCfg.detail` sets how finely a leaf is meshed, as
-  a multiplier: a full-grown leaf is about 1500 triangles at the default 1,
-  500 at 0.1 and 4500 at 4. Coarser drops the leaflets' finest teeth first.
-- **greenhouse-lab**: the crop's age. `SceneCfg.week`, the weeks since
-  planting, grows every stem forward from a 0.4 m transplant at a truss a
-  week. A young crop stands on its twines below the wire with green fruit
-  only and keeps its lowest leaves; its heads reach the wire and its first
-  trusses ripen about week 9 at the defaults; from then on its stems are
-  lowered along the gutter as they grow. Which trusses hang, how ripe they
-  are and how far their fruit have grown follow from each truss's age, and
-  an extra stem is taken on six weeks after planting.
-- The docs are a site,
-  [azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/):
-  the framework's pages, both generators' parameters and the examples,
-  searchable.
-- **misina-lab**: The viewer's `P` key logs the camera as a storyboard's
-  `camera`, and copies it: a view found by hand, ready to paste into a
-  storyboard.
-- **misina-lab**: A storyboard's camera takes `fov`, the vertical field of
-  view. `{PACKAGE}_SHOT` saves the frame to an image once a storyboard is
-  over, so a storyboard with no steps is a still of its opening shot.
-- **misina-lab**: `misina_lab.isaaclab.shots` renders a still of a generated
-  scene in Isaac Sim from a shot file, its camera a storyboard's, or opens
-  Kit's viewport on the scene, where `P` prints the camera in the same terms.
-- **greenhouse-lab**: A web playground, the viewer in the browser, at
-  [azazdeaz.github.io/misina-lab/playground/greenhouse](https://azazdeaz.github.io/misina-lab/playground/greenhouse/).
-- **misina-lab**: A strand swells all round at its `bulges` and, at its
-  `collars`, toward the stalk of an organ leaving it, the swelling running
-  on down the strand. Given a `tolerance`, a strand keeps only the rings
-  that hold its mesh that close to its surface, bunched at a swelling or a
-  bend and spread out where it runs straight, rather than evenly spaced
-  ones. `sides_within` gives the fewest sides that hold a ring to a
-  tolerance.
-- **greenhouse-lab**: `StemParams.detail`, how finely the stems and the
-  trusses' stems are meshed: at 1 as finely as a leaf at its own detail of
-  1, at 0.1 a plain tube. 0.5 by default.
-- **greenhouse-lab**: `StemParams.head_diameter`, how thick a stem is
-  20 cm below its tip, where growers measure it: 10 mm by default, as on a
-  balanced crop. A stem is half as thick again from 0.8 m below its tip
-  down, about 15 mm by default, where it was 12–20 mm.
-- **greenhouse-lab** (**cfg**): `StemParams.development_spread`, how far
-  stems drift apart in their development: a stem runs up to this times the
-  square root of the crop's age ahead of it or behind it, in weeks, and grows
-  up to 5% faster or slower, so its trusses hang higher or lower than its
-  neighbours' and ripen later or sooner, where every stem's hung level. 0.2
-  by default; 0 keeps the stems in step, their trusses apart only by how
-  much faster or slower each grows. `harvest_height` is now where a
-  stem's lowest truss hangs about: up to a week's growth above it, and up to
-  5% of the stem's live height below it on a stem that grows faster. A stem
-  carries `trusses` trusses whatever the day, where it carried one fewer
-  between whole weeks, the newest flowering near its head. `ripe_trusses`
-  is an average over the stems: a stem's lowest truss runs from breaking,
-  just after a picking, to red, where at a whole week every stem's was red.
-
-### Changed
-
-- **greenhouse-lab**: A fruit colours over its whole surface, where a level
-  front climbed from its blossom end and left its girth green until pink.
-  Each point of its skin starts to colour at an onset of its own: up from
-  the blossom end, in patches, and the shoulders last, by
-  `FruitCfg.shoulder_lag` stages, 1.7 by default, which is new. From its
-  onset a point loses its chlorophyll and then builds lycopene, and its
-  colour is read off those amounts, so a turning fruit passes through
-  yellow and salmon rather than olive. At the end of red the shoulders are
-  still a little orange; a `shoulder_lag` of 0.5 makes them red. An orange,
-  yellow or brown fruit builds other pigments: yellow keeps a trace of
-  green, and brown keeps all of its chlorophyll beside the lycopene, which
-  makes it a red-brown, `#80341D`, lighter than the `#5E2A1C` it was. A
-  young fruit is a little duller green.
-- **greenhouse-lab** (**cfg**): A fruit has a lobe per locule, each its own
-  width and fullness, where its lobes were one even ripple. The groove over
-  each wall between two is deepest round the shoulders, where it pleats out
-  from the calyx, and fades toward the blossom end. New:
-  `FruitCfg.locules`, which each fruit draws up to one either side of;
-  `FruitCfg.rib_reach`, the grooves' depth at the girth as a share of
-  their depth round the shoulders; and `FruitCfg.irregularity`, how far a
-  fruit's lobes differ and how far it leans, a few fruit far, where every
-  fruit bulged a little to one side. `FruitCfg.ribbing` is now the depth
-  round the shoulders, 0.08 by default. The body is rounder and its stem dip
-  shallower, as on a round truss tomato, and a sepal over a groove lifts its
-  edges clear of the lobes either side.
-- **misina-lab**: `Shears.cut` leaves a body already cut loose as it is,
-  and returns False.
-- **vinery-lab**, **greenhouse-lab**: The web playgrounds start on a scene
-  just big enough to hold everything: the vineyard on a 24 by 18 m parcel
-  of three rows, the greenhouse on one 5 m row. The panel grows
-  either back to the defaults the native viewer starts on. New in
-  **misina-lab**: `viewer::start_from`, which starts the viewer from given
-  params rather than the defaults.
-- **misina-lab**: A storyboard that saves a still or records a video opens no
-  window and needs no display: the viewer draws the scene and the panel into
-  an image of the storyboard's size, so `{PACKAGE}_SHOT` and
-  `{PACKAGE}_RECORD` run on a machine with no desktop. A preview still opens
-  its window.
-- **greenhouse-lab**: A truss's rachis ends in its last fruit: its last
-  internode is that fruit's pedicel out to the knuckle, where the rachis ran
-  on past the fruit to a stump. Every other pedicel leaves the rachis's
-  underside, down one flank and then the other, where it left out to the
-  sides, so the fruit hang under the rachis in two ranks at a right angle. A
-  pedicel runs out to its knuckle, bends down there and runs on into its
-  fruit's calyx, where a stub on the fruit stood between them, and it leans
-  the fruit out the way it left, so the fruit's top faces back toward the
-  rachis. Each pedicel draws its own reach, swing and lean. Pedicels no longer
-  run through the fruit above them. New: `TrussCfg.pedicel_angle`, how far
-  under the rachis the pedicels leave it; 0 leaves them out to its sides.
-- **greenhouse-lab** (**cfg**): `FruitCfg.jointed` is now `TrussCfg.jointed`:
-  the knuckle is on the truss's pedicel, and a fruit has no stub of its own.
-- **misina-lab**: `rods.make_physics_cfg_newton` takes `broad_phase`.
-  `"explicit"`, as it was, tests the shape pairs `Model.finalize` listed from
-  the collision groups, for the life of the model. `"nxn"` and `"sap"` read
-  the groups every step, and a cut then gives its piece groups of its own,
-  so it meets every plant's rods and every other piece. The two faces of a
-  cut pass through each other there, and `tune_rods` reserves no
-  `ContactSlots` rows, so the scene needs no two static shapes to park them
-  on.
-- The harvest demo finds its contacts with the sweep-and-prune broad phase: cut
-  trusses pile up in the crate instead of lying through each other in one layer.
-- The harvest demo's hand slips: its colliders, the shear's among them, have
-  a friction coefficient of 0.25, where every one had the default 1.0. A
-  truss let go slides off the open finger as the shear opens, where it lay
-  on it until the blades were tipped down.
-- The harvest demo's hand is stiff to the touch: its colliders have a
-  contact stiffness of 50 000 N/m, where every one had Isaac Lab's default
-  2500. A fruit borne on the shear's head sinks 0.6 mm into it, where it
-  sank about a centimetre.
-- The harvest demo's video opens on a truss giving way to the arm: before
-  the first cut, the open shear pushes the truss from the side, brushes its
-  lowest fruit and lifts it, filmed close up. The demo's crop is deleafed up
-  to the truss above the one picked, so leaves hang in the video's view. `harvest.run` makes the `Gesture`s it is
-  given at the first truss, its points placed about the truss's fruit, and
-  passes over one the arm cannot plan or finish.
-- The harvest demo lowers a truss into its crate before it lets go, where
-  it opened the shear with the jaws 42 cm over the floor: onto the trusses
-  already there, or to about 6 cm over the empty floor, at whichever of
-  three spots along the crate lets it come down furthest. The open shear
-  then backs off the truss. One the arm cannot carry to the crate or lower
-  into it is let go where it is, as before.
-- The pruning demo's vineyard grows bending weeds, and its robot's chassis
-  and wheels push them aside as it drives the alley. Its video is filmed
-  with them.
-- The pruning demo's arm swings out to each cut with its shear shut, and
-  opens it at the stand-off: open, the hook's claw could gather a cane on
-  the swing and drag it down through every cut after. In its video's take of
-  two canes, the shut shear moves off a cane the swing left lying on it
-  before the blade opens, if one is there, so the blade does not drop it into
-  the mouth and pinch it there on the next swing.
-- **misina-lab**: The demo videos' camera, `film.sensor`, renders with DLAA
-  rather than DLSS, and `film.develop` renders each frame four times, which
-  leaves its edges clean where they were ragged and flickering. The pruning
-  video's close-ups are filmed at f/96, as at f/48 the blades frayed against
-  the blurred background.
-- **misina-lab**: A storyboard's slide rebuilds the scene at every frame of
-  it, where it reached the scene 150 ms after the slider stopped, as a drag
-  does: a recorded video shows the scene following the slider.
-- **misina-lab**: A storyboard's camera move that starts while another is
-  still under way blends out of it and keeps the camera's speed, where it
-  stopped the camera dead and started it again from rest.
-- **misina-lab**: The viewer's footer keeps each figure on one line: a window
-  too narrow for them all moves whole figures to a second row, where each
-  figure broke over two lines as its number grew.
-- **misina-lab**: The viewer's `{PACKAGE}_RECORD` video is near-lossless, at
-  CRF 10 where it was 20, as the Isaac Sim films' are: a video encoded from
-  it for upload loses detail only then. A file is about three times bigger.
-- **misina-lab**: The viewer's **Copy Isaac Lab cfg** button spans the
-  panel's width and is taller than a control row.
-- **greenhouse-lab**: Lowered stems lie in a loose bundle along each side
-  of the gutter, where they were packed into one straight cable: each run
-  drifts across and up the bundle, crossing the others, rests every half
-  meter or so and sags between, a few in deep loops, and kinks at each old
-  truss. A stem takes off from where it last rests, climbing along the row
-  to its twine a little below its lowest truss, where it bent straight up
-  in 15 cm. Every stem kinks at each truss, away from it, and is a little
-  ridged. Trusses and
-  leaves keep their heights and the way they face.
-- **greenhouse-lab**: A stem swells at every node and every truss, more on
-  the side its leaf or truss leaves, the swelling running on down the stem
-  as a leaf's base does. A stripped leaf or a picked truss leaves a short
-  stub, or more often a scar, all the way down the lowered run as well as
-  on the rise. A stem kinks a little at every node too, thins to a point at
-  its tip, and its girth undulates slowly along it. A leaf's petiole flares
-  out of the stem; a truss's peduncle flares out of it too, its rachis
-  swells at every pedicel, and each pedicel arches smoothly and flares out
-  of the rachis. A bent truss's held segment reaches 13.5 mm along its
-  peduncle, past the thickest stem's surface.
-
-- **vinery-lab**: Leaves are built from their veins rather than traced: five
-  main veins from the petiole's junction, a lobe at the end of each, sinuses
-  between them and teeth the whole way round, cut to a margin of its own for
-  every blade mesh the budget keeps, where five drawn outlines were curled a
-  few ways each. A leaf's shape now follows its growth: the young leaves near
-  a shoot's tip are narrower and coarser toothed, with little blade yet at
-  their base, folded up along their veins and a lighter yellow-green, where
-  they were a grown blade scaled down. A leaf now takes about ten nodes
-  below the tip to reach full size, 0.7 m at the default spacing where it
-  took 0.25 m, so the leaves of a default shoot are all still filling out
-  and the canopy's blades run a little smaller. New: `LeafCfg.lobing`, how
-  deeply a grown blade is cut, which each leaf draws about;
-  `LeafCfg.detail` now meshes the margin and the veins as well as the
-  middle, so coarser drops the teeth first.
-- **vinery-lab** (**cfg**): A leaf bends along its veins, which its mesh
-  keeps as edges so it creases on them. The young leaves near a shoot's tip
-  are folded on the midrib as they lay in the bud, opening out by the time
-  they are half grown, where they drooped across it. A grown blade hangs off
-  a petiole held up and out, bent down off it at the junction by new
-  `LeafCfg.blade_angle`, and arches down off it, where the whole leaf
-  drooped from the shoot; `ShootCfg.leaf_droop` is still the blade's pitch.
-  The blade stands up between its main veins. And no leaf is symmetric: one
-  half is the larger and the midrib curves away from it, the next leaf up
-  the shoot leaning the other way about three times in four, as far as new
-  `LeafCfg.asymmetry` lets it. `LeafCfg.curl` now arches, pleats and
-  ruffles a grown blade and no longer troughs it across its midrib; new
-  `LeafCfg.fold` folds it into a V. A full-grown leaf's area is new
-  `LeafCfg.area`, 150 cm² as before. Every leaf prim carries its blade's
-  area as placed, in m², and its maturity, as `vinery_lab:area` and
-  `vinery_lab:maturity`. A blade is about a sixth more triangles at the same
-  `detail`.
-- **misina-lab**: `Outline::from_svg` is gone, and with it the `usvg`
-  dependency: an outline is a ring built in code, which `geometry::outline`
-  fills. A generator that traced its shapes in SVG builds the ring itself.
-- **greenhouse-lab**: Trusses are modelled closer to life. The rachis is a
-  chain of internodes that zigzags, kinking away from each pedicel, and
-  hangs nearer vertical toward its tip; the peduncle bends over a longer
-  arc. The sepals are half the fruit's diameter long, lift off the
-  shoulders to spread, and are folded and twisted. Every representative
-  truss draws its own kinks.
-- **misina-lab**: A rod carries loads: `Cable.loads` is the mass hanging from
-  each point, which the builder adds to the rod's own, and `cable()` takes
-  it after the widths, empty for a rod that carries nothing.
-- **misina-lab**: A rod tapers as its organ is drawn. The builder authors a
-  cable's `widths` again as its `physics:thicknesses`, so each segment's
-  capsule, mass and stiffness follow the taper, and the scene document's
-  `Cable.thickness`, the one diameter a rod used to be simulated at, is
-  gone. At its material's own stiffness a tapered
-  1.4 m rod sags about 9 cm and settles in about a second, as the uniform
-  one did stiffened threefold, so `tune_rods`, vinery-lab's `tune_shoots`
-  and `rods` lose `stiffen` and `ROD_STIFFEN`.
-- **misina-lab**: The Isaac Lab side runs on Isaac Lab 3.0.0 and the Newton
-  1.6.1 it ships with. Under Newton, Isaac Lab now puts into the physics only
-  the assets a scene declares, so declare a generated scene in a scene config,
-  `AssetBaseCfg(prim_path=..., spawn=...)`: one spawned straight onto the
-  stage with `cfg.func(...)` is drawn, but nothing collides with it. The
-  viewer's **Copy Isaac Lab cfg** snippet says so.
-- The examples run on the Isaac Lab 3.0.0 release and Isaac Sim 6.2, and
-  build their scene as an `InteractiveScene`, which puts the robot in the
-  scene's one environment, at `/World/envs/env_0/Robot`.
-- **greenhouse-lab** (**cfg**): `StemCfg.lowered` is gone: how much stem
-  lies along the gutter follows from `SceneCfg.week`.
-  `StemCfg.harvest_height` and `StemCfg.trusses` now describe the crop in
-  full production, and set how much a stem grows in a week.
-- **misina-lab**: `Shears.colliders(body)` replaces `Shears.collider(body)`
-  and lists all of a body's collision shapes, so a part built of several, a
-  blade in slices, can have each moved on its own with `Shears.place`.
-- **misina-lab**: The viewer's camera is `bevy_panorbit_camera` 0.36 from
-  crates.io, so a generator in its own repository no longer copies a
-  `[patch.crates-io]` section; delete it.
-- **misina-lab**: A web build of a generator gets Bevy's WebGPU backend and
-  `getrandom`'s `wasm_js` from misina-lab, so a generator in its own
-  repository no longer lists them under its `wasm32` dependencies; delete
-  them.
-- **misina-lab**: A storyboard played without `{PACKAGE}_RECORD` hands the
-  window back to the pointer once it is over, instead of quitting.
-- The repository is now
-  [azazdeaz/misina-lab](https://github.com/azazdeaz/misina-lab), and the web
-  playground moved with it to
-  [azazdeaz.github.io/misina-lab/playground/vinery](https://azazdeaz.github.io/misina-lab/playground/vinery/).
-  The old repository URL redirects; the old playground URL does not.
-- The README is misina-lab's front page: the framework's features first,
-  then a section for each reference generator and its examples. The docs
-  site lists the framework first too. The
-  vineyard's page is now
-  [crates/vinery-lab/README.md](crates/vinery-lab/README.md), which is also
-  vinery-lab's description on PyPI.
-
-### Fixed
-
-- The harvest demo's arm is shaded smooth, where every facet of its meshes
-  showed: Menagerie's UR5e meshes give each triangle its own corners and its
-  face's normal. The demo draws a copy of each with the corners welded and
-  the normals averaged across every edge but those sharper than 40 degrees.
-- **misina-lab**: A `{PACKAGE}_RECORD` video keeps every frame in its place.
-  A frame whose readback landed more than 8 frames late, as one does while a
-  slide rebuilds the scene, was skipped, and written once it landed in the
-  place of a frame up to two seconds later: the camera jumped back for a
-  frame. Frames now wait for a late one up to 2 GiB, about 250 frames at
-  1080p, and one skipped is never written, and logged.
-- **greenhouse-lab** (**cfg**): `LayoutCfg.plant_spacing` is how far apart
-  the plants stand, exactly. A slab is cut to the whole number of plants
-  that brings it nearest 1.2 m, where every slab was 1.2 m and took the
-  nearest whole number of plants, so every spacing from 0.35 to 0.48 m built
-  the same rows, three plants to a slab. A row leaves at least 0.2 m of its
-  gutter bare at each end, and plants stand no closer than 0.15 m, so every
-  block sits whole on its slab. A lowered crop's stems rise along a wire as
-  far apart as the plants: every hook is slid by the same step, where each
-  stem was lowered as far as it had grown past the wire, give or take 15%,
-  which bunched some stems a few centimetres apart and left gaps of over
-  half a metre. The stems that run round a gutter's end rise on in step with the
-  rest, and trusses of neighbouring stems no longer run into each other or
-  into the stems.
-- **misina-lab**: The rods' solver keeps up to 1024 contacts for each body,
-  `rods.BODY_CONTACTS`, where it kept Newton's 64. A robot body that meets
-  rods as a proxy touches every rod shape against it at once, and VBD
-  dropped its contacts past 64 and printed a warning every substep: in the
-  greenhouse harvest demo the crate filled to about 500 and the shear
-  reached about 180, some 175,000 warnings a run. Solving all of them on
-  Newton's four threads per body made a run half again as long, so new
-  `rods.widen_contact_threads()`, which the harvest demo calls once the app
-  is up, gives each body 32, and a run takes 3% longer than it did.
-- **misina-lab**: `tune_rods` counts a rod under no plant's prim as a plant
-  of its own, so it meets the ground, the posts and the robot. It had taken
-  the scene's group, which the ground shares, and passed through it.
-- **misina-lab**: Whatever rides a rod's segment stays where it was put
-  once the simulation runs. Newton framed each segment's body itself, in
-  the world, and turned it about the segment off the prim it drives by as
-  much as half a turn, carrying the prim's riders round with it: a bent
-  truss's fruit were drawn up to 6.5 cm from their colliders. A `Cable`
-  now carries its `normals`, one per point, the frames its segments' prims
-  are authored at, and the importer builds every body in them.
-  `segment_frames` turns each frame from the one before rather than from
-  +Z, so a rod's frames no longer twist along it. Scene document format 11.
-- **misina-lab**: A cut piece rests on the stub it was cut from. The two
-  segments either side of a cut were the two a joint had tied, and Newton
-  never pairs those, so the piece fell through the stub's top segment and
-  tipped off the one below. `tune_rods` now reserves a contact-pair row per
-  rod joint as the model is built, and a cut writes the joint's pair into
-  it, with each capsule pulled back a radius at the cut face so the two
-  touch there instead of starting a thickness deep in each other. A scene
-  with rods needs two static colliders, anywhere, to park the rows on.
-- **misina-lab**: `configs_changed` also fires when a layer's configs are
-  removed, so an edit that leaves a layer nothing to build clears its parts
-  from the library. Such an edit used to leave the layer's old parts in the
-  scene document, unreferenced.
-- **misina-lab**: The viewer draws everything a rebuild spawns. When an edit
-  rebuilt two layers in one frame, Bevy 0.20.0 could skip propagating the
-  transforms of parts the second layer spawned into entity indices the first
-  had just freed, and those parts drew at the origin: setting the
-  greenhouse's week to 0 lost a whole row. misina-lab now requires Bevy
-  0.20.1, which fixes it.
-- **misina-lab**: The ground's collider under Newton is the ground mesh again
-  on a field whose two axes step differently. The height field Newton builds
-  from it was sampled at the finer axis's spacing, which put its rows between
-  the mesh's along the other axis: millimetres off the drawn ground on gentle
-  ground, more on rough.
-
-## [0.1.0] - Unreleased
-
-Scene document format 8. The first release.
+The first release, 0.1.0. Scene document format 12.
 
 ### Added
 
@@ -591,39 +28,66 @@ Scene document format 8. The first release.
   declares its parameters once, as Rust structs, and builds its scene in Bevy
   0.20; the viewer's panel, the Python params classes, the Isaac Lab cfg
   classes, their type stubs and a parameters page are all generated from those
-  declarations.
+  declarations. It releases as a crate on crates.io and a Python package on
+  PyPI.
 - **misina-lab**: the viewer. Collapsible parameter sections with a tooltip on
   every parameter, sliders that take a typed number, a rebuild of only what an
-  edit touches, a wireframe toggle, an overlay of every collider, a footer with
-  what the scene weighs, and video recording of a run. **Copy Isaac Lab cfg**
-  puts the current settings on the clipboard as a cfg construction, only the
-  fields that moved.
+  edit touches, a wireframe toggle, an overlay of every collider, and a footer
+  with what the scene weighs. **Copy Isaac Lab cfg** puts the current settings
+  on the clipboard as a cfg construction, only the fields that moved. A
+  storyboard plays camera moves and panel edits and saves a still or records a
+  video, with no window or display; `P` copies the view as a storyboard's
+  `camera`.
+- **misina-lab**: what a generator builds its organs from. Strands, tubes
+  swept along a polyline that swell at their bulges and collars; outlines
+  filled into sheets that fold on their veins; the pieces of a lobed, toothed
+  margin; points scattered over a band of ground; `bending::sag`, where a rod
+  settles under the loads on it; `packing::pack`, a cluster of fruit on stalks
+  moved apart until none lies in another; and `palette::tissue`, the colour a
+  tissue's pigments leave. `quantize` reduces a population of configs to a
+  budget of meshes, and every element draws from a stream of the one seed.
 - **misina-lab**: the USD builder, `misina_lab.usd`, and
   `python -m misina_lab.usd scene.json scene.usd` to build a saved document.
   Scenes are Z-up, in meters. A material per part, coloured per point where
   the part asks for it; static colliders; the ground as a height field, read
   back by `misina_lab.usd.Ground` to place a robot on it. Custom prim
   attributes carry ground truth, under the generator's namespace.
-- **misina-lab**: the Isaac Lab spawner, `GeneratedSceneCfg`. It generates a
-  scene on first use, caches it as a USD file, and spawns it as an ordinary
-  `FileCfg` asset, once however many envs there are.
+- **misina-lab**: the Isaac Lab spawner, `GeneratedSceneCfg`, on Isaac Lab
+  3.0.0 and the Newton 1.6.1 it ships with. It generates a scene on first use,
+  caches it as a USD file, and spawns it as an ordinary `FileCfg` asset, once
+  however many envs there are.
 - **misina-lab**: flexible rods on Newton: one capsule body per segment,
-  stepped by the VBD solver beside MJWarp for the robot, and spawned static on
-  a backend that cannot step them. `misina_lab.isaaclab.cutting` cuts a rod
-  anywhere along it while the simulation runs.
+  tapering as the organ does and carrying the loads hung on it, stepped by the
+  VBD solver beside MJWarp for the robot, and spawned static on a backend that
+  cannot step them. Whatever is authored under a segment rides its body, and a
+  skin bends with the rod where a tube per segment kinks at every joint.
+  `Shears` cuts a rod anywhere along it while the simulation runs, and holds a
+  cut piece as a hand does.
+- **misina-lab**: Isaac Sim tools. `ColliderView` draws every collider of the
+  running Newton model in Kit's viewport, `shots` renders a still of a scene
+  from a shot file, and `film` films a video of the running simulation.
 - **vinery-lab**: a parametric vineyard. Rows on rolling terrain with bumps a
   wheel feels, posts and trellis wires, vines trained up to the fruiting wire
-  and along it, leaves as detailed meshes, a cover crop in the alleys and weeds
-  under the vines. Every plant, shoot and leaf is its own prim, and the same
-  seed gives the same vineyard. Level of detail and mesh variance trade
-  fidelity for frame rate.
-- **vinery-lab**: stray shoots as flexible rods a robot pushes aside and cuts,
-  and a dormant mode: bare canes with a bud at every node, every one of them
-  cuttable.
-- **vinery-lab**: `VineyardCfg`, and the viewer as a
-  [web playground](https://azazdeaz.github.io/misina-lab/).
+  and along it, leaves built from their veins and bent along them, a cover crop
+  in the alleys and weeds under the vines. Every plant, shoot and leaf is its
+  own prim, and the same seed gives the same vineyard. Level of detail and mesh
+  variance trade fidelity for frame rate. Spawned with `VineyardCfg`.
+- **vinery-lab**: stray shoots and weed stems as flexible rods a robot pushes
+  aside and cuts, and a dormant mode: bare canes with a bud at every node,
+  every one of them cuttable.
 - **greenhouse-lab**: the rows of a high-wire tomato greenhouse. Floor, heating
-  pipe rails, gutters with slabs and blocks, crop wires, and the crop on them:
-  stems with their twine and hooks, trusses with a `Cut` and a `Bend` frame
-  for a gripper, and every fruit its own prim, with a calyx, a growth stage and
-  a ripeness. Spawned with `GreenhouseCfg`.
+  pipe loops, gutters with slabs and blocks, crop wires, and the crop on them,
+  grown for `SceneCfg.week` weeks since planting: stems with their twine and
+  hooks, lowered along the gutter as they grow; compound leaves that yellow
+  with age and are stripped as growers strip them; and trusses that flower,
+  set fruit and sag under it. Every fruit is its own prim, with a calyx, a
+  shape of its own and a ripeness coloured from its pigments, and every truss
+  has a `Cut` and a `Bend` frame for a gripper. Trusses low on the stem bend
+  and are cut as rods, and fruit and stems collide. Spawned with
+  `GreenhouseCfg`.
+- Web playgrounds of both viewers, and the docs site, at
+  [azazdeaz.github.io/misina-lab](https://azazdeaz.github.io/misina-lab/).
+- Examples, each its own uv project: a quadruped walking the vineyard's
+  alleys, a straddling robot driving its rows, an arm pruning a dormant row, a
+  pipe-rail robot harvesting the greenhouse, and RGB-D sequences filmed as
+  BUTom-ST21's were.

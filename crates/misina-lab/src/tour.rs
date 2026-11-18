@@ -1,5 +1,5 @@
 //! Plays a storyboard in the viewer — camera moves, panel scrolls, parameter
-//! edits — for recording a demo video with [`record`](crate::record), or for
+//! edits — for recording a demo video with [`record`], or for
 //! taking a still:
 //!
 //! ```text

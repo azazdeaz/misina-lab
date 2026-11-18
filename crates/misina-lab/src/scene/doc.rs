@@ -38,6 +38,10 @@
 //!   prim carrying a [`Skin`]: the builder binds it to a skeleton there with
 //!   a joint per segment, which a consumer poses from the rod's bodies.
 
+// The document is the contract with every consumer of the JSON, so each field
+// says what it holds.
+#![warn(missing_docs)]
+
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
@@ -50,12 +54,14 @@ pub const FORMAT: u32 = 12;
 /// One generated scene, ready to be turned into a USD stage.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SceneDoc {
+    /// [`FORMAT`] when written; the builder refuses any other.
     pub format: u32,
     /// Always `"Z"` — the export target is robotics simulation (Isaac Lab and
     /// ROS, both REP-103 right-handed Z-up). Transmitted rather than assumed
     /// so the builder authors stage metadata from the document rather than
     /// from a constant of its own.
     pub up_axis: String,
+    /// Always 1: every length in the document is in meters.
     pub meters_per_unit: f64,
     /// The generator's Python package, `Generator::PACKAGE`. Every name in a
     /// [`Node::attributes`] is authored under it — `boxlab:` for `boxlab` —
@@ -75,6 +81,8 @@ pub struct PartEntry {
     /// Unique within the document, and the name a [`Node::reference`] uses.
     /// By convention `<Layer>_<representative index>` — `Leaf_2`, `Plant_11`.
     pub name: String,
+    /// The vertices, in the part's own frame: a prim referencing the part
+    /// places them with its [`Node::xform`].
     pub points: Vec<[f32; 3]>,
     /// Flat triangle list into `points`.
     pub indices: Vec<u32>,
@@ -82,6 +90,8 @@ pub struct PartEntry {
     /// builder leaves `normals` unauthored and a renderer computes its own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub normals: Option<Vec<[f32; 3]>>,
+    /// Per-point texture coordinates, authored as the `st` primvar. Absent
+    /// when the mesh carries none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub uvs: Option<Vec<[f32; 2]>>,
     /// Linear RGB. Authored both as a constant-interpolation `displayColor`
@@ -149,6 +159,8 @@ pub struct Node {
     pub name: String,
     /// `"Xform"` or `"Scope"`.
     pub type_name: String,
+    /// The prim's transform relative to its parent. Absent for the identity,
+    /// in which case the builder authors no transform ops.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub xform: Option<Xform>,
     /// The [`PartEntry`] this prim draws, by name. A prim with a reference is
@@ -197,6 +209,8 @@ pub struct Node {
     /// its transform, and not inside the part it references.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub attributes: BTreeMap<String, AttributeValue>,
+    /// The child prims, sorted by name, so the document is identical across
+    /// runs. Empty on a prim with a `reference`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<Node>,
 }
@@ -210,10 +224,15 @@ pub struct Node {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(untagged)]
 pub enum AttributeValue {
+    /// USD `bool`.
     Bool(bool),
+    /// USD `int`.
     Int(i32),
+    /// USD `float`.
     Float(f32),
+    /// USD `float3`.
     Float3([f32; 3]),
+    /// USD `string`.
     String(String),
 }
 
@@ -250,10 +269,12 @@ impl From<&str> for AttributeValue {
 /// A prim's transform, as the `translate` / `orient` / `scale` op stack.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct Xform {
+    /// In meters, in the parent prim's frame.
     pub translate: [f32; 3],
     /// Quaternion in **xyzw** order — Bevy's `Quat` layout. USD's `Gf.Quatf`
     /// takes the real part first, so the builder reorders on the way in.
     pub orient: [f32; 4],
+    /// Per axis, applied before `orient`.
     pub scale: [f32; 3],
 }
 
@@ -265,6 +286,7 @@ pub struct Xform {
 /// routed through custom geometry, both dearer than the analytic shape.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct Capsule {
+    /// In meters, of the cylinder and of both hemispherical caps.
     pub radius: f32,
     /// The **cylindrical section alone**, as USD measures it: the capsule
     /// reaches `height / 2 + radius` either side of its origin.
@@ -321,7 +343,9 @@ pub struct Cable {
 /// prim's parent, the organ, which the skin's points are in too.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Skin {
+    /// One joint per segment, from the rod's held end.
     pub joints: Vec<String>,
+    /// Each joint's rest frame, in the same order as `joints`.
     pub binds: Vec<Xform>,
 }
 

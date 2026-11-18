@@ -7,7 +7,10 @@ pub mod geometry;
 pub mod palette;
 pub mod params;
 pub mod perf;
+// Called only from what `generator!` expands to, in the generator's crate, so
+// public; not API, so hidden. Its signatures change with the macro.
 #[cfg(feature = "python")]
+#[doc(hidden)]
 pub mod python;
 pub mod quantize;
 // Pipes frames to an `ffmpeg` child process, which the web has neither of.

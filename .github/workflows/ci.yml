@@ -47,6 +47,20 @@ jobs:
 
       - run: cargo test --workspace
 
+      # What docs.rs renders: a broken link, or one to a private item, fails here.
+      - run: cargo doc -p misina-lab --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+      # Packs misina-lab as crates.io gets it and builds it from the tarball, so
+      # a file it needs from outside the crate fails here. The packed manifest
+      # has no `[profile]`; passing the root one lets the build reuse the
+      # dependencies `cargo test` compiled.
+      - run: >-
+          cargo package -p misina-lab
+          --config profile.dev.opt-level=1
+          --config 'profile.dev.package."*".opt-level=3'
+
       - uses: astral-sh/setup-uv@v7
 
       # Builds the extension through maturin, the way a consumer installs it,

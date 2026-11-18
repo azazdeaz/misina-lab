@@ -2,21 +2,21 @@
 //! the viewer.
 //!
 //! The panel owns no per-parameter code. It walks [`params::fragments`] and
-//! spawns one [`section`] per fragment holding one control per field: a slider
+//! spawns one `section` per fragment holding one control per field: a slider
 //! for a field carrying a `@Slider`, a dropdown for one carrying `@Choices`, a
 //! checkbox for a `bool`. Caption, range and tooltip all come from the field's
 //! declaration, so a parameter added to a struct is in the panel.
 //!
-//! Sliders fire on every [`ValueChange`](bevy::ui_widgets::ValueChange),
+//! Sliders fire on every [`ValueChange`],
 //! including mid-drag, so they write a [`Staged`] copy of the params rather
-//! than the resources the build systems read. [`commit`] hands the edit over
+//! than the resources the build systems read. `commit` hands the edit over
 //! once the slider has stopped moving, which is what keeps the drag itself
 //! smooth: one rebuild per drag instead of one per frame.
 //!
 //! A click that is not a drag turns a slider into a text field instead, the
-//! way Blender's sliders do — see [`open_field`] and [`close_fields`].
+//! way Blender's sliders do — see `open_field` and `close_fields`.
 //!
-//! Every control carries a [`Tip`] saying what its parameter means; [`tips`]
+//! Every control carries a [`Tip`] saying what its parameter means; `tips`
 //! floats it beside the control while the pointer is over it.
 
 use std::borrow::Cow;
@@ -69,7 +69,7 @@ pub fn plugin<G: Generator>(app: &mut App) {
 /// Which field a control edits, by fragment and field name.
 ///
 /// The write-back observers reach the params through it, and so does
-/// [`sync_controls`], which is why a dropdown's caption and a checkbox's
+/// `sync_controls`, which is why a dropdown's caption and a checkbox's
 /// check are right however the params came to change.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Bound {
@@ -339,7 +339,7 @@ fn close_field(
 /// opening onto the rest.
 ///
 /// The caption is not set by the pick but read back from the params every
-/// frame by [`sync_controls`], so it needs no walk from a menu item back to
+/// frame by `sync_controls`, so it needs no walk from a menu item back to
 /// the button it belongs to.
 pub fn dropdown<P: Params>(
     label: String,
@@ -518,7 +518,7 @@ const QUIET: f32 = 0.15;
 ///
 /// Rebuilding a layer costs tens of milliseconds at field scale, so a slider
 /// that wrote the live resources would spend a drag rebuilding the scene once
-/// per frame. Sliders write this instead and [`commit`] copies it across.
+/// per frame. Sliders write this instead and `commit` copies it across.
 ///
 /// Viewer-only: nothing but [`plugin`] inserts one, so the headless
 /// [`generate`](crate::generate) path and the Python bindings see the live

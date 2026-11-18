@@ -8,7 +8,7 @@
 //! be self-describing but unreadable; this way the snippet says what was
 //! *decided*, which is also what survives review in a config file.
 //!
-//! The fields come from the params walk in [`params`](crate::params), so a
+//! The fields come from the params walk in [`params`], so a
 //! field added to a struct is in the snippet. A fragment's cfg class is its
 //! stem with `Cfg` on the end — `PoleCfg` for `PoleParams` — which is the name
 //! the generated `{name}_cfg.py` defines; the aggregate's is `{NAME}Cfg`.

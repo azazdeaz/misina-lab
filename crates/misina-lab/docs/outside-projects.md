@@ -1,15 +1,11 @@
 # A generator in its own repository
 
-> [!WARNING]
-> **Under development.** This page may not reflect the current state of
-> the source. We're working on it.
-
-A generator outside this repository depends on both halves of misina-lab:
-the Rust crate by git, and the Python package by version. Its repository
-holds one crate that is the generator, its viewer and its Python extension
-module at once. This page is what that crate needs beyond the generator's
-code, which is written as the [README](../README.md) shows. Below,
-`<commit>` stands for the commit a generator pins.
+A generator outside this repository depends on both halves of misina-lab,
+at one release: the Rust crate from crates.io and the Python package from
+PyPI. Its repository holds one crate that is the generator, its viewer and
+its Python extension module at once. This page is what that crate needs
+beyond the generator's code, which is written as the [README](../README.md)
+shows. Below, `0.1.0` stands for the release a generator pins.
 
 ## The layout
 
@@ -50,7 +46,7 @@ edition = "2024"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-misina-lab = { git = "https://github.com/azazdeaz/misina-lab", rev = "<commit>" }
+misina-lab = "=0.1.0"
 bevy = "0.20.1"
 pyo3 = { version = "0.29", features = ["abi3-py312"], optional = true }
 
@@ -58,7 +54,7 @@ pyo3 = { version = "0.29", features = ["abi3-py312"], optional = true }
 python = ["dep:pyo3", "misina-lab/python"]
 extension-module = ["python", "pyo3/extension-module"]
 
-# Copied from the root Cargo.toml of misina-lab's repository at <commit>.
+# Copied from the root Cargo.toml of misina-lab's repository at tag v0.1.0.
 [profile.dev]
 opt-level = 1
 
@@ -66,9 +62,12 @@ opt-level = 1
 opt-level = 3
 ```
 
+- **`misina-lab`** is pinned exactly, for the reason
+  [One misina-lab release](#one-misina-lab-release) gives.
 - **`[profile]`** is read only from the root manifest of a build, so it is
-  copied from the [root `Cargo.toml`](../../../Cargo.toml) at `<commit>`. It
-  optimizes the dependencies, so a debug viewer runs at a usable frame rate.
+  copied from the [root `Cargo.toml`](https://github.com/azazdeaz/misina-lab/blob/v0.1.0/Cargo.toml) at the
+  release's tag. It optimizes the dependencies, so a debug viewer runs at a
+  usable frame rate.
 - **`bevy`** is misina-lab's version. Its features are not copied: Cargo
   turns on the ones misina-lab asks for on the one Bevy in the build.
 - **`pyo3`** is misina-lab's minor version. `pyo3-ffi` declares
@@ -172,9 +171,6 @@ requires-python = ">=3.12"
 dynamic = ["version"]
 dependencies = ["misina-lab==0.1.0"]
 
-[tool.uv.sources]
-misina-lab = { git = "https://github.com/azazdeaz/misina-lab", rev = "<commit>", subdirectory = "python/misina-lab" }
-
 [tool.maturin]
 features = ["extension-module"]
 module-name = "boxlab._core"
@@ -188,25 +184,43 @@ boxlab` rebuilds it.
 
 ## One misina-lab release
 
-The extension writes a scene document and `misina_lab.usd` reads it, so both
-halves are pinned to one misina-lab: the `rev` in `Cargo.toml`, and the
-`rev` and the version in `pyproject.toml`. The two Python pins hold in
-different places. uv installs from the `[tool.uv.sources]` entry and ignores
-the version bound while the entry is there, so the project's `.venv` is held
-by the `rev`. The wheel's metadata carries the bound and not the entry, so
-an installer of the wheel is held by `misina-lab==0.1.0`. Nothing compares
-the two: keep the bound at the version misina-lab's `pyproject.toml` has at
-`<commit>`.
-
-A release tagged `vX.Y.Z` has both halves at one commit and the Python
-package on PyPI as `X.Y.Z`. Pin it with `tag = "vX.Y.Z"` in place of `rev`
-in `Cargo.toml` and `misina-lab==X.Y.Z` in `pyproject.toml`, with no
-`[tool.uv.sources]` entry. Until a version is on PyPI, a wheel that names it
-installs only beside misina-lab installed from git.
+The extension writes a scene document and `misina_lab.usd` reads it, and
+the builder refuses a document of any other format, so both halves name one
+release: `misina-lab = "=X.Y.Z"` in `Cargo.toml` and `misina-lab==X.Y.Z` in
+`pyproject.toml`. A release tagged `vX.Y.Z` puts the crate on crates.io and
+the Python package on PyPI from one commit. Cargo's default requirement,
+`"X.Y"`, would let `cargo update` move the crate to a later release while
+the Python pin stays put.
 
 Moving to a new misina-lab is one commit: both pins; the `bevy` and `pyo3`
-versions and the `[profile]` lines as the new commit has them; and
+versions and the `[profile]` lines as the new release has them; and
 whatever `cargo test` then reports stale, rewritten by `regen_params`.
+
+### Between releases
+
+A change not released yet is pinned by commit, both halves from git:
+
+```toml
+# Cargo.toml
+misina-lab = { git = "https://github.com/azazdeaz/misina-lab", rev = "<commit>" }
+```
+
+```toml
+# pyproject.toml
+[tool.uv.sources]
+misina-lab = { git = "https://github.com/azazdeaz/misina-lab", rev = "<commit>", subdirectory = "python/misina-lab" }
+```
+
+The two Python pins then hold in different places. uv installs from the
+`[tool.uv.sources]` entry and ignores the version bound while the entry is
+there, so the project's `.venv` is held by the `rev`. The wheel's metadata
+carries the bound and not the entry, so an installer of the wheel is held by
+`misina-lab==X.Y.Z`. Nothing compares the two: keep the bound at the version
+misina-lab's `pyproject.toml` has at `<commit>`. Such a wheel is for an
+install that puts misina-lab from the same commit beside it: left to PyPI,
+an installer takes that version's release if there is one, whose builder
+refuses the document once the format has moved on. A wheel others install
+from PyPI pins a release.
 
 ## AGENTS.md
 
@@ -228,10 +242,10 @@ A row of boxes, built on misina-lab.
 
 ## The framework
 
-misina-lab is pinned to one commit in Cargo.toml and in pyproject.toml; the
-two change together. Its docs are in Cargo's checkout of that commit, beside
-the `manifest_path` that `cargo metadata --format-version 1` gives the
-`misina-lab` package: README.md first, then docs/.
+misina-lab is pinned to one release in Cargo.toml and in pyproject.toml; the
+two change together. Its docs ship in the crate, beside the `manifest_path`
+that `cargo metadata --format-version 1` gives the `misina-lab` package:
+README.md first, then docs/.
 
 ## Rules that bite
 
@@ -247,5 +261,5 @@ the `manifest_path` that `cargo metadata --format-version 1` gives the
 - [`src/params.rs`](../src/params.rs): `generator!`, and the `module` function it writes
 - [`src/codegen.rs`](../src/codegen.rs): `targets`, the files and their regions; `stale`, what both tests call
 - [`Cargo.toml`](../Cargo.toml): the `pyo3` version a generator matches
-- [the root `Cargo.toml`](../../../Cargo.toml): the `bevy` version, and the `[profile.dev]` lines a generator copies
-- [`python/misina-lab/pyproject.toml`](../../../python/misina-lab/pyproject.toml): the version the Python pin names
+- [the root `Cargo.toml`](https://github.com/azazdeaz/misina-lab/blob/v0.1.0/Cargo.toml): the `bevy` version, and the `[profile.dev]` lines a generator copies
+- [`python/misina-lab/pyproject.toml`](https://github.com/azazdeaz/misina-lab/blob/v0.1.0/python/misina-lab/pyproject.toml): the version the Python pin names
