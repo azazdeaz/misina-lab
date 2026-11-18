@@ -104,9 +104,10 @@ agree.
 2. Run the release workflow by hand, `gh workflow run release.yml --ref
    main`, and wait for it to pass. It builds every package as the tag's run
    will, without publishing, so a build that fails is fixed before anything
-   is out. A run builds whatever `main` is when it starts, so check that its
-   commit, `gh run list --workflow release.yml --json headSha`, is the merge
-   commit.
+   is out. A run builds whatever `main` is when it starts, so check that the
+   latest one's commit is the merge commit: `gh run list --workflow
+   release.yml --branch main --event workflow_dispatch --limit 1 --json
+   headSha,conclusion`.
 3. From a clean checkout of the merge commit, `cargo publish -p misina-lab`.
    The crate's licence files are symlinks, so the checkout has to have them as
    links: one where git wrote them as plain files, as it may on Windows, packs
